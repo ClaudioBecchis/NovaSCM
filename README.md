@@ -12,7 +12,7 @@ NovaSCM combines a **WPF desktop console** (Windows), a **REST API server** (Pyt
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Console-Windows-0078D4?logo=windows)](../../releases)
 [![Server: Docker](https://img.shields.io/badge/Server-Docker%20%7C%20Python-2496ED?logo=docker)](server/)
-[![GitHub release](https://img.shields.io/github/v/release/ClaudioBecchis/NovaSCM)](../../releases)
+[![GitHub release](https://img.shields.io/github/v/release/ClaudioBecchis/NovaSCM)](https://github.com/ClaudioBecchis/NovaSCM/releases/latest)
 
 📖 **Read the full article on dev.to:** [I built a free open-source alternative to Microsoft SCCM](https://dev.to/claudio_f5c23617499305b57/i-built-a-free-open-source-alternative-to-microsoft-sccm-3dkh)
 
@@ -106,14 +106,14 @@ Creates 3 workflows, 6 demo machines and 4 assignments in different states (comp
 
 ### 3. Run the console
 
-Download **`NovaSCM.exe`** from [Releases](../../releases) and run it on your **Windows admin PC**.
+Download **`NovaSCM-Console.zip`** from [Releases](https://github.com/ClaudioBecchis/NovaSCM/releases/latest), extract and run `NovaSCM.exe` on your **Windows admin PC**.
 Go to **Settings → NovaSCM API URL** and enter `http://<server-ip>:9091`.
 
 > This is the management console — you run it once on your PC to control everything.
 
 ### 4. Deploy the agent on target machines
 
-Download **`NovaSCMAgent.exe`** from [Releases](../../releases) and install it on each **PC you want to manage**.
+Download **`NovaSCMAgent-Win-x64.zip`** from [Releases](https://github.com/ClaudioBecchis/NovaSCM/releases/latest), extract and run `NovaSCMAgent.exe` on each **PC you want to manage**.
 
 Or install it automatically via script:
 
