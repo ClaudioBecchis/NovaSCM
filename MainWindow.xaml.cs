@@ -522,9 +522,17 @@ public partial class MainWindow : Window
                 try
                 {
                     using var ping = new System.Net.NetworkInformation.Ping();
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
                     var reply = await ping.SendPingAsync(ip, 1000);
-                    ms = reply.Status == System.Net.NetworkInformation.IPStatus.Success
-                        ? reply.RoundtripTime : -1;
+                    sw.Stop();
+                    if (reply.Status == System.Net.NetworkInformation.IPStatus.Success)
+                    {
+                        // Stopwatch per precisione sub-millisecondo su reti locali
+                        ms = reply.RoundtripTime > 0
+                            ? reply.RoundtripTime
+                            : Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+                        if (ms < 0.1) ms = 0.1; // evita 0 esatto
+                    }
                 }
                 catch { ms = -1; }
 
@@ -668,13 +676,14 @@ public partial class MainWindow : Window
         }
 
         // Aggiorna statistiche
-        TxtPingLast.Text = latestMs >= 0 ? $"{latestMs} ms" : "timeout";
+        string FmtMs(double v) => v < 1 ? $"< 1 ms" : $"{v:0} ms";
+        TxtPingLast.Text = latestMs >= 0 ? FmtMs(latestMs) : "timeout";
         TxtPingLast.Foreground = new System.Windows.Media.SolidColorBrush(lineColor);
         if (valid.Count > 0)
         {
-            TxtPingAvg.Text = $"avg: {valid.Average():0} ms";
-            TxtPingMin.Text = $"min: {valid.Min():0} ms";
-            TxtPingMax.Text = $"max: {valid.Max():0} ms";
+            TxtPingAvg.Text = $"avg: {FmtMs(valid.Average())}";
+            TxtPingMin.Text = $"min: {FmtMs(valid.Min())}";
+            TxtPingMax.Text = $"max: {FmtMs(valid.Max())}";
         }
     }
 
@@ -2605,59 +2614,80 @@ public partial class MainWindow : Window
 
     // ── Controlla aggiornamenti dal server NovaSCM ────────────────────────────
 
-    private string? GetUpdateBaseUrl()
-    {
-        if (string.IsNullOrEmpty(_config.NovaSCMApiUrl)) return null;
-        // Da "http://host:port/api/cr" → "http://host:port"
-        var uri = new Uri(_config.NovaSCMApiUrl);
-        return $"{uri.Scheme}://{uri.Host}:{uri.Port}";
-    }
+    private const string GitHubReleasesApi =
+        "https://api.github.com/repos/ClaudioBecchis/NovaSCM/releases/latest";
 
     private async Task CheckForUpdatesAsync(bool silent = true)
     {
-        var baseUrl = GetUpdateBaseUrl();
-        if (baseUrl == null) return;
-
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-            var json = await http.GetStringAsync($"{baseUrl}/api/version");
-            var doc  = JsonDocument.Parse(json);
-            var serverVer = doc.RootElement.TryGetProperty("version", out var v) ? v.GetString() ?? "" : "";
-            var dlUrl     = doc.RootElement.TryGetProperty("url",     out var u) ? u.GetString() ?? "" : "";
-            var notes     = doc.RootElement.TryGetProperty("notes",   out var n) ? n.GetString() ?? "" : "";
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            // GitHub API richiede User-Agent
+            http.DefaultRequestHeaders.Add("User-Agent", $"NovaSCM/{CurrentVersion}");
+            http.DefaultRequestHeaders.Add("Accept", "application/vnd.github.v3+json");
 
-            bool hasUpdate = string.Compare(serverVer, CurrentVersion,
+            var json = await http.GetStringAsync(GitHubReleasesApi);
+            var doc  = JsonDocument.Parse(json);
+
+            // tag_name es: "v1.0.7" — rimuoviamo il 'v' iniziale
+            var tag       = doc.RootElement.TryGetProperty("tag_name", out var t) ? t.GetString() ?? "" : "";
+            var serverVer = tag.TrimStart('v');
+            var notes     = doc.RootElement.TryGetProperty("body",     out var b) ? b.GetString() ?? "" : "";
+            // Prima riga delle note come sommario
+            var notesSummary = notes.Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                                    .FirstOrDefault()?.Trim() ?? "";
+            if (notesSummary.Length > 80) notesSummary = notesSummary[..77] + "…";
+
+            // URL download: primo asset .exe, oppure pagina release HTML
+            var dlUrl = doc.RootElement.TryGetProperty("html_url", out var h) ? h.GetString() ?? "" : "";
+            if (doc.RootElement.TryGetProperty("assets", out var assets))
+            {
+                foreach (var asset in assets.EnumerateArray())
+                {
+                    var name = asset.TryGetProperty("name", out var an) ? an.GetString() ?? "" : "";
+                    if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                        name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        dlUrl = asset.TryGetProperty("browser_download_url", out var du)
+                            ? du.GetString() ?? dlUrl : dlUrl;
+                        break;
+                    }
+                }
+            }
+
+            bool hasUpdate = !string.IsNullOrEmpty(serverVer) &&
+                             string.Compare(serverVer, CurrentVersion,
                                             StringComparison.OrdinalIgnoreCase) > 0;
 
             if (hasUpdate && !string.IsNullOrEmpty(dlUrl))
             {
                 _updateDownloadUrl = dlUrl;
                 TxtUpdateBanner.Text    = $"🔄  NovaSCM v{serverVer} disponibile" +
-                                          (string.IsNullOrEmpty(notes) ? "" : $"  —  {notes}");
+                                          (string.IsNullOrEmpty(notesSummary) ? "" : $"  —  {notesSummary}");
                 UpdateBanner.Visibility = Visibility.Visible;
 
-                // Toast notification
-                var toast = new UpdateToast(serverVer, notes, () => BtnInstallUpdate_Click(this, new RoutedEventArgs()));
+                var toast = new UpdateToast(serverVer, notesSummary,
+                    () => BtnInstallUpdate_Click(this, new RoutedEventArgs()));
                 toast.Show();
 
                 if (!silent)
                 {
-                    TxtUpdateStatus.Text       = $"🆕  Nuova versione v{serverVer} disponibile — clicca il banner in alto o il toast!";
+                    TxtUpdateStatus.Text       = $"🆕  Nuova versione v{serverVer} disponibile — clicca il banner in alto!";
                     TxtUpdateStatus.Foreground = System.Windows.Media.Brushes.Orange;
                 }
             }
             else if (!silent)
             {
                 TxtUpdateStatus.Text       = $"✅  Sei aggiornato (v{CurrentVersion})";
-                TxtUpdateStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
+                TxtUpdateStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(21, 128, 61));
             }
         }
         catch
         {
             if (!silent)
             {
-                TxtUpdateStatus.Text       = $"⚠️  Impossibile contattare il server (v{CurrentVersion} installata)";
+                TxtUpdateStatus.Text       = $"⚠️  Impossibile contattare GitHub (v{CurrentVersion} installata)";
                 TxtUpdateStatus.Foreground = System.Windows.Media.Brushes.Gray;
             }
         }
