@@ -1,9 +1,18 @@
 # NovaSCM
 
-> **Open source fleet & deployment manager for Windows and Linux — SCCM-inspired, self-hosted.**
+> **Tired of paying for SCCM? There's a free alternative.**
 
-NovaSCM is a lightweight alternative to Microsoft SCCM/Intune for small and medium IT environments.
-It combines a **WPF desktop console** (Windows), a **REST API server** (Python/Flask) and a **cross-platform agent** (Linux & Windows) to manage PC deployments, software installation, network scanning and WiFi certificate enrollment — all from a single interface.
+NovaSCM is an open-source fleet & deployment manager for IT admins who want full control over their infrastructure — without the Microsoft price tag.
+
+Deploy Windows in zero-touch, manage software, scan networks, issue WiFi certificates and track every machine from a single console.
+**Built by an IT admin, for IT admins.**
+
+NovaSCM combines a **WPF desktop console** (Windows), a **REST API server** (Python/Flask) and a **cross-platform agent** (Linux & Windows) — self-hosted, lightweight, no licensing fees.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/Console-Windows-0078D4?logo=windows)](../../releases)
+[![Server: Docker](https://img.shields.io/badge/Server-Docker%20%7C%20Python-2496ED?logo=docker)](server/)
+[![GitHub release](https://img.shields.io/github/v/release/ClaudioBecchis/NovaSCM)](../../releases)
 
 ---
 
