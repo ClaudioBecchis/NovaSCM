@@ -39,31 +39,31 @@
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
         <Style x:Key="BtnGreen" TargetType="Button" BasedOn="{StaticResource BtnBase}">
-            <Setter Property="Background"   Value="#052e16"/>
-            <Setter Property="BorderBrush"  Value="#16a34a"/>
-            <Setter Property="Foreground"   Value="#4ade80"/>
+            <Setter Property="Background"   Value="#16a34a"/>
+            <Setter Property="BorderBrush"  Value="#15803d"/>
+            <Setter Property="Foreground"   Value="White"/>
         </Style>
         <Style x:Key="BtnRed" TargetType="Button" BasedOn="{StaticResource BtnBase}">
-            <Setter Property="Background"   Value="#2d0a0a"/>
-            <Setter Property="BorderBrush"  Value="#dc2626"/>
-            <Setter Property="Foreground"   Value="#f87171"/>
+            <Setter Property="Background"   Value="#dc2626"/>
+            <Setter Property="BorderBrush"  Value="#b91c1c"/>
+            <Setter Property="Foreground"   Value="White"/>
         </Style>
         <Style x:Key="BtnBlue" TargetType="Button" BasedOn="{StaticResource BtnBase}">
-            <Setter Property="Background"   Value="#0c1e40"/>
-            <Setter Property="BorderBrush"  Value="#2563eb"/>
-            <Setter Property="Foreground"   Value="#93c5fd"/>
+            <Setter Property="Background"   Value="#2563eb"/>
+            <Setter Property="BorderBrush"  Value="#1d4ed8"/>
+            <Setter Property="Foreground"   Value="White"/>
         </Style>
         <Style x:Key="BtnAmber" TargetType="Button" BasedOn="{StaticResource BtnBase}">
-            <Setter Property="Background"   Value="#2d1a00"/>
-            <Setter Property="BorderBrush"  Value="#d97706"/>
-            <Setter Property="Foreground"   Value="#fcd34d"/>
+            <Setter Property="Background"   Value="#d97706"/>
+            <Setter Property="BorderBrush"  Value="#b45309"/>
+            <Setter Property="Foreground"   Value="White"/>
         </Style>
 
         <!-- Label sezione -->
         <Style x:Key="SectionLabel" TargetType="TextBlock">
             <Setter Property="FontSize"     Value="14"/>
             <Setter Property="FontWeight"   Value="SemiBold"/>
-            <Setter Property="Foreground"   Value="#60a5fa"/>
+            <Setter Property="Foreground"   Value="#1D4ED8"/>
             <Setter Property="Margin"       Value="0,0,0,10"/>
         </Style>
 
@@ -137,7 +137,7 @@
             <Setter Property="Margin"       Value="0,10,0,3"/>
         </Style>
         <Style x:Key="GroupTitle" TargetType="TextBlock">
-            <Setter Property="Foreground"   Value="#60a5fa"/>
+            <Setter Property="Foreground"   Value="#1D4ED8"/>
             <Setter Property="FontSize"     Value="13"/>
             <Setter Property="FontWeight"   Value="SemiBold"/>
             <Setter Property="Margin"       Value="0,16,0,6"/>
@@ -203,20 +203,20 @@
         </Border>
 
         <!-- ═══ STATUS BAR ═══ -->
-        <Border DockPanel.Dock="Bottom" Background="#060e1e" Height="24"
-                BorderBrush="#1e3a5f" BorderThickness="0,1,0,0">
+        <Border DockPanel.Dock="Bottom" Background="#E8EDF5" Height="24"
+                BorderBrush="#C8D0DC" BorderThickness="0,1,0,0">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0">
-                <TextBlock Text="NovaSCM" Foreground="#60a5fa" FontSize="11" FontWeight="SemiBold"/>
-                <TextBlock Text="  ·  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock Text="© 2026 Claudio Becchis — PolarisCore.it" Foreground="#334155" FontSize="11"/>
-                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock Text="8/10 online" Foreground="#10b981" FontSize="11"/>
-                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock Text="4 cert" Foreground="#60a5fa" FontSize="11"/>
-                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock Text="3/4 PC" Foreground="#a78bfa" FontSize="11"/>
-                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock x:Name="StatusBarMsg" Text="Pronto" Foreground="#475569" FontSize="11"/>
+                <TextBlock Text="NovaSCM" Foreground="#1D4ED8" FontSize="11" FontWeight="SemiBold"/>
+                <TextBlock Text="  ·  " Foreground="#94a3b8" FontSize="11"/>
+                <TextBlock Text="© 2026 Claudio Becchis — PolarisCore.it" Foreground="#64748b" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
+                <TextBlock Text="8/10 online" Foreground="#15803d" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
+                <TextBlock Text="4 cert" Foreground="#1D4ED8" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
+                <TextBlock Text="3/4 PC" Foreground="#7c3aed" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
+                <TextBlock x:Name="StatusBarMsg" Text="Pronto" Foreground="#64748b" FontSize="11"/>
             </StackPanel>
         </Border>
 
@@ -309,7 +309,7 @@
                                     x:Name="BtnStop" Click="BtnStop_Click" IsEnabled="False"/>
                         </StackPanel>
                         <ProgressBar x:Name="ScanProgress" Height="4" Margin="0,8,0,0"
-                                     Background="#0d1b3e" Foreground="#3b82f6"
+                                     Background="#DBEAFE" Foreground="#2563eb"
                                      BorderThickness="0" Minimum="0" Maximum="100" Value="0"/>
                         <TextBlock x:Name="TxtScanStatus" Foreground="#475569" FontSize="11"
                                    Margin="0,4,0,0" Text="Inserisci IP e subnet, poi clicca Scansiona"/>
@@ -465,7 +465,7 @@
 
                     <!-- Coda -->
                     <StackPanel Grid.Row="1">
-                        <TextBlock Text="Code attive" Foreground="#60a5fa" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                        <TextBlock Text="Code attive" Foreground="#1D4ED8" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
                         <DataGrid x:Name="AppQueueGrid" MaxHeight="130">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="PC"           Binding="{Binding Pc}"     Width="140"/>
@@ -893,7 +893,7 @@
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         <TextBlock Grid.Row="0" Text="📄  Anteprima autounattend.xml"
-                                   Foreground="#60a5fa" FontSize="13" FontWeight="SemiBold"
+                                   Foreground="#1D4ED8" FontSize="13" FontWeight="SemiBold"
                                    Margin="0,0,0,8"/>
                         <TextBox Grid.Row="1" x:Name="TxtDeployPreview"
                                  Background="#0a0f1e" Foreground="#4ade80"
@@ -941,7 +941,7 @@
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
                             <TextBlock Grid.Row="0" Text="Workflow definiti"
-                                       Foreground="#60a5fa" FontWeight="SemiBold"
+                                       Foreground="#1D4ED8" FontWeight="SemiBold"
                                        Padding="10,8,10,6" FontSize="12"/>
                             <ListBox x:Name="LstWorkflows" Grid.Row="1"
                                      Background="Transparent" BorderThickness="0"
@@ -1000,7 +1000,7 @@
                                 <Border Grid.Row="0" Background="#EDF0F5" Padding="10,5">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Step del workflow selezionato"
-                                                   Foreground="#60a5fa" FontWeight="SemiBold"
+                                                   Foreground="#1D4ED8" FontWeight="SemiBold"
                                                    VerticalAlignment="Center" Margin="0,0,16,0" FontSize="12"/>
                                         <Button Content="+ Aggiungi Step"  Style="{StaticResource BtnGreen}" Click="BtnWfAddStep_Click"/>
                                         <Button Content="✏️ Modifica Step"  Style="{StaticResource BtnBlue}"  Click="BtnWfEditStep_Click"/>
@@ -1038,7 +1038,7 @@
                                 <Border Grid.Row="0" Background="#EDF0F5" Padding="10,5">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Assegnazioni (Deployment)"
-                                                   Foreground="#60a5fa" FontWeight="SemiBold"
+                                                   Foreground="#1D4ED8" FontWeight="SemiBold"
                                                    VerticalAlignment="Center" Margin="0,0,16,0" FontSize="12"/>
                                         <Button Content="+ Assegna a PC"   Style="{StaticResource BtnGreen}" Click="BtnWfAssign_Click"/>
                                         <Button Content="🔍 Dettaglio"      Style="{StaticResource BtnBlue}"  Click="BtnWfAssignDetail_Click"/>
@@ -1420,13 +1420,13 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         <!-- Pulsanti -->
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                             <Button Content="🌐  PolarisCore.it" Padding="14,7" Margin="0,0,10,0"
-                                    Background="#0c1e40" BorderBrush="#2563eb" Foreground="#93c5fd"
+                                    Style="{StaticResource BtnBlue}"
                                     Click="BtnOpenWebsite_Click"/>
                             <Button Content="📁  GitHub" Padding="14,7" Margin="0,0,10,0"
-                                    Background="#0c1e40" BorderBrush="#2563eb" Foreground="#93c5fd"
+                                    Style="{StaticResource BtnBlue}"
                                     Click="BtnOpenGitHub_Click"/>
                             <Button Content="🔄  Controlla aggiornamenti" Padding="14,7"
-                                    Background="#0c2d1a" BorderBrush="#16a34a" Foreground="#4ade80"
+                                    Style="{StaticResource BtnGreen}"
                                     Click="BtnCheckUpdate_Click"/>
                         </StackPanel>
 
