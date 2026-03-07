@@ -43,3 +43,4 @@ installer/*.exe
 appsettings.local.json
 config.local.json
 .env
+config.json
