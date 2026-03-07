@@ -667,6 +667,79 @@
                         </Grid>
                     </Border>
 
+                    <!-- Traceroute panel -->
+                    <Border x:Name="TraceroutePanel" Visibility="Collapsed"
+                            Background="#06080f" CornerRadius="6" ClipToBounds="True">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="12,10,12,6">
+                                <TextBlock x:Name="TxtTracerouteTitle" Text="🔀  Traceroute"
+                                           Foreground="#60a5fa" FontSize="13" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <Button Content="✕ Chiudi" Margin="16,0,0,0" Padding="8,3"
+                                        Background="Transparent" BorderBrush="#334155"
+                                        Foreground="#94a3b8" FontSize="11" Cursor="Hand"
+                                        Click="BtnCloseTraceroute_Click"/>
+                            </StackPanel>
+                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                                <StackPanel x:Name="TracerouteStack" Margin="12,0,12,12"/>
+                            </ScrollViewer>
+                        </Grid>
+                    </Border>
+
+                    <!-- Speed test panel -->
+                    <Border x:Name="SpeedTestPanel" Visibility="Collapsed"
+                            Background="#06080f" CornerRadius="6" ClipToBounds="True">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="12,10,12,6">
+                                <TextBlock Text="⚡  Speed Test" Foreground="#fbbf24"
+                                           FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <Button Content="✕ Chiudi" Margin="16,0,0,0" Padding="8,3"
+                                        Background="Transparent" BorderBrush="#334155"
+                                        Foreground="#94a3b8" FontSize="11" Cursor="Hand"
+                                        Click="BtnCloseSpeedTest_Click"/>
+                            </StackPanel>
+                            <Grid Grid.Row="1" Margin="20,10,20,20">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+                                    <TextBlock Text="⬇ DOWNLOAD" Foreground="#94a3b8" FontSize="11"
+                                               HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                    <Canvas x:Name="SpeedGaugeDown" Width="140" Height="140"/>
+                                    <TextBlock x:Name="TxtSpeedDown" Text="— Mbps"
+                                               Foreground="#4ade80" FontSize="18" FontWeight="Bold"
+                                               HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtSpeedStatus" Text="Clicca ⚡ Speed Test\nper avviare"
+                                               Foreground="#64748b" FontSize="12" TextAlignment="Center"
+                                               TextWrapping="Wrap" HorizontalAlignment="Center"/>
+                                    <TextBlock x:Name="TxtSpeedPing" Text="Ping: — ms"
+                                               Foreground="#60a5fa" FontSize="13" FontWeight="SemiBold"
+                                               HorizontalAlignment="Center" Margin="0,12,0,0"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+                                    <TextBlock Text="⬆ UPLOAD" Foreground="#94a3b8" FontSize="11"
+                                               HorizontalAlignment="Center" Margin="0,0,0,8"/>
+                                    <Canvas x:Name="SpeedGaugeUp" Width="140" Height="140"/>
+                                    <TextBlock x:Name="TxtSpeedUp" Text="— Mbps"
+                                               Foreground="#60a5fa" FontSize="18" FontWeight="Bold"
+                                               HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </Border>
+
                     <!-- Tabella device -->
                     <DataGrid x:Name="NetGrid" SelectionMode="Extended"
                               MouseDoubleClick="NetGrid_DoubleClick"
@@ -678,7 +751,12 @@
                                 <MenuItem Header="📋  Copia MAC"      Click="MenuCopyMac_Click"/>
                                 <MenuItem Header="📋  Copia IP + MAC" Click="MenuCopyBoth_Click"/>
                                 <Separator/>
-                                <MenuItem Header="🔍  Dettagli porte" Click="MenuDetails_Click"/>
+                                <MenuItem Header="🔍  Dettagli porte"  Click="MenuDetails_Click"/>
+                                <MenuItem Header="💡  Wake-on-LAN"     Click="MenuWoL_Click"        ToolTip="Invia magic packet UDP per accendere il PC"/>
+                                <MenuItem Header="🖥️  SSH Terminal"    Click="MenuSsh_Click"        ToolTip="Apre terminale SSH verso questo device"/>
+                                <MenuItem Header="🔀  Traceroute"      Click="MenuTraceroute_Click" ToolTip="Visualizza il percorso verso questo IP"/>
+                                <Separator/>
+                                <MenuItem Header="📤  Esporta CSV"     Click="MenuExportCsv_Click"  ToolTip="Esporta tutti i device in formato CSV"/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
@@ -732,6 +810,18 @@
                         <Button Content="📊  Inventario" Style="{StaticResource BtnBlue}"
                                 Click="BtnInventory_Click"
                                 ToolTip="Apre inventario hardware/software per il device selezionato"/>
+                        <Button Content="💡  WoL" Style="{StaticResource BtnAmber}"
+                                Click="BtnWoL_Click"
+                                ToolTip="Wake-on-LAN — accende il PC selezionato via magic packet"/>
+                        <Button Content="🔍  mDNS" Style="{StaticResource BtnBlue}"
+                                Click="BtnMdns_Click"
+                                ToolTip="Scopri device via mDNS/Bonjour (stampanti, Apple, Chromecast...)"/>
+                        <Button Content="⚡  Speed Test" Style="{StaticResource BtnBlue}"
+                                Click="BtnSpeedTest_Click"
+                                ToolTip="Testa la velocità della connessione internet"/>
+                        <Button Content="📤  Esporta CSV" Style="{StaticResource BtnBlue}"
+                                Click="BtnExportCsv_Click"
+                                ToolTip="Esporta la lista device in formato CSV"/>
                         <TextBlock VerticalAlignment="Center" Margin="12,0,0,0"
                                    Foreground="#475569" FontSize="11"
                                    Text="Doppio click per porte  •  Ctrl+click multi-selezione"/>
