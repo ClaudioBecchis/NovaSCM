@@ -204,6 +204,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        // Forza render del primo tab al caricamento
+        Dispatcher.BeginInvoke(() =>
+        {
+            MainTabs.SelectedIndex = 0;
+            UpdateNavState(0);
+        }, System.Windows.Threading.DispatcherPriority.Render);
         bool firstRun = !File.Exists(ConfigPath);
         LoadConfig();
         NetGrid.ItemsSource     = _netRows;
@@ -1307,7 +1313,7 @@ public partial class MainWindow : Window
             else if (!silent)
             {
                 TxtUpdateStatus.Text       = $"✅  Sei aggiornato (v{CurrentVersion})";
-                TxtUpdateStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+                TxtUpdateStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
             }
         }
         catch
