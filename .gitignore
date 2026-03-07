@@ -36,6 +36,9 @@ desktop.ini
 NovaSCMAgent/bin/
 NovaSCMAgent/obj/
 
+# Installer binaries (troppo grandi per git, usa GitHub Releases)
+installer/*.exe
+
 # Secrets / config locale (se aggiunto in futuro)
 appsettings.local.json
 config.local.json
