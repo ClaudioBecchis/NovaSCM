@@ -588,4 +588,34 @@ public static class Database
         cmd.Parameters.AddWithValue("$id", id);
         cmd.ExecuteNonQuery();
     }
+
+    // ── Note e tag device ─────────────────────────────────────────────────────
+    public static void SaveDeviceNote(string ip, string note)
+    {
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO devices (ip, mac, vendor, name, icon, device_type, connection_type, status, cert_status, last_seen)
+            VALUES ($ip,'—','—','—','❔','—','❔','—','⬜ No','')
+            ON CONFLICT(ip) DO UPDATE SET last_seen=last_seen;
+            """;
+        cmd.Parameters.AddWithValue("$ip", ip);
+        cmd.ExecuteNonQuery();
+
+        using var cmd2 = db.CreateCommand();
+        cmd2.CommandText = "UPDATE devices SET note=$note WHERE ip=$ip;";
+        cmd2.Parameters.AddWithValue("$note", note);
+        cmd2.Parameters.AddWithValue("$ip", ip);
+        try { cmd2.ExecuteNonQuery(); } catch { } // colonna note potrebbe non esistere ancora
+    }
+
+    public static void SaveDeviceTag(string ip, string tag)
+    {
+        using var db = Open();
+        using var cmd2 = db.CreateCommand();
+        cmd2.CommandText = "UPDATE devices SET note=$tag WHERE ip=$ip;";
+        cmd2.Parameters.AddWithValue("$tag", "[tag:" + tag + "]");
+        cmd2.Parameters.AddWithValue("$ip", ip);
+        try { cmd2.ExecuteNonQuery(); } catch { }
+    }
 }

@@ -485,6 +485,7 @@
                     <TreeViewItem Header="⚙️  OPSI"           Tag="3" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="💿  Deploy OS"      Tag="5" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="⚙️  Workflow"       Tag="6" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="📜  Script Library" Tag="9" Padding="4,3" Selected="NavTree_ItemSelected"/>
                 </TreeViewItem>
 
                 <!-- Workspace: Monitoraggio -->
@@ -497,8 +498,8 @@
                 <!-- Workspace: Amministrazione -->
                 <TreeViewItem x:Name="TvGroupAdmin" IsExpanded="True" Padding="4,4"
                               Header="⚙️  Amministrazione" Visibility="Collapsed">
-                    <TreeViewItem Header="⚙️  Impostazioni"   Tag="9"  Padding="4,3" Selected="NavTree_ItemSelected"/>
-                    <TreeViewItem Header="ℹ️  About"           Tag="10" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="⚙️  Impostazioni"   Tag="12" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="ℹ️  About"           Tag="11" Padding="4,3" Selected="NavTree_ItemSelected"/>
                 </TreeViewItem>
             </TreeView>
 
@@ -523,8 +524,9 @@
                 <Button x:Name="NavWorkflow"     Tag="6"  Click="Nav_Click"/>
                 <Button x:Name="NavRichieste"    Tag="7"  Click="Nav_Click"/>
                 <Button x:Name="NavSccm"         Tag="8"  Click="Nav_Click"/>
-                <Button x:Name="NavImpostazioni" Tag="9"  Click="Nav_Click"/>
-                <Button x:Name="NavAbout"        Tag="10" Click="Nav_Click"/>
+                <Button x:Name="NavScript"       Tag="9"  Click="Nav_Click"/>
+                <Button x:Name="NavImpostazioni" Tag="12" Click="Nav_Click"/>
+                <Button x:Name="NavAbout"        Tag="11" Click="Nav_Click"/>
             </StackPanel>
         </Grid>
 
@@ -573,6 +575,16 @@
                             <Button x:Name="BtnToggleHeatmap" Content="⬛  Heatmap" Style="{StaticResource BtnBlue}"
                                     Click="BtnToggleHeatmap_Click"
                                     ToolTip="Vista heatmap — tutti i 254 IP della subnet colorati per stato"/>
+                            <Button x:Name="BtnAutoScan" Content="⏰  Auto" Style="{StaticResource BtnAmber}"
+                                    Click="BtnAutoScan_Click" Margin="16,0,0,0"
+                                    ToolTip="Attiva scansione automatica ogni N minuti"/>
+                            <ComboBox x:Name="CboAutoScanInterval" Width="70" Margin="4,0,0,0"
+                                      SelectedIndex="1" VerticalAlignment="Center" FontSize="12">
+                                <ComboBoxItem Content="5 min"/>
+                                <ComboBoxItem Content="15 min"/>
+                                <ComboBoxItem Content="30 min"/>
+                                <ComboBoxItem Content="60 min"/>
+                            </ComboBox>
                         </StackPanel>
                         <ProgressBar x:Name="ScanProgress" Height="4" Margin="0,8,0,0"
                                      Background="#DBEAFE" Foreground="#2563eb"
@@ -757,6 +769,9 @@
                                 <MenuItem Header="🔀  Traceroute"      Click="MenuTraceroute_Click" ToolTip="Visualizza il percorso verso questo IP"/>
                                 <Separator/>
                                 <MenuItem Header="📤  Esporta CSV"     Click="MenuExportCsv_Click"  ToolTip="Esporta tutti i device in formato CSV"/>
+                                <Separator/>
+                                <MenuItem Header="📝  Aggiungi nota"   Click="MenuAddNote_Click"    ToolTip="Aggiungi nota personalizzata a questo device"/>
+                                <MenuItem Header="🏷️  Tag device"     Click="MenuTagDevice_Click"  ToolTip="Assegna tag personalizzato (es: server, stampante, iot)"/>
                             </ContextMenu>
                         </DataGrid.ContextMenu>
                         <DataGrid.Columns>
@@ -1830,7 +1845,136 @@
                 </Grid>
             </TabItem>
 
-            <!-- ─── TAB IMPOSTAZIONI ─── -->
+            <!-- ─── TAB SCRIPT LIBRARY ─── -->
+            <TabItem Header="📜  Script">
+                <Grid Margin="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="240"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Lista script sinistra -->
+                    <Grid Grid.Column="0" Background="#0d1117">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <Border Background="#1e3a5f" Padding="12,10">
+                            <TextBlock Text="📜  Script Library" Foreground="#60a5fa"
+                                       FontWeight="SemiBold" FontSize="12"/>
+                        </Border>
+                        <ListBox x:Name="ScriptList" Grid.Row="1"
+                                 Background="Transparent" BorderThickness="0"
+                                 SelectionChanged="ScriptList_SelectionChanged"
+                                 Foreground="#c9d1d9" FontSize="12" Padding="0,4">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="12,7"/>
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="Foreground" Value="#c9d1d9"/>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="#1e3a5f"/>
+                                            <Setter Property="Foreground" Value="White"/>
+                                        </Trigger>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#0f2040"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                        </ListBox>
+                        <StackPanel Grid.Row="2" Margin="8,8">
+                            <Button Content="➕  Nuovo script" Style="{StaticResource BtnGreen}"
+                                    Click="BtnNewScript_Click" Margin="0,0,0,4"/>
+                            <Button Content="🗑  Elimina" Style="{StaticResource BtnRed}"
+                                    Click="BtnDeleteScript_Click"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Editor + output destra -->
+                    <Grid Grid.Column="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="190"/>
+                        </Grid.RowDefinitions>
+
+                        <!-- Header -->
+                        <Border Grid.Row="0" Background="#161b22" Padding="14,9" BorderBrush="#30363d" BorderThickness="0,0,0,1">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="TxtScriptName" Text="Seleziona uno script dalla lista"
+                                           Foreground="#60a5fa" FontSize="13" FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtScriptDesc" Text=""
+                                           Foreground="#64748b" FontSize="11"
+                                           VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Editor PowerShell -->
+                        <TextBox x:Name="TxtScriptEditor" Grid.Row="1"
+                                 Background="#0d1117" Foreground="#4ade80"
+                                 FontFamily="Consolas" FontSize="13"
+                                 BorderThickness="0" AcceptsReturn="True" AcceptsTab="True"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 TextWrapping="NoWrap" Padding="14,10"/>
+
+                        <!-- Toolbar azioni -->
+                        <Border Grid.Row="2" Background="#161b22" Padding="10,7" BorderBrush="#30363d" BorderThickness="0,1,0,1">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="▶  Esegui su PC" Style="{StaticResource BtnGreen}"
+                                        Click="BtnRunScriptOnPc_Click"
+                                        ToolTip="Esegui su IP del PC selezionato in Rete (richiede WinRM attivo)"/>
+                                <Button Content="🖥️  Localmente" Style="{StaticResource BtnBlue}"
+                                        Click="BtnRunScriptLocal_Click"
+                                        ToolTip="Esegui lo script su questo PC"/>
+                                <Button Content="💾  Salva" Style="{StaticResource BtnAmber}"
+                                        Click="BtnSaveScript_Click"/>
+                                <Button Content="📤  .ps1" Style="{StaticResource BtnBlue}"
+                                        Click="BtnExportScript_Click"
+                                        ToolTip="Esporta come file .ps1"/>
+                                <Border Width="1" Background="#334155" Margin="8,4"/>
+                                <TextBlock Text="IP target:" Foreground="#64748b" FontSize="11"
+                                           VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBox x:Name="TxtScriptTarget" Width="140"
+                                         Style="{StaticResource SettingsBox}"
+                                         Text="" ToolTip="IP del PC su cui eseguire (vuoto = PC selezionato in Rete)"/>
+                                <TextBlock x:Name="TxtScriptRunStatus" Foreground="#94a3b8" FontSize="11"
+                                           VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Output -->
+                        <Border Grid.Row="3" Background="#0a0f1e" BorderBrush="#1e3a5f" BorderThickness="0,0,0,0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <StackPanel Orientation="Horizontal" Background="#0d1117" Margin="12,5">
+                                    <TextBlock Text="📄  Output" Foreground="#64748b" FontSize="11"
+                                               VerticalAlignment="Center"/>
+                                    <Button Content="🗑 Pulisci" Margin="10,0,0,0" Padding="6,2"
+                                            Background="Transparent" BorderBrush="#334155"
+                                            Foreground="#64748b" FontSize="10" Cursor="Hand"
+                                            Click="BtnClearScriptOutput_Click"/>
+                                </StackPanel>
+                                <TextBox x:Name="TxtScriptOutput" Grid.Row="1"
+                                         Background="Transparent" Foreground="#a3e635"
+                                         FontFamily="Consolas" FontSize="11"
+                                         BorderThickness="0" IsReadOnly="True"
+                                         VerticalScrollBarVisibility="Auto"
+                                         Padding="12,6"/>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
             <!-- ─── TAB WIKI ─── -->
             <TabItem Header="📖  Wiki">
                 <Grid Margin="0">
