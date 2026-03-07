@@ -1,0 +1,21 @@
+services:
+  novascm-api:
+    build: .
+    container_name: novascm-api
+    ports:
+      - "9091:9091"
+    volumes:
+      - novascm-data:/data
+    environment:
+      NOVASCM_DB: /data/novascm.db
+      PORT: 9091
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9091/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  novascm-data:
+    driver: local

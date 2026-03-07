@@ -1,0 +1,365 @@
+<Window x:Class="PolarisManager.DemoSCCM"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="NovaSCM — Configuration Manager Console"
+        Height="720" Width="1120" WindowStartupLocation="CenterScreen"
+        Background="White">
+    <Window.Resources>
+        <Style x:Key="RibbonTab" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#9AAFC8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}" Height="32">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="RibbonTabActive" TargetType="Button" BasedOn="{StaticResource RibbonTab}">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Background" Value="#2B579A"/>
+        </Style>
+        <Style x:Key="RibbonBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width" Value="64"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="4,6">
+                            <ContentPresenter HorizontalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WsBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#6688AA"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="6,8">
+                            <StackPanel>
+                                <TextBlock Text="{TemplateBinding Tag}" FontSize="18"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{TemplateBinding Foreground}"/>
+                                <TextBlock Text="{TemplateBinding Content}" FontSize="9"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{TemplateBinding Foreground}"
+                                           Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WsBtnActive" TargetType="Button" BasedOn="{StaticResource WsBtn}">
+            <Setter Property="Background" Value="#2B579A"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#ECEEF2"/>
+            <Setter Property="Foreground" Value="#333"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderBrush" Value="#CDD1D8"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        </Style>
+        <Style TargetType="DataGridRow">
+            <Setter Property="Background" Value="White"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#CCE5FF"/>
+                </Trigger>
+                <Trigger Property="AlternationIndex" Value="1">
+                    <Setter Property="Background" Value="#F7F8FA"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}">
+                            <ContentPresenter Margin="10,5"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel Background="White">
+
+        <!-- ═══ RIBBON ═══ -->
+        <Grid DockPanel.Dock="Top">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32"/>
+                <RowDefinition Height="68"/>
+            </Grid.RowDefinitions>
+
+            <!-- Tab bar -->
+            <Grid Grid.Row="0" Background="#1F3864">
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Home"       Style="{StaticResource RibbonTabActive}"/>
+                    <Button Content="Cartella"   Style="{StaticResource RibbonTab}"/>
+                    <Button Content="Visualizza" Style="{StaticResource RibbonTab}"/>
+                    <Button Content="Strumenti"  Style="{StaticResource RibbonTab}"/>
+                </StackPanel>
+                <Border HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,14,0"
+                        Background="#0F2848" BorderBrush="#2A4F8A" BorderThickness="1" CornerRadius="3">
+                    <StackPanel Orientation="Horizontal" Margin="8,4">
+                        <TextBlock Text="&#x1F50D;" FontSize="11" Foreground="#6688AA" VerticalAlignment="Center"/>
+                        <TextBlock Text="  Cerca dispositivi, workflow..." FontSize="11"
+                                   Foreground="#4466AA" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Action bar -->
+            <Border Grid.Row="1" Background="#2B579A">
+                <StackPanel Orientation="Horizontal" Margin="8,0">
+                    <!-- Gestione -->
+                    <StackPanel Margin="4,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource RibbonBtn}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x1F4CB;" FontSize="22" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Nuovo" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x270F;&#xFE0F;" FontSize="22" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Proprieta'" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x1F5D1;&#xFE0F;" FontSize="22" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Elimina" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Text="Gestione" FontSize="10" Foreground="#7799CC" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <Border Width="1" Background="#1F4888" Margin="6,10"/>
+
+                    <!-- Distribuzione -->
+                    <StackPanel Margin="4,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource RibbonBtn}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x1F680;" FontSize="22" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Distribuisci" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x1F4CA;" FontSize="22" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Stato" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x1F504;" FontSize="22" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Aggiorna" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Text="Distribuzione" FontSize="10" Foreground="#7799CC" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <Border Width="1" Background="#1F4888" Margin="6,10"/>
+
+                    <!-- Strumenti -->
+                    <StackPanel Margin="4,0">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource RibbonBtn}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x1F4E5;" FontSize="22" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Importa" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x1F4E4;" FontSize="22" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Esporta" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/>
+                                </StackPanel>
+                            </Button>
+                            <Button Style="{StaticResource RibbonBtn}">
+                                <StackPanel>
+                                    <TextBlock Text="&#x2699;&#xFE0F;" FontSize="22" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="Impostazioni" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Text="Strumenti" FontSize="10" Foreground="#7799CC" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ═══ STATUS BAR ═══ -->
+        <Border DockPanel.Dock="Bottom" Background="#E8EAED" Height="22"
+                BorderBrush="#CCC" BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal" Margin="10,0" VerticalAlignment="Center">
+                <TextBlock Text="Connesso: 192.168.20.110:9091" FontSize="11" Foreground="#555"/>
+                <TextBlock Text="  |  " FontSize="11" Foreground="#BBB"/>
+                <TextBlock Text="Oggetti: 6" FontSize="11" Foreground="#555"/>
+                <TextBlock Text="  |  " FontSize="11" Foreground="#BBB"/>
+                <TextBlock Text="● Pronto" FontSize="11" Foreground="#228B22"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ═══ LEFT NAV ═══ -->
+        <Grid DockPanel.Dock="Left" Width="236">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="28"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="64"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0" Background="#1F3864">
+                <TextBlock Text="Libreria Software" Foreground="White" FontSize="12"
+                           FontWeight="SemiBold" VerticalAlignment="Center" Margin="10,0"/>
+            </Border>
+
+            <TreeView Grid.Row="1" Background="#F4F5F7" BorderThickness="0,0,1,0"
+                      BorderBrush="#D0D4DC" FontSize="12">
+                <TreeViewItem Header="&#x1F4E6;  Applicazioni" Padding="4,4">
+                    <TreeViewItem Header="Tutte le applicazioni" Padding="4,3"/>
+                    <TreeViewItem Header="Pacchetti" Padding="4,3"/>
+                    <TreeViewItem Header="Script" Padding="4,3"/>
+                </TreeViewItem>
+                <TreeViewItem Header="&#x2699;&#xFE0F;  Workflow" IsExpanded="True" Padding="4,4">
+                    <TreeViewItem Header="Deploy Base Win11" IsSelected="True" Padding="4,3"/>
+                    <TreeViewItem Header="Aggiornamenti Security" Padding="4,3"/>
+                    <TreeViewItem Header="Setup Server Linux" Padding="4,3"/>
+                </TreeViewItem>
+                <TreeViewItem Header="&#x1F5A5;&#xFE0F;  Distribuzione OS" Padding="4,4">
+                    <TreeViewItem Header="Immagini sistema" Padding="4,3"/>
+                    <TreeViewItem Header="Sequenze di attivita'" Padding="4,3"/>
+                    <TreeViewItem Header="Driver" Padding="4,3"/>
+                </TreeViewItem>
+                <TreeViewItem Header="&#x1F4E1;  Aggiornamenti" Padding="4,4">
+                    <TreeViewItem Header="Tutti gli aggiornamenti" Padding="4,3"/>
+                    <TreeViewItem Header="Gruppi" Padding="4,3"/>
+                </TreeViewItem>
+                <TreeViewItem Header="&#x1F4CB;  Change Request" Padding="4,4"/>
+                <TreeViewItem Header="&#x1F512;  Certificati" Padding="4,4"/>
+            </TreeView>
+
+            <!-- Workspace switcher -->
+            <Border Grid.Row="2" Background="#1F3864" BorderBrush="#0A1F40" BorderThickness="0,1,0,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Button Content="Asset"    Tag="&#x1F3E0;" Style="{StaticResource WsBtn}"       Width="44"/>
+                    <Button Content="Software" Tag="&#x1F4E6;" Style="{StaticResource WsBtnActive}" Width="44"/>
+                    <Button Content="Monitor"  Tag="&#x1F4CA;" Style="{StaticResource WsBtn}"       Width="44"/>
+                    <Button Content="Admin"    Tag="&#x2699;&#xFE0F;" Style="{StaticResource WsBtn}" Width="44"/>
+                    <Button Content="Rete"     Tag="&#x1F4E1;" Style="{StaticResource WsBtn}"       Width="44"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ═══ MAIN CONTENT ═══ -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="5"/>
+                <RowDefinition Height="185"/>
+            </Grid.RowDefinitions>
+
+            <!-- Results pane -->
+            <Grid Grid.Row="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="26"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Background="#ECEEF2" BorderBrush="#CDD1D8" BorderThickness="0,0,0,1">
+                    <TextBlock Margin="10,0" FontSize="11" Foreground="#555" VerticalAlignment="Center">
+                        <Run Text="Libreria Software"/>
+                        <Run Text="  ▶  " Foreground="#AAA"/>
+                        <Run Text="Workflow"/>
+                        <Run Text="  ▶  " Foreground="#AAA"/>
+                        <Run Text="Deploy Base Win11" FontWeight="SemiBold"/>
+                        <Run Text="  ▶  " Foreground="#AAA"/>
+                        <Run Text="Assegnazioni"/>
+                    </TextBlock>
+                </Border>
+                <DataGrid Grid.Row="1" x:Name="GridResults"
+                          AutoGenerateColumns="False" CanUserAddRows="False"
+                          SelectionMode="Single" AlternationCount="2"
+                          GridLinesVisibility="Horizontal"
+                          HorizontalGridLinesBrush="#E2E6EC"
+                          Background="White" BorderThickness="0" RowHeight="34">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Binding="{Binding Sel}" Width="36" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Nome PC"         Binding="{Binding Name}"     Width="155" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Stato"           Binding="{Binding Status}"   Width="125" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Progresso"       Binding="{Binding Progress}" Width="90"  IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Ultimo contatto" Binding="{Binding LastSeen}" Width="145" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Dominio"         Binding="{Binding Domain}"   Width="180" IsReadOnly="True"/>
+                        <DataGridTextColumn Header="Workflow"        Binding="{Binding Workflow}"  Width="*"   IsReadOnly="True"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+
+            <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch"
+                          Background="#C8CDD6" ResizeBehavior="PreviousAndNext"/>
+
+            <!-- Details pane -->
+            <Grid Grid.Row="2" Background="#FAFBFC">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="26"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Background="#E4E7EC" BorderBrush="#CDD1D8" BorderThickness="0,0,0,1">
+                    <TextBlock Margin="10,0" FontSize="11" FontWeight="SemiBold" Foreground="#333"
+                               VerticalAlignment="Center" Text="Dettaglio — PC-LAB-001"/>
+                </Border>
+                <UniformGrid Grid.Row="1" Rows="1" Margin="20,12">
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="NOME PC"  FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                        <TextBlock Text="PC-LAB-001" FontSize="13" Margin="0,0,0,10"/>
+                        <TextBlock Text="DOMINIO"  FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                        <TextBlock Text="WORKGROUP" FontSize="13" Margin="0,0,0,10"/>
+                        <TextBlock Text="IP / DC"  FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                        <TextBlock Text="192.168.10.0" FontSize="13"/>
+                    </StackPanel>
+                    <StackPanel Margin="0,0,24,0">
+                        <TextBlock Text="WORKFLOW" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                        <TextBlock Text="Deploy Base Windows 11" FontSize="13" Margin="0,0,0,10"/>
+                        <TextBlock Text="STATO"   FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                        <TextBlock Text="Completato" FontSize="13" Foreground="#228B22" FontWeight="SemiBold" Margin="0,0,0,10"/>
+                        <TextBlock Text="PROGRESSO" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                        <TextBlock Text="9 / 9 step (100%)" FontSize="13"/>
+                    </StackPanel>
+                    <StackPanel>
+                        <TextBlock Text="UTENTE ASSEGNATO" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                        <TextBlock Text="—" FontSize="13" Margin="0,0,0,10"/>
+                        <TextBlock Text="NOTE" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                        <TextBlock Text="Postazione laboratorio A" FontSize="13" Margin="0,0,0,10"/>
+                        <TextBlock Text="ULTIMO CONTATTO" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                        <TextBlock Text="07/03/2026 09:42" FontSize="13"/>
+                    </StackPanel>
+                </UniformGrid>
+            </Grid>
+        </Grid>
+    </DockPanel>
+</Window>

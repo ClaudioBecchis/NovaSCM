@@ -1,0 +1,1385 @@
+<Window x:Class="PolarisManager.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        Title="NovaSCM — by Claudio Becchis" Icon="Assets/novascm.ico"
+        Height="780" Width="1300"
+        MinHeight="560" MinWidth="900"
+        FontSize="14"
+        WindowStartupLocation="CenterScreen">
+
+    <Window.Resources>
+        <!-- Colori base -->
+        <SolidColorBrush x:Key="NavyBrush"     Color="#0d1b3e"/>
+        <SolidColorBrush x:Key="AccentBrush"   Color="#3b82f6"/>
+        <SolidColorBrush x:Key="GreenBrush"    Color="#10b981"/>
+        <SolidColorBrush x:Key="RedBrush"      Color="#ef4444"/>
+        <SolidColorBrush x:Key="AmberBrush"    Color="#f59e0b"/>
+        <SolidColorBrush x:Key="MutedBrush"    Color="#475569"/>
+        <SolidColorBrush x:Key="SubtleBrush"   Color="#1e3a5f"/>
+
+        <!-- Stat card style -->
+        <Style x:Key="StatCard" TargetType="Border">
+            <Setter Property="Background"      Value="#0d1b3e"/>
+            <Setter Property="BorderThickness" Value="0,0,0,0"/>
+            <Setter Property="CornerRadius"    Value="6"/>
+            <Setter Property="Padding"         Value="16,10"/>
+            <Setter Property="Margin"          Value="0,0,10,0"/>
+        </Style>
+
+        <!-- Pulsante base -->
+        <Style x:Key="BtnBase" TargetType="Button">
+            <Setter Property="Padding"         Value="16,8"/>
+            <Setter Property="Margin"          Value="0,0,8,0"/>
+            <Setter Property="FontSize"        Value="13"/>
+            <Setter Property="FontWeight"      Value="SemiBold"/>
+            <Setter Property="Cursor"          Value="Hand"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style x:Key="BtnGreen" TargetType="Button" BasedOn="{StaticResource BtnBase}">
+            <Setter Property="Background"   Value="#052e16"/>
+            <Setter Property="BorderBrush"  Value="#16a34a"/>
+            <Setter Property="Foreground"   Value="#4ade80"/>
+        </Style>
+        <Style x:Key="BtnRed" TargetType="Button" BasedOn="{StaticResource BtnBase}">
+            <Setter Property="Background"   Value="#2d0a0a"/>
+            <Setter Property="BorderBrush"  Value="#dc2626"/>
+            <Setter Property="Foreground"   Value="#f87171"/>
+        </Style>
+        <Style x:Key="BtnBlue" TargetType="Button" BasedOn="{StaticResource BtnBase}">
+            <Setter Property="Background"   Value="#0c1e40"/>
+            <Setter Property="BorderBrush"  Value="#2563eb"/>
+            <Setter Property="Foreground"   Value="#93c5fd"/>
+        </Style>
+        <Style x:Key="BtnAmber" TargetType="Button" BasedOn="{StaticResource BtnBase}">
+            <Setter Property="Background"   Value="#2d1a00"/>
+            <Setter Property="BorderBrush"  Value="#d97706"/>
+            <Setter Property="Foreground"   Value="#fcd34d"/>
+        </Style>
+
+        <!-- Label sezione -->
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
+            <Setter Property="FontSize"     Value="14"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="Foreground"   Value="#60a5fa"/>
+            <Setter Property="Margin"       Value="0,0,0,10"/>
+        </Style>
+
+        <!-- DataGrid dark -->
+        <Style TargetType="DataGrid">
+            <Setter Property="Background"           Value="#0a0f1e"/>
+            <Setter Property="RowBackground"        Value="#0a0f1e"/>
+            <Setter Property="AlternatingRowBackground" Value="#0d1422"/>
+            <Setter Property="BorderThickness"      Value="1"/>
+            <Setter Property="BorderBrush"          Value="#1e3a5f"/>
+            <Setter Property="GridLinesVisibility"  Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#1e2a40"/>
+            <Setter Property="HeadersVisibility"    Value="Column"/>
+            <Setter Property="SelectionMode"        Value="Single"/>
+            <Setter Property="AutoGenerateColumns"  Value="False"/>
+            <Setter Property="CanUserAddRows"       Value="False"/>
+            <Setter Property="CanUserDeleteRows"    Value="False"/>
+            <Setter Property="IsReadOnly"           Value="True"/>
+            <Setter Property="FontSize"             Value="13"/>
+            <Setter Property="RowHeight"            Value="36"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background"   Value="#0d1b3e"/>
+            <Setter Property="Foreground"   Value="#60a5fa"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="Padding"      Value="10,7"/>
+            <Setter Property="BorderBrush"  Value="#1e3a5f"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        </Style>
+        <Style TargetType="DataGridRow">
+            <Setter Property="Foreground"   Value="#cbd5e1"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#1e3a6e"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1e2a4a"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Padding"       Value="10,4"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+
+        <!-- TextBox settings -->
+        <Style x:Key="SettingsBox" TargetType="TextBox">
+            <Setter Property="Background"   Value="#0d1b3e"/>
+            <Setter Property="Foreground"   Value="#e2e8f0"/>
+            <Setter Property="BorderBrush"  Value="#1e3a5f"/>
+            <Setter Property="Padding"      Value="8,4"/>
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="Width"        Value="320"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+        <Style x:Key="SettingsPass" TargetType="PasswordBox">
+            <Setter Property="Background"   Value="#0d1b3e"/>
+            <Setter Property="Foreground"   Value="#e2e8f0"/>
+            <Setter Property="BorderBrush"  Value="#1e3a5f"/>
+            <Setter Property="Padding"      Value="8,4"/>
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="Width"        Value="320"/>
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+        </Style>
+        <Style x:Key="SettingsLabel" TargetType="TextBlock">
+            <Setter Property="Foreground"   Value="#94a3b8"/>
+            <Setter Property="FontSize"     Value="12"/>
+            <Setter Property="Margin"       Value="0,10,0,3"/>
+        </Style>
+        <Style x:Key="GroupTitle" TargetType="TextBlock">
+            <Setter Property="Foreground"   Value="#60a5fa"/>
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="Margin"       Value="0,16,0,6"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="#0a0f1e">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- banner aggiornamento -->
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="26"/>
+        </Grid.RowDefinitions>
+
+        <!-- ═══ BANNER AGGIORNAMENTO ═══ -->
+        <Border x:Name="UpdateBanner" Grid.Row="0"
+                Background="#1a1200" BorderBrush="#f59e0b" BorderThickness="0,0,0,2"
+                Visibility="Collapsed" Padding="14,7">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtUpdateBanner" Grid.Column="0"
+                           Foreground="#fbbf24" FontSize="13" VerticalAlignment="Center"/>
+                <Button x:Name="BtnInstallUpdate" Grid.Column="1"
+                        Content="⬇️  Installa ora" Margin="0,0,8,0"
+                        Background="#0c2d1a" BorderBrush="#16a34a" Foreground="#4ade80"
+                        Padding="12,4" Cursor="Hand" FontSize="12"
+                        Click="BtnInstallUpdate_Click"/>
+                <Button Grid.Column="2" Content="✕" Padding="8,4" Cursor="Hand"
+                        Background="Transparent" BorderThickness="0" Foreground="#475569"
+                        FontSize="13" Click="BtnDismissUpdate_Click"/>
+            </Grid>
+        </Border>
+
+        <!-- ═══ TABS ═══ -->
+        <TabControl Grid.Row="1" Background="#0a0f1e" BorderThickness="0"
+                    x:Name="MainTabs"
+                    SelectionChanged="MainTabs_SelectionChanged">
+
+            <!-- ─── TAB RETE ─── -->
+            <TabItem Header="📡  Rete">
+                <Grid Margin="16,12,16,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Barra scansione -->
+                    <StackPanel Grid.Row="0" Margin="0,0,0,10">
+                        <TextBlock Text="📡  Scansione rete" Style="{StaticResource SectionLabel}"/>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBox x:Name="TxtScanIp" Width="160" Margin="0,0,8,0"
+                                     Style="{StaticResource SettingsBox}"
+                                     Text="192.168.10.0" ToolTip="IP base della rete"/>
+                            <TextBlock Text="/" Foreground="#64748b" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="16"/>
+                            <TextBox x:Name="TxtScanSubnet" Width="60" Margin="0,0,12,0"
+                                     Style="{StaticResource SettingsBox}"
+                                     Text="24" ToolTip="Subnet mask (es: 24 = /24 = 254 host)"/>
+                            <Button Content="▶  Scansiona" Style="{StaticResource BtnGreen}"
+                                    x:Name="BtnScan" Click="BtnScan_Click"/>
+                            <Button Content="🌐  Tutte le VLAN" Style="{StaticResource BtnBlue}"
+                                    x:Name="BtnScanAll" Click="BtnScanAll_Click"
+                                    ToolTip="Scansiona tutte le subnet configurate nelle Impostazioni"/>
+                            <Button Content="⏹  Stop" Style="{StaticResource BtnRed}"
+                                    x:Name="BtnStop" Click="BtnStop_Click" IsEnabled="False"/>
+                        </StackPanel>
+                        <ProgressBar x:Name="ScanProgress" Height="4" Margin="0,8,0,0"
+                                     Background="#0d1b3e" Foreground="#3b82f6"
+                                     BorderThickness="0" Minimum="0" Maximum="100" Value="0"/>
+                        <TextBlock x:Name="TxtScanStatus" Foreground="#475569" FontSize="11"
+                                   Margin="0,4,0,0" Text="Inserisci IP e subnet, poi clicca Scansiona"/>
+                    </StackPanel>
+
+                    <!-- Stat cards -->
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
+                            <StackPanel>
+                                <TextBlock Text="10" FontSize="22" FontWeight="Bold" Foreground="#f8fafc"/>
+                                <TextBlock Text="Device totali" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#10b981">
+                            <StackPanel>
+                                <TextBlock Text="8" FontSize="22" FontWeight="Bold" Foreground="#10b981"/>
+                                <TextBlock Text="Online" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
+                            <StackPanel>
+                                <TextBlock Text="4" FontSize="22" FontWeight="Bold" Foreground="#60a5fa"/>
+                                <TextBlock Text="Con certificato" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#f59e0b">
+                            <StackPanel>
+                                <TextBlock Text="6" FontSize="22" FontWeight="Bold" Foreground="#f59e0b"/>
+                                <TextBlock Text="Senza cert" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Tabella device -->
+                    <DataGrid Grid.Row="2" x:Name="NetGrid" SelectionMode="Extended"
+                              MouseDoubleClick="NetGrid_DoubleClick"
+                              ToolTip="Doppio click per dettagli e scansione porte">
+                        <DataGrid.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="📋  Copia IP"       Click="MenuCopyIp_Click"/>
+                                <MenuItem Header="📋  Copia MAC"      Click="MenuCopyMac_Click"/>
+                                <MenuItem Header="📋  Copia IP + MAC" Click="MenuCopyBoth_Click"/>
+                                <Separator/>
+                                <MenuItem Header="🔍  Dettagli porte" Click="MenuDetails_Click"/>
+                            </ContextMenu>
+                        </DataGrid.ContextMenu>
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header=" "        Binding="{Binding Icon}"           Width="36"/>
+                            <DataGridTextColumn Header="IP"       Binding="{Binding Ip}"             Width="120"/>
+                            <DataGridTextColumn Header="MAC"      Binding="{Binding Mac}"            Width="140"/>
+                            <DataGridTextColumn Header="Hostname" Binding="{Binding Name}"           Width="130"/>
+                            <DataGridTextColumn Header="Tipo"     Binding="{Binding DeviceType}"     Width="110"/>
+                            <DataGridTextColumn Header="Conn."    Binding="{Binding ConnectionType}" Width="110"/>
+                            <DataGridTextColumn Header="Vendor"   Binding="{Binding Vendor}"         Width="100"/>
+                            <DataGridTextColumn Header="Cert"     Binding="{Binding CertStatus}"     Width="70"/>
+                            <DataGridTextColumn Header="Stato"    Binding="{Binding Status}"         Width="80"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- Azioni -->
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,12">
+                        <Button Content="➕  Registra" Style="{StaticResource BtnGreen}"
+                                Click="BtnRegisterDevices_Click"
+                                ToolTip="Registra i device selezionati (via MAC) per App e OPSI"/>
+                        <Button Content="🔐  Genera Cert" Style="{StaticResource BtnBlue}"
+                                Click="BtnGenerateCert_Click"/>
+                        <Button Content="📱  QR Code" Style="{StaticResource BtnBlue}"
+                                Click="BtnQrNet_Click"/>
+                        <Button x:Name="BtnMonitor" Content="👁  Monitora" Style="{StaticResource BtnAmber}"
+                                Click="BtnMonitor_Click"
+                                ToolTip="Scansione continua ogni 30s — notifica nuovi device o disconnessioni"/>
+                        <Button Content="📊  Inventario" Style="{StaticResource BtnBlue}"
+                                Click="BtnInventory_Click"
+                                ToolTip="Apre inventario hardware/software per il device selezionato"/>
+                        <TextBlock VerticalAlignment="Center" Margin="12,0,0,0"
+                                   Foreground="#475569" FontSize="11"
+                                   Text="Doppio click per porte  •  Ctrl+click multi-selezione"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB CERTIFICATI ─── -->
+            <TabItem Header="🔐  Certificati">
+                <Grid Margin="16,12,16,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="🔐  Certificati WiFi EAP-TLS — PolarisCore Secure"
+                               Style="{StaticResource SectionLabel}"/>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#10b981">
+                            <StackPanel>
+                                <TextBlock Text="4" FontSize="22" FontWeight="Bold" Foreground="#10b981"/>
+                                <TextBlock Text="Attivi" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#ef4444">
+                            <StackPanel>
+                                <TextBlock Text="1" FontSize="22" FontWeight="Bold" Foreground="#ef4444"/>
+                                <TextBlock Text="Revocati" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
+                            <StackPanel>
+                                <TextBlock Text="5" FontSize="22" FontWeight="Bold" Foreground="#f8fafc"/>
+                                <TextBlock Text="Totali" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#60a5fa">
+                            <StackPanel>
+                                <TextBlock Text="2036" FontSize="22" FontWeight="Bold" Foreground="#60a5fa"/>
+                                <TextBlock Text="Scad. minima" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="2" x:Name="CertGrid">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header=" "       Binding="{Binding Icon}"    Width="36"/>
+                            <DataGridTextColumn Header="Device"  Binding="{Binding Name}"    Width="140"/>
+                            <DataGridTextColumn Header="MAC"     Binding="{Binding Mac}"     Width="150"/>
+                            <DataGridTextColumn Header="Creato"  Binding="{Binding Created}" Width="110"/>
+                            <DataGridTextColumn Header="Scade"   Binding="{Binding Expires}" Width="110"/>
+                            <DataGridTextColumn Header="Stato"   Binding="{Binding Status}"  Width="100"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,12">
+                        <Button Content="✨  Nuovo"    Style="{StaticResource BtnGreen}" Click="BtnNewCert_Click"/>
+                        <Button Content="📱  QR Code"  Style="{StaticResource BtnBlue}"  Click="BtnQrCert_Click"/>
+                        <Button Content="❌  Revoca"   Style="{StaticResource BtnRed}"   Click="BtnRevoke_Click"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB APP ─── -->
+            <TabItem Header="📦  App">
+                <Grid Margin="16,12,16,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="📦  Portale Software — installazioni remote sui PC"
+                               Style="{StaticResource SectionLabel}"/>
+
+                    <!-- Coda -->
+                    <StackPanel Grid.Row="1">
+                        <TextBlock Text="Code attive" Foreground="#60a5fa" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                        <DataGrid x:Name="AppQueueGrid" MaxHeight="130">
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="PC"           Binding="{Binding Pc}"     Width="140"/>
+                                <DataGridTextColumn Header="IP"           Binding="{Binding Ip}"     Width="120"/>
+                                <DataGridTextColumn Header="MAC"          Binding="{Binding Mac}"    Width="145"/>
+                                <DataGridTextColumn Header="App in coda"  Binding="{Binding Apps}"   Width="180"/>
+                                <DataGridTextColumn Header="Stato"        Binding="{Binding Status}" Width="140"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </StackPanel>
+
+                    <!-- Catalogo -->
+                    <ScrollViewer Grid.Row="2" Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <TextBlock Text="Catalogo App" Foreground="#60a5fa" FontSize="12"
+                                       FontWeight="SemiBold" Margin="0,0,0,8"/>
+                            <ItemsControl x:Name="AppCatalog">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,0,10">
+                                            <TextBlock Text="{Binding Category}" Foreground="#a78bfa"
+                                                       FontWeight="SemiBold" FontSize="13"/>
+                                            <TextBlock Text="{Binding Items}" Foreground="#64748b"
+                                                       Margin="12,2,0,0" FontSize="12"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,12">
+                        <Button Content="▶  Installa su PC..." Style="{StaticResource BtnGreen}" Click="BtnInstallApp_Click"/>
+                        <Button Content="📤  Upload custom"    Style="{StaticResource BtnBlue}"  Click="BtnUploadApp_Click"/>
+                        <Button Content="🗑  Svuota coda"      Style="{StaticResource BtnRed}"   Click="BtnClearQueue_Click"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB OPSI ─── -->
+            <TabItem Header="⚙️  OPSI">
+                <Grid Margin="16,12,16,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="⚙️  OPSI — Pacchetti software gestiti"
+                               Style="{StaticResource SectionLabel}"/>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#10b981">
+                            <StackPanel>
+                                <TextBlock Text="4" FontSize="22" FontWeight="Bold" Foreground="#10b981"/>
+                                <TextBlock Text="Aggiornati" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#f59e0b">
+                            <StackPanel>
+                                <TextBlock Text="1" FontSize="22" FontWeight="Bold" Foreground="#f59e0b"/>
+                                <TextBlock Text="Da aggiornare" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
+                            <StackPanel>
+                                <TextBlock Text="5" FontSize="22" FontWeight="Bold" Foreground="#f8fafc"/>
+                                <TextBlock Text="Totali" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#60a5fa">
+                            <StackPanel>
+                                <TextBlock Text="2026-03-04" FontSize="18" FontWeight="Bold" Foreground="#60a5fa"/>
+                                <TextBlock Text="Ultimo deploy" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="2" x:Name="OpsiGrid">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Pacchetto"   Binding="{Binding Name}"    Width="200"/>
+                            <DataGridTextColumn Header="Versione"    Binding="{Binding Version}" Width="100"/>
+                            <DataGridTextColumn Header="Stato"       Binding="{Binding Status}"  Width="130"/>
+                            <DataGridTextColumn Header="Aggiornato"  Binding="{Binding Updated}" Width="120"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,12">
+                        <Button Content="🚀  Crea pacchetto" Style="{StaticResource BtnGreen}" Click="BtnOpsiCreate_Click"/>
+                        <Button Content="⬆  Aggiorna"        Style="{StaticResource BtnAmber}" Click="BtnOpsiUpdate_Click"/>
+                        <Button Content="🗑  Elimina"         Style="{StaticResource BtnRed}"   Click="BtnOpsiDelete_Click"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB PC ─── -->
+            <TabItem Header="🖥️  PC">
+                <Grid Margin="16,12,16,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Text="🖥️  PC — Stato agenti e risorse di sistema"
+                               Style="{StaticResource SectionLabel}"/>
+
+                    <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#10b981">
+                            <StackPanel>
+                                <TextBlock Text="3" FontSize="22" FontWeight="Bold" Foreground="#10b981"/>
+                                <TextBlock Text="Online" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#ef4444">
+                            <StackPanel>
+                                <TextBlock Text="1" FontSize="22" FontWeight="Bold" Foreground="#ef4444"/>
+                                <TextBlock Text="Offline" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
+                            <StackPanel>
+                                <TextBlock Text="4" FontSize="22" FontWeight="Bold" Foreground="#f8fafc"/>
+                                <TextBlock Text="Totali" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#60a5fa">
+                            <StackPanel>
+                                <TextBlock Text="4" FontSize="22" FontWeight="Bold" Foreground="#60a5fa"/>
+                                <TextBlock Text="Agent installato" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <DataGrid Grid.Row="2" x:Name="PcGrid">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header=" "       Binding="{Binding Icon}"   Width="36"/>
+                            <DataGridTextColumn Header="Nome"    Binding="{Binding Name}"   Width="140"/>
+                            <DataGridTextColumn Header="IP"      Binding="{Binding Ip}"     Width="130"/>
+                            <DataGridTextColumn Header="OS"      Binding="{Binding Os}"     Width="110"/>
+                            <DataGridTextColumn Header="CPU"     Binding="{Binding Cpu}"    Width="70"/>
+                            <DataGridTextColumn Header="RAM"     Binding="{Binding Ram}"    Width="100"/>
+                            <DataGridTextColumn Header="Stato"   Binding="{Binding Status}" Width="90"/>
+                            <DataGridTextColumn Header="Agent"   Binding="{Binding Agent}"  Width="70"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,12">
+                        <Button Content="📊  Inventario"      Style="{StaticResource BtnAmber}" Click="BtnInventory_Click"
+                                ToolTip="Raccoglie hardware, OS e software installati via WMI"/>
+                        <Button Content="🖥️  RDP"             Style="{StaticResource BtnGreen}" Click="BtnRdp_Click"/>
+                        <Button Content="📜  Esegui script"   Style="{StaticResource BtnBlue}"  Click="BtnRunScript_Click"/>
+                        <Button Content="🔄  Aggiorna agent"  Style="{StaticResource BtnBlue}"  Click="BtnUpdateAgent_Click"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB DEPLOY ─── -->
+            <TabItem Header="💿  Deploy">
+                <Grid Margin="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="390" MinWidth="260"/>
+                        <ColumnDefinition Width="5"/>
+                        <ColumnDefinition Width="*" MinWidth="200"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Splitter ridimensionabile -->
+                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                                  Background="#1e2d45" ShowsPreview="False"/>
+
+                    <!-- COLONNA SX: Form configurazione -->
+                    <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"
+                                  Margin="16,12,12,12">
+                        <StackPanel>
+                            <TextBlock Text="💿  Crea installazione Windows automatica"
+                                       Style="{StaticResource SectionLabel}"/>
+
+                            <!-- 🪟 Windows -->
+                            <TextBlock Text="🪟  Windows" Style="{StaticResource GroupTitle}"/>
+
+                            <TextBlock Text="Edizione" Style="{StaticResource SettingsLabel}"/>
+                            <ComboBox x:Name="CboWinEdition" Width="330" HorizontalAlignment="Left"
+                                      Background="#0d1b3e" Foreground="#e2e8f0" BorderBrush="#1e3a5f"
+                                      FontSize="13" Padding="8,5">
+                                <!-- Client -->
+                                <ComboBoxItem Content="── Client ──"            IsEnabled="False" Foreground="#475569"/>
+                                <ComboBoxItem Content="Windows 11 Pro"          Tag="Professional"            IsSelected="True"/>
+                                <ComboBoxItem Content="Windows 11 Home"         Tag="Home"/>
+                                <ComboBoxItem Content="Windows 11 Enterprise"   Tag="Enterprise"/>
+                                <ComboBoxItem Content="Windows 10 Pro"          Tag="Professional"/>
+                                <ComboBoxItem Content="Windows 10 Enterprise"   Tag="Enterprise"/>
+                                <!-- Server -->
+                                <ComboBoxItem Content="── Server ──"            IsEnabled="False" Foreground="#475569"/>
+                                <ComboBoxItem Content="Windows Server 2025 Standard"    Tag="Windows Server 2025 Standard"/>
+                                <ComboBoxItem Content="Windows Server 2025 Datacenter"  Tag="Windows Server 2025 Datacenter"/>
+                                <ComboBoxItem Content="Windows Server 2022 Standard"    Tag="Windows Server 2022 Standard"/>
+                                <ComboBoxItem Content="Windows Server 2022 Datacenter"  Tag="Windows Server 2022 Datacenter"/>
+                                <ComboBoxItem Content="Windows Server 2019 Standard"    Tag="Windows Server 2019 Standard"/>
+                            </ComboBox>
+
+                            <TextBlock Text="Nome PC (template)" Style="{StaticResource SettingsLabel}"/>
+                            <TextBox x:Name="TxtDeployPcName" Style="{StaticResource SettingsBox}"
+                                     Width="330" Text="PC-{MAC6}"
+                                     ToolTip="Variabili: {MAC6}=ultimi 6 hex del MAC, testo fisso"/>
+                            <TextBlock Text="es: PC-{MAC6} → PC-B3CEEB   |   UFFICIO-01 (fisso)"
+                                       Foreground="#475569" FontSize="10" Margin="0,2,0,0"/>
+
+                            <TextBlock Text="Lingua sistema" Style="{StaticResource SettingsLabel}"/>
+                            <ComboBox x:Name="CboWinLocale" Width="330" HorizontalAlignment="Left"
+                                      Background="#0d1b3e" Foreground="#e2e8f0" BorderBrush="#1e3a5f"
+                                      FontSize="13" Padding="8,5">
+                                <ComboBoxItem Content="it-IT — Italiano (Italia)"       Tag="it-IT" IsSelected="True"/>
+                                <ComboBoxItem Content="en-US — English (United States)" Tag="en-US"/>
+                                <ComboBoxItem Content="en-GB — English (United Kingdom)" Tag="en-GB"/>
+                                <ComboBoxItem Content="fr-FR — Français (France)"       Tag="fr-FR"/>
+                                <ComboBoxItem Content="de-DE — Deutsch (Deutschland)"   Tag="de-DE"/>
+                            </ComboBox>
+
+                            <!-- 👤 Account -->
+                            <TextBlock Text="👤  Account" Style="{StaticResource GroupTitle}"/>
+
+                            <TextBlock Text="Licenza Windows / Product Key (opzionale)"
+                                       Style="{StaticResource SettingsLabel}"/>
+                            <TextBox x:Name="TxtDeployProductKey" Style="{StaticResource SettingsBox}"
+                                     Width="330" FontFamily="Consolas"
+                                     ToolTip="Es: XXXXX-XXXXX-XXXXX-XXXXX-XXXXX — lascia vuoto per KMS/valutazione"/>
+                            <TextBlock Text="Vuoto = KMS volume licensing o Windows di valutazione (180gg)"
+                                       Foreground="#475569" FontSize="10" Margin="0,2,0,0"/>
+
+                            <!-- Tipo account -->
+                            <TextBlock Text="Tipo account principale" Style="{StaticResource SettingsLabel}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                                <RadioButton x:Name="RbLocalAccount" Content="👤  Account locale (automatico)"
+                                             Foreground="#cbd5e1" IsChecked="True" Margin="0,0,16,0"
+                                             GroupName="AccountType"
+                                             Checked="RbAccount_Checked"
+                                             ToolTip="Installazione 100% automatica, nessuna interazione"/>
+                                <RadioButton x:Name="RbMsAccount"   Content="☁️  Account Microsoft"
+                                             Foreground="#cbd5e1" GroupName="AccountType"
+                                             Checked="RbAccount_Checked"
+                                             ToolTip="Il setup si fermerà alla schermata Microsoft account — l'utente fa login manualmente"/>
+                            </StackPanel>
+                            <TextBlock x:Name="TxtAccountNote"
+                                       Text="⚠️  Con account Microsoft il setup si ferma e chiede login — poi il post-install riparte automaticamente"
+                                       Foreground="#f59e0b" FontSize="10" Margin="0,4,0,0"
+                                       TextWrapping="Wrap" Visibility="Collapsed"/>
+
+                            <TextBlock Text="Password Amministratore locale" Style="{StaticResource SettingsLabel}"/>
+                            <PasswordBox x:Name="TxtDeployAdminPass" Style="{StaticResource SettingsPass}"
+                                         Width="330"/>
+
+                            <TextBlock Text="Utente locale aggiuntivo (opzionale — lascia vuoto per saltare)"
+                                       Style="{StaticResource SettingsLabel}"/>
+                            <TextBox x:Name="TxtDeployUsername" Style="{StaticResource SettingsBox}"
+                                     Width="330" ToolTip="Lascia vuoto per non creare utente aggiuntivo"/>
+
+                            <TextBlock Text="Password utente standard" Style="{StaticResource SettingsLabel}"/>
+                            <PasswordBox x:Name="TxtDeployUserPass" Style="{StaticResource SettingsPass}"
+                                         Width="330"/>
+
+                            <!-- 🏢 Dominio -->
+                            <TextBlock Text="🏢  Dominio / Join" Style="{StaticResource GroupTitle}"/>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
+                                <RadioButton x:Name="RbWorkgroup" Content="Workgroup"
+                                             Foreground="#cbd5e1" IsChecked="True" Margin="0,0,16,0"
+                                             GroupName="DomainType" Checked="RbDomain_Checked"/>
+                                <RadioButton x:Name="RbAdLocale" Content="AD locale"
+                                             Foreground="#cbd5e1" Margin="0,0,16,0"
+                                             GroupName="DomainType" Checked="RbDomain_Checked"/>
+                                <RadioButton x:Name="RbAzureAd" Content="Azure AD"
+                                             Foreground="#cbd5e1"
+                                             GroupName="DomainType" Checked="RbDomain_Checked"/>
+                            </StackPanel>
+
+                            <!-- Pannello AD locale -->
+                            <StackPanel x:Name="PanelAdLocale" Visibility="Collapsed">
+                                <TextBlock Text="Nome dominio" Style="{StaticResource SettingsLabel}"/>
+                                <TextBox x:Name="TxtDomainName" Style="{StaticResource SettingsBox}"
+                                         Width="330" ToolTip="Es: azienda.local oppure azienda.com"/>
+
+                                <TextBlock Text="Utente con permessi di join" Style="{StaticResource SettingsLabel}"/>
+                                <TextBox x:Name="TxtDomainUser" Style="{StaticResource SettingsBox}"
+                                         Width="330" ToolTip="Es: Administrator oppure join-account"/>
+
+                                <TextBlock Text="Password utente di join" Style="{StaticResource SettingsLabel}"/>
+                                <PasswordBox x:Name="TxtDomainPass" Style="{StaticResource SettingsPass}"
+                                             Width="330"/>
+
+                                <TextBlock Text="IP Domain Controller (DNS)" Style="{StaticResource SettingsLabel}"/>
+                                <TextBox x:Name="TxtDomainControllerIp" Style="{StaticResource SettingsBox}"
+                                         Width="330" ToolTip="IP del DC — necessario per risolvere il dominio durante l'installazione"/>
+
+                                <TextBlock Text="✅  Unione al dominio completamente automatica (pass specialize)"
+                                           Foreground="#4ade80" FontSize="10" Margin="0,3,0,0"/>
+                            </StackPanel>
+
+                            <!-- Pannello Azure AD -->
+                            <StackPanel x:Name="PanelAzureAd" Visibility="Collapsed">
+                                <TextBlock Text="Tenant ID (opzionale)" Style="{StaticResource SettingsLabel}"/>
+                                <TextBox x:Name="TxtAzureTenant" Style="{StaticResource SettingsBox}"
+                                         Width="330" FontFamily="Consolas"
+                                         ToolTip="GUID del tenant Azure AD — lascia vuoto per tenant automatico"/>
+                                <TextBlock Foreground="#f59e0b" FontSize="10" Margin="0,3,0,8"
+                                           TextWrapping="Wrap"
+                                           Text="⚠️  Azure AD join viene avviato dal postinstall (dsregcmd). L'utente dovrà fare login con il proprio account Microsoft 365 al primo avvio."/>
+                            </StackPanel>
+
+                            <!-- 📦 Software -->
+                            <TextBlock Text="📦  Software (winget)" Style="{StaticResource GroupTitle}"/>
+
+                            <!-- Lista dinamica pacchetti -->
+                            <ListBox x:Name="LstPackages"
+                                     Background="#0a0f1e" BorderBrush="#1e3a5f" BorderThickness="1"
+                                     Width="330" Height="160" HorizontalAlignment="Left"
+                                     Margin="0,0,0,6" Padding="0">
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Padding"    Value="6,3"/>
+                                        <Setter Property="Foreground" Value="#cbd5e1"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding}"
+                                                       FontFamily="Consolas" FontSize="12"
+                                                       VerticalAlignment="Center"/>
+                                            <Button Grid.Column="1" Content="✕"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    Foreground="#ef4444" FontSize="11" Padding="4,0"
+                                                    Cursor="Hand"
+                                                    Click="BtnRemovePackage_Click"
+                                                    ToolTip="Rimuovi"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Aggiungi pacchetto -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
+                                <TextBox x:Name="TxtNewPackage"
+                                         Background="#0d1b3e" Foreground="#e2e8f0" BorderBrush="#1e3a5f"
+                                         Padding="8,5" FontFamily="Consolas" FontSize="12"
+                                         Width="272"
+                                         ToolTip="Winget ID esatto — es: Git.Git, Valve.Steam, Python.Python.3"
+                                         KeyDown="TxtNewPackage_KeyDown"/>
+                                <Button Content="➕" Style="{StaticResource BtnGreen}"
+                                        Padding="10,5" Margin="4,0,0,0"
+                                        Click="BtnAddPackage_Click" ToolTip="Aggiungi pacchetto"/>
+                            </StackPanel>
+                            <TextBlock Text="Winget ID — es: Git.Git  |  Valve.Steam  |  Python.Python.3"
+                                       Foreground="#475569" FontSize="10" Margin="0,3,0,0"/>
+
+                            <!-- 🔒 Agent -->
+                            <TextBlock Text="🔒  NovaSCM Agent" Style="{StaticResource GroupTitle}"/>
+
+                            <CheckBox x:Name="ChkIncludeAgent"
+                                      Content="Includi agente enrollment WiFi EAP-TLS"
+                                      Foreground="#cbd5e1" IsChecked="True" Margin="0,4,0,8"/>
+
+                            <TextBlock Text="URL server NovaSCM (per l'agente)"
+                                       Style="{StaticResource SettingsLabel}"/>
+                            <TextBox x:Name="TxtDeployServerUrl" Style="{StaticResource SettingsBox}"
+                                     Width="330"
+                                     ToolTip="Es: http://192.168.20.110:9090"/>
+
+                            <!-- Profili -->
+                            <TextBlock Text="💾  Profili" Style="{StaticResource GroupTitle}"/>
+                            <ComboBox x:Name="CboProfiles" Width="330" HorizontalAlignment="Left"
+                                      Background="#0d1b3e" Foreground="#e2e8f0" BorderBrush="#1e3a5f"
+                                      FontSize="13" Padding="8,5" Margin="0,0,0,6"
+                                      ToolTip="Seleziona un profilo salvato"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                <Button Content="📂  Carica"  Style="{StaticResource BtnBlue}"
+                                        Padding="10,5" Click="BtnLoadProfile_Click"
+                                        ToolTip="Carica profilo selezionato"/>
+                                <Button Content="💾  Salva"   Style="{StaticResource BtnGreen}"
+                                        Padding="10,5" Click="BtnSaveProfile_Click"
+                                        ToolTip="Salva configurazione corrente"/>
+                                <Button Content="📁  Importa" Style="{StaticResource BtnAmber}"
+                                        Padding="10,5" Click="BtnImportProfile_Click"
+                                        ToolTip="Importa profilo da file JSON"/>
+                                <Button Content="🗑" Style="{StaticResource BtnRed}"
+                                        Padding="10,5" Click="BtnDeleteProfile_Click"
+                                        ToolTip="Elimina profilo selezionato"/>
+                            </StackPanel>
+
+                            <!-- Azioni -->
+                            <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                                <Button Content="⚙️  Genera file" Style="{StaticResource BtnGreen}"
+                                        Click="BtnDeployGenerate_Click"/>
+                                <Button Content="💾  Salva cartella" Style="{StaticResource BtnBlue}"
+                                        x:Name="BtnDeploySave" IsEnabled="False"
+                                        Click="BtnDeploySave_Click"/>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <Button Content="🖴  Scrivi USB" Style="{StaticResource BtnAmber}"
+                                        x:Name="BtnDeployUsb" IsEnabled="False"
+                                        Click="BtnDeployUsb_Click"
+                                        ToolTip="Copia file nella radice di una USB"/>
+                                <Button Content="🌐  Deploy PXE" Style="{StaticResource BtnBlue}"
+                                        x:Name="BtnDeployPxe" IsEnabled="False"
+                                        Click="BtnDeployPxe_Click"
+                                        ToolTip="Copia su server PXE via SCP (CT 110)"/>
+                            </StackPanel>
+
+                            <TextBlock x:Name="TxtDeployStatus" Foreground="#10b981"
+                                       FontSize="11" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- COLONNA DX: Preview XML -->
+                    <Grid Grid.Column="2" Margin="0,12,16,12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="📄  Anteprima autounattend.xml"
+                                   Foreground="#60a5fa" FontSize="13" FontWeight="SemiBold"
+                                   Margin="0,0,0,8"/>
+                        <TextBox Grid.Row="1" x:Name="TxtDeployPreview"
+                                 Background="#0a0f1e" Foreground="#4ade80"
+                                 BorderBrush="#1e3a5f" BorderThickness="1"
+                                 FontFamily="Consolas" FontSize="11"
+                                 IsReadOnly="True" TextWrapping="NoWrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 Padding="12"/>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB WORKFLOW ─── -->
+            <TabItem Header="⚙️  Workflow">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>  <!-- toolbar principale -->
+                        <RowDefinition Height="*"/>     <!-- contenuto -->
+                        <RowDefinition Height="Auto"/>  <!-- status bar -->
+                    </Grid.RowDefinitions>
+
+                    <!-- Toolbar -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal"
+                                Background="#0d1b3e" Margin="0">
+                        <Button Content="+ Nuovo Workflow"  Style="{StaticResource BtnGreen}"  Click="BtnWfNew_Click"/>
+                        <Button Content="✏️ Rinomina"        Style="{StaticResource BtnBlue}"   Click="BtnWfRename_Click"/>
+                        <Button Content="🗑 Elimina Workflow" Style="{StaticResource BtnRed}"    Click="BtnWfDelete_Click"/>
+                        <Separator Width="16" Background="Transparent"/>
+                        <Button Content="↻ Aggiorna"         Style="{StaticResource BtnBlue}"   Click="BtnWfRefresh_Click"/>
+                    </StackPanel>
+
+                    <!-- Contenuto: lista workflow | step + assegnazioni -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="260"/>
+                            <ColumnDefinition Width="4"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- ─ COLONNA SINISTRA: lista workflow ─ -->
+                        <Grid Grid.Column="0" Background="#0d1520">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0" Text="Workflow definiti"
+                                       Foreground="#60a5fa" FontWeight="SemiBold"
+                                       Padding="10,8,10,6" FontSize="12"/>
+                            <ListBox x:Name="LstWorkflows" Grid.Row="1"
+                                     Background="Transparent" BorderThickness="0"
+                                     Foreground="#cbd5e1" FontSize="13"
+                                     SelectionChanged="LstWorkflows_SelectionChanged">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="4,4,4,4">
+                                            <TextBlock Text="{Binding Nome}" FontWeight="SemiBold"/>
+                                            <TextBlock FontSize="11" Foreground="#475569">
+                                                <Run Text="v"/><Run Text="{Binding Versione}"/>
+                                                <Run Text=" — "/><Run Text="{Binding StepCount}"/>
+                                                <Run Text=" step"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Padding" Value="8,4"/>
+                                        <Setter Property="Background" Value="Transparent"/>
+                                        <Setter Property="Foreground" Value="#cbd5e1"/>
+                                        <Style.Triggers>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter Property="Background" Value="#1e3a6e"/>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Background" Value="#1e2a4a"/>
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                            </ListBox>
+                        </Grid>
+
+                        <!-- Splitter verticale -->
+                        <GridSplitter Grid.Column="1" Width="4"
+                                      HorizontalAlignment="Stretch"
+                                      Background="#1e3a5f"/>
+
+                        <!-- ─ COLONNA DESTRA ─ -->
+                        <Grid Grid.Column="2">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" MinHeight="180"/>
+                                <RowDefinition Height="4"/>
+                                <RowDefinition Height="220" MinHeight="120"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Step section -->
+                            <Grid Grid.Row="0">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Background="#0d1b3e" Padding="10,5">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Step del workflow selezionato"
+                                                   Foreground="#60a5fa" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" Margin="0,0,16,0" FontSize="12"/>
+                                        <Button Content="+ Aggiungi Step"  Style="{StaticResource BtnGreen}" Click="BtnWfAddStep_Click"/>
+                                        <Button Content="✏️ Modifica Step"  Style="{StaticResource BtnBlue}"  Click="BtnWfEditStep_Click"/>
+                                        <Button Content="↑"                 Style="{StaticResource BtnBlue}"  Click="BtnWfStepUp_Click"    Padding="10,6"/>
+                                        <Button Content="↓"                 Style="{StaticResource BtnBlue}"  Click="BtnWfStepDown_Click"  Padding="10,6"/>
+                                        <Button Content="🗑"                 Style="{StaticResource BtnRed}"   Click="BtnWfDeleteStep_Click" Padding="10,6"/>
+                                    </StackPanel>
+                                </Border>
+                                <DataGrid x:Name="GridWfSteps" Grid.Row="1"
+                                          AutoGenerateColumns="False"
+                                          SelectionMode="Single" IsReadOnly="True"
+                                          CanUserAddRows="False" CanUserDeleteRows="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="#"        Binding="{Binding Ordine}"   Width="44"/>
+                                        <DataGridTextColumn Header="Nome"     Binding="{Binding Nome}"     Width="*"/>
+                                        <DataGridTextColumn Header="Tipo"     Binding="{Binding Tipo}"     Width="150"/>
+                                        <DataGridTextColumn Header="Platform" Binding="{Binding Platform}" Width="80"/>
+                                        <DataGridTextColumn Header="Parametri" Binding="{Binding Parametri}" Width="200"/>
+                                        <DataGridTextColumn Header="Su errore" Binding="{Binding SuErrore}" Width="80"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+
+                            <!-- Splitter orizzontale -->
+                            <GridSplitter Grid.Row="1" Height="4"
+                                          HorizontalAlignment="Stretch"
+                                          Background="#1e3a5f"/>
+
+                            <!-- Assegnazioni section -->
+                            <Grid Grid.Row="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <Border Grid.Row="0" Background="#0d1b3e" Padding="10,5">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="Assegnazioni (Deployment)"
+                                                   Foreground="#60a5fa" FontWeight="SemiBold"
+                                                   VerticalAlignment="Center" Margin="0,0,16,0" FontSize="12"/>
+                                        <Button Content="+ Assegna a PC"   Style="{StaticResource BtnGreen}" Click="BtnWfAssign_Click"/>
+                                        <Button Content="🔍 Dettaglio"      Style="{StaticResource BtnBlue}"  Click="BtnWfAssignDetail_Click"/>
+                                        <Button Content="↻"                 Style="{StaticResource BtnBlue}"  Click="BtnWfRefreshAssign_Click" Padding="10,6"/>
+                                        <Button Content="🗑"                 Style="{StaticResource BtnRed}"   Click="BtnWfDeleteAssign_Click"  Padding="10,6"/>
+                                    </StackPanel>
+                                </Border>
+                                <DataGrid x:Name="GridWfAssignments" Grid.Row="1"
+                                          AutoGenerateColumns="False"
+                                          SelectionMode="Single" IsReadOnly="True"
+                                          CanUserAddRows="False" CanUserDeleteRows="False">
+                                    <DataGrid.Columns>
+                                        <DataGridTextColumn Header="PC"       Binding="{Binding PcName}"       Width="130"/>
+                                        <DataGridTextColumn Header="Workflow" Binding="{Binding WorkflowNome}" Width="*"/>
+                                        <DataGridTextColumn Header="Stato"    Binding="{Binding Status}"       Width="80"/>
+                                        <DataGridTemplateColumn Header="Progresso" Width="160">
+                                            <DataGridTemplateColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Margin="4,2">
+                                                        <ProgressBar Value="{Binding Progress}" Maximum="100"
+                                                                     Height="7" Background="#1e3a5f"
+                                                                     Foreground="{Binding ProgressColor}"/>
+                                                        <TextBlock Text="{Binding ProgressText}"
+                                                                   FontSize="10" Foreground="#64748b"/>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </DataGridTemplateColumn.CellTemplate>
+                                        </DataGridTemplateColumn>
+                                        <DataGridTextColumn Header="Assegnato" Binding="{Binding AssignedAt}" Width="130"/>
+                                        <DataGridTextColumn Header="Last seen" Binding="{Binding LastSeen}"   Width="130"/>
+                                    </DataGrid.Columns>
+                                </DataGrid>
+                            </Grid>
+                        </Grid>
+                    </Grid>
+
+                    <!-- Status bar -->
+                    <TextBlock x:Name="TxtWfStatus" Grid.Row="2"
+                               Padding="10,4" Background="#0d1520"
+                               Foreground="#475569" FontSize="11"
+                               Text="Seleziona un workflow per vedere gli step"/>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB RICHIESTE (CR) ─── -->
+            <TabItem Header="📋  Richieste">
+                <Grid Margin="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="380"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- COLONNA SINISTRA: Form nuovo CR -->
+                    <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"
+                                  Background="#1a2235" Padding="16,12,16,12">
+                        <StackPanel>
+                            <TextBlock Text="📋  Nuova Richiesta (CR)" FontSize="14" FontWeight="Bold"
+                                       Foreground="#5ba3f5" Margin="0,0,0,12"/>
+
+                            <!-- PC -->
+                            <TextBlock Text="🖥️  Nome PC" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox x:Name="TxtCrPcName" Margin="0,0,0,10"
+                                     ToolTip="Es: PC-LAB-001 (maiuscolo automatico)"
+                                     CharacterCasing="Upper"/>
+
+                            <!-- Dominio -->
+                            <TextBlock Text="🏢  Dominio" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox x:Name="TxtCrDomain" Margin="0,0,0,10" Text="test.local"/>
+
+                            <!-- OU -->
+                            <TextBlock Text="📁  OU (Organizational Unit)" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox x:Name="TxtCrOu" Margin="0,0,0,10"
+                                     Text="CN=Computers,DC=test,DC=local"
+                                     ToolTip="Es: OU=Lab,DC=test,DC=local"/>
+
+                            <!-- IP DC -->
+                            <TextBlock Text="🌐  IP Domain Controller" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox x:Name="TxtCrDcIp" Margin="0,0,0,10" Text="192.168.10.185"/>
+
+                            <!-- Join credentials -->
+                            <TextBlock Text="👤  Utente join AD" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox x:Name="TxtCrJoinUser" Margin="0,0,0,10" Text="join-account"/>
+
+                            <TextBlock Text="🔑  Password join AD" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <PasswordBox x:Name="TxtCrJoinPass" Margin="0,0,0,10"/>
+
+                            <!-- ODJ Blob (djoin.exe) -->
+                            <Border Background="#1e3a5f" Height="1" Margin="0,4,0,8"/>
+                            <TextBlock Text="— oppure: ODJ blob da djoin.exe (nessuna password nel XML) —"
+                                       Foreground="#475569" FontSize="10"
+                                       HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                            <TextBlock Text="🔑  ODJ Blob" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox x:Name="TxtCrOdjBlob" Margin="0,0,0,4" Height="65"
+                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     ToolTip="Incolla qui il base64 del file .djoin generato sul DC"
+                                     FontFamily="Consolas" FontSize="10"/>
+                            <Button Content="📋  Copia comando djoin (da eseguire sul DC)"
+                                    Style="{StaticResource BtnBlue}" FontSize="11"
+                                    Margin="0,0,0,12"
+                                    Click="BtnCrCopyDjoin_Click"/>
+
+                            <!-- Password admin -->
+                            <TextBlock Text="🔑  Password Administrator" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <PasswordBox x:Name="TxtCrAdminPass" Margin="0,0,0,10"/>
+
+                            <!-- Utente assegnato -->
+                            <TextBlock Text="👤  Utente assegnato (opzionale)" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox x:Name="TxtCrAssignedUser" Margin="0,0,0,10"/>
+
+                            <!-- Software -->
+                            <TextBlock Text="📦  Software winget" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <Grid Margin="0,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="36"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="TxtCrNewPackage" Grid.Column="0"
+                                         ToolTip="Es: Mozilla.Firefox"
+                                         KeyDown="TxtCrNewPackage_KeyDown"/>
+                                <Button Content="➕" Grid.Column="1" Margin="4,0,0,0"
+                                        Click="BtnCrAddPackage_Click"
+                                        Style="{StaticResource BtnBlue}" Padding="0"/>
+                            </Grid>
+                            <ListBox x:Name="LstCrPackages" Height="90" Margin="0,0,0,10"
+                                     Background="#111827" BorderBrush="#2d3f5a"
+                                     ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="24"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Text="{Binding}" Foreground="#ccd6f6" VerticalAlignment="Center"/>
+                                            <Button Content="✕" Grid.Column="1" Padding="0"
+                                                    Background="Transparent" BorderThickness="0"
+                                                    Foreground="#ff6b6b" FontSize="11"
+                                                    Click="BtnCrRemovePackage_Click"/>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <!-- Note -->
+                            <TextBlock Text="📝  Note" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBox x:Name="TxtCrNotes" Margin="0,0,0,16" Height="54"
+                                     AcceptsReturn="True" TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"/>
+
+                            <!-- Pulsanti -->
+                            <Button x:Name="BtnCrCreate" Content="✅  Crea Richiesta"
+                                    Style="{StaticResource BtnGreen}" Margin="0,0,0,6"
+                                    Click="BtnCrCreate_Click"/>
+                            <Button x:Name="BtnCrRefresh" Content="🔄  Aggiorna lista"
+                                    Style="{StaticResource BtnBlue}" Margin="0,0,0,6"
+                                    Click="BtnCrRefresh_Click"/>
+                            <TextBlock x:Name="TxtCrStatus" Text="" Foreground="#5ba3f5"
+                                       FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- COLONNA DESTRA: Lista CR -->
+                    <Grid Grid.Column="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Text="📋  Richieste attive"
+                                   FontSize="13" FontWeight="Bold"
+                                   Foreground="#5ba3f5" Margin="16,12,0,8"/>
+
+                        <DataGrid x:Name="CrGrid" Grid.Row="1"
+                                  AutoGenerateColumns="False" IsReadOnly="True"
+                                  CanUserResizeRows="False" RowHeight="34"
+                                  Background="#111827" RowBackground="#111827"
+                                  AlternatingRowBackground="#151f2e"
+                                  BorderThickness="0" GridLinesVisibility="Horizontal"
+                                  HorizontalGridLinesBrush="#1e2d45"
+                                  Foreground="#ccd6f6" FontSize="12"
+                                  SelectionChanged="CrGrid_SelectionChanged">
+                            <DataGrid.RowStyle>
+                                <Style TargetType="DataGridRow">
+                                    <Setter Property="Foreground" Value="#ccd6f6"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Status}" Value="completed">
+                                            <Setter Property="Background" Value="#0a2e1f"/>
+                                            <Setter Property="Foreground" Value="#10b981"/>
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Status}" Value="in_progress">
+                                            <Setter Property="Background" Value="#2e1f00"/>
+                                            <Setter Property="Foreground" Value="#fbbf24"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </DataGrid.RowStyle>
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="✅  Segna Completato" Click="MenuCrComplete_Click"/>
+                                    <MenuItem Header="🔄  Segna In lavorazione" Click="MenuCrInProgress_Click"/>
+                                    <MenuItem Header="🗑  Elimina" Click="MenuCrDelete_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="💿  Genera file per USB" Click="MenuCrGenUsb_Click"/>
+                                    <MenuItem Header="⬇️  Scarica autounattend.xml" Click="MenuCrDownloadXml_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="🔍  Task Sequence Debugger" Click="MenuCrDebug_Click"/>
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="ID"      Binding="{Binding Id}"           Width="45"/>
+                                <DataGridTextColumn Header="Nome PC" Binding="{Binding PcName}"       Width="130"/>
+                                <DataGridTextColumn Header="Dominio" Binding="{Binding Domain}"       Width="110"/>
+                                <DataGridTextColumn Header="OU"      Binding="{Binding Ou}"           Width="180"/>
+                                <DataGridTextColumn Header="Utente"  Binding="{Binding AssignedUser}" Width="110"/>
+                                <DataGridTextColumn Header="Stato"   Binding="{Binding Status}"       Width="100"/>
+                                <DataGridTextColumn Header="Creato"  Binding="{Binding CreatedAt}"    Width="140"/>
+                                <DataGridTextColumn Header="Note"       Binding="{Binding Notes}"    Width="*"/>
+                                <DataGridTextColumn Header="Check-in"  Binding="{Binding LastSeen}" Width="140"/>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB IMPOSTAZIONI ─── -->
+            <TabItem Header="⚙️  Impostazioni">
+                <ScrollViewer Margin="20,12,20,12" VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+
+                        <TextBlock Text="⚙️  Configurazione server" Style="{StaticResource SectionLabel}"/>
+
+                        <!-- Sezione Server -->
+                        <TextBlock Text="🌐 Server" Style="{StaticResource GroupTitle}"/>
+
+                        <TextBlock Text="Certportal URL" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtCertportalUrl" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Es: https://certportal.miarete.it oppure http://192.168.1.110:9090"/>
+
+                        <TextBlock Text="UniFi Controller URL" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtUnifiUrl" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Es: https://192.168.1.1"/>
+
+                        <TextBlock Text="UniFi Username" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtUnifiUser" Style="{StaticResource SettingsBox}"/>
+
+                        <TextBlock Text="UniFi Password" Style="{StaticResource SettingsLabel}"/>
+                        <PasswordBox x:Name="TxtUnifiPass" Style="{StaticResource SettingsPass}"/>
+
+                        <!-- Sezione WiFi / RADIUS -->
+                        <TextBlock Text="📡 WiFi / RADIUS" Style="{StaticResource GroupTitle}"/>
+
+                        <TextBlock Text="SSID rete sicura (EAP-TLS)" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtSsid" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Es: MiaRete-Secure"/>
+
+                        <TextBlock Text="RADIUS Server IP" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtRadiusIp" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Es: 192.168.1.105"/>
+
+                        <!-- Sezione Certificati -->
+                        <TextBlock Text="🔐 Certificati" Style="{StaticResource GroupTitle}"/>
+
+                        <TextBlock Text="Validità certificati (giorni)" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtCertDays" Style="{StaticResource SettingsBox}" Text="3650"
+                                 ToolTip="Default: 3650 (10 anni)"/>
+
+                        <!-- Sezione subnet multiple -->
+                        <TextBlock Text="🌐 Subnet da scansionare" Style="{StaticResource GroupTitle}"/>
+
+                        <TextBlock Text="Reti (una per riga, formato 192.168.x.0/24)"
+                                   Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtScanNetworks"
+                                 Background="#0d1b3e" Foreground="#e2e8f0"
+                                 BorderBrush="#1e3a5f" Padding="8,4" FontSize="13"
+                                 Width="320" HorizontalAlignment="Left"
+                                 AcceptsReturn="True" TextWrapping="Wrap" Height="110"
+                                 VerticalScrollBarVisibility="Auto"
+                                 ToolTip="Usato dal pulsante 'Tutte le VLAN' nel tab Rete"/>
+
+                        <!-- Sezione WinRM / Inventario -->
+                        <TextBlock Text="🖥️ Inventario / WinRM" Style="{StaticResource GroupTitle}"/>
+
+                        <TextBlock Text="Username admin remoto" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtAdminUser" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Es: Administrator — usato per WMI remoto e inventario hardware/software"/>
+
+                        <TextBlock Text="Password admin remoto" Style="{StaticResource SettingsLabel}"/>
+                        <PasswordBox x:Name="TxtAdminPass" Style="{StaticResource SettingsPass}"/>
+
+                        <TextBlock Foreground="#475569" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
+                                   Text="⚠️  Abilita WinRM sui PC target con:  Enable-PSRemoting -Force  (da PowerShell admin)"/>
+
+                        <!-- Sezione Organizzazione -->
+                        <TextBlock Text="🏢 Organizzazione" Style="{StaticResource GroupTitle}"/>
+
+                        <TextBlock Text="Nome organizzazione" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtOrgName" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Es: PolarisCore / MiaAzienda Srl"/>
+
+                        <TextBlock Text="Dominio" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtDomain" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Es: polariscore.it / miazienda.local"/>
+
+                        <!-- Sezione NovaSCM API -->
+                        <TextBlock Text="🔧 NovaSCM / CR" Style="{StaticResource GroupTitle}"/>
+                        <TextBlock Text="URL API NovaSCM (tab Richieste)" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtNovaSCMApiUrl" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Es: http://192.168.20.110:9091/api/cr"/>
+
+                        <!-- Pulsanti -->
+                        <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                            <Button Content="💾  Salva impostazioni" Style="{StaticResource BtnGreen}"
+                                    Click="BtnSaveSettings_Click"/>
+                            <Button Content="🔍  Test connessione" Style="{StaticResource BtnBlue}"
+                                    Click="BtnTestConnection_Click"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="TxtSettingsStatus" Foreground="#10b981"
+                                   FontSize="12" Margin="0,10,0,0" Text=""/>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ─── TAB ABOUT ─── -->
+            <TabItem Header="ℹ️  About">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel Margin="40,24,40,24">
+
+                        <!-- Titolo -->
+                        <TextBlock Text="NovaSCM" FontSize="36" FontWeight="Bold" Foreground="#60a5fa"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="Open Source Fleet &amp; Network Manager"
+                                   FontSize="14" Foreground="#64748b" Margin="0,4,0,20"
+                                   TextWrapping="Wrap"/>
+
+                        <!-- Autore -->
+                        <TextBlock Text="Developed by" Foreground="#475569" FontSize="12" TextWrapping="Wrap"/>
+                        <TextBlock Text="Claudio Becchis" FontSize="22" FontWeight="SemiBold"
+                                   Foreground="#e2e8f0" Margin="0,2,0,6" TextWrapping="Wrap"/>
+                        <TextBlock Text="Powered by" Foreground="#475569" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                        <TextBlock Text="PolarisCore.it" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="#60a5fa" Margin="0,2,0,20" TextWrapping="Wrap"/>
+
+                        <!-- Funzionalità -->
+                        <TextBlock Text="📋  Funzionalità" Foreground="#60a5fa"
+                                   FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <Border Background="#0d1b3e" BorderBrush="#1e3a5f" BorderThickness="1"
+                                CornerRadius="6" Padding="16,12" Margin="0,0,0,16">
+                            <TextBlock Foreground="#94a3b8" FontSize="12" LineHeight="22"
+                                       TextWrapping="Wrap">
+                                <TextBlock.Text>•  Scansione rete — IP, MAC, Vendor, Tipo device
+•  Scansione porte aperte per ogni device
+•  Connessione RDP e SSH one-click
+•  Gestione certificati WiFi EAP-TLS
+•  Registrazione device via MAC
+•  Deploy Windows unattended con autounattend.xml
+•  Task Sequence Debugger (stile SCCM)
+•  Completamente configurabile da GUI</TextBlock.Text>
+                            </TextBlock>
+                        </Border>
+
+                        <!-- Licenza -->
+                        <TextBlock Text="📄  Licenza" Foreground="#60a5fa"
+                                   FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <Border Background="#0d1b3e" BorderBrush="#1e3a5f" BorderThickness="1"
+                                CornerRadius="6" Padding="16,12" Margin="0,0,0,20">
+                            <StackPanel>
+                                <TextBlock Foreground="#94a3b8" FontSize="12" LineHeight="22"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Text>MIT License — Software libero e open source
+Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autore originale.</TextBlock.Text>
+                                </TextBlock>
+                                <TextBlock Margin="0,10,0,0" Foreground="#475569" FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Text="© 2026 Claudio Becchis — PolarisCore.it"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Pulsanti -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="🌐  PolarisCore.it" Padding="14,7" Margin="0,0,10,0"
+                                    Background="#0c1e40" BorderBrush="#2563eb" Foreground="#93c5fd"
+                                    Click="BtnOpenWebsite_Click"/>
+                            <Button Content="📁  GitHub" Padding="14,7" Margin="0,0,10,0"
+                                    Background="#0c1e40" BorderBrush="#2563eb" Foreground="#93c5fd"
+                                    Click="BtnOpenGitHub_Click"/>
+                            <Button Content="🔄  Controlla aggiornamenti" Padding="14,7"
+                                    Background="#0c2d1a" BorderBrush="#16a34a" Foreground="#4ade80"
+                                    Click="BtnCheckUpdate_Click"/>
+                        </StackPanel>
+
+                        <!-- Demo stili GUI -->
+                        <TextBlock Text="🎨  Demo Stili GUI" Foreground="#60a5fa"
+                                   FontWeight="SemiBold" FontSize="13" Margin="0,16,0,8" TextWrapping="Wrap"/>
+                        <TextBlock Text="Confronta i tre stili visivi per scegliere il design finale di NovaSCM."
+                                   Foreground="#475569" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="🏢  SCCM Console Style" Padding="14,8" Margin="0,0,10,0"
+                                    Background="#1F3864" BorderBrush="#2B579A" Foreground="White"
+                                    Click="BtnDemoSCCM_Click"/>
+                            <Button Content="🔵  Advanced Installer Style" Padding="14,8" Margin="0,0,10,0"
+                                    Background="#073682" BorderBrush="#0A78C9" Foreground="White"
+                                    Click="BtnDemoAI_Click"/>
+                            <Button Content="📦  MSIX Packaging Tool Style" Padding="14,8"
+                                    Background="#0078D4" BorderBrush="#005A9E" Foreground="White"
+                                    Click="BtnDemoMSIX_Click"/>
+                        </StackPanel>
+                        <TextBlock x:Name="TxtUpdateStatus" FontSize="12" Margin="0,0,0,16"
+                                   TextWrapping="Wrap" Foreground="#475569"/>
+
+                        <!-- Versione -->
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="TxtAboutVersion" Foreground="#334155" FontSize="12"
+                                       VerticalAlignment="Center"/>
+                            <Border Background="#1e3a5f" CornerRadius="4" Padding="8,3">
+                                <TextBlock Text="STABLE" Foreground="#10b981"
+                                           FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
+
+        <!-- ═══ STATUS BAR ═══ -->
+        <Border Grid.Row="2" Background="#0d1b3e" BorderThickness="0,1,0,0" BorderBrush="#1e3a5f">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0">
+                <TextBlock Text="NovaSCM" Foreground="#60a5fa" FontSize="11" FontWeight="SemiBold"/>
+                <TextBlock Text="  ·  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock Text="© 2026 Claudio Becchis — PolarisCore.it" Foreground="#334155" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock Text="8/10 online" Foreground="#10b981" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock Text="4 cert" Foreground="#60a5fa" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock Text="3/4 PC" Foreground="#a78bfa" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock x:Name="StatusBarMsg" Text="Pronto" Foreground="#475569" FontSize="11"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

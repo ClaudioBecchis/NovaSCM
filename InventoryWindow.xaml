@@ -1,0 +1,177 @@
+<Window x:Class="PolarisManager.InventoryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        Title="Inventario" Height="720" Width="1080"
+        WindowStartupLocation="CenterOwner" MinWidth="800" MinHeight="500">
+
+    <Window.Resources>
+        <Style x:Key="HwLabel" TargetType="TextBlock">
+            <Setter Property="Foreground"   Value="#64748b"/>
+            <Setter Property="FontSize"     Value="12"/>
+            <Setter Property="Margin"       Value="0,0,0,2"/>
+        </Style>
+        <Style x:Key="HwValue" TargetType="TextBlock">
+            <Setter Property="Foreground"   Value="#e2e8f0"/>
+            <Setter Property="FontSize"     Value="12"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin"       Value="0,0,0,12"/>
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="Background"               Value="#0a0f1e"/>
+            <Setter Property="RowBackground"            Value="#0a0f1e"/>
+            <Setter Property="AlternatingRowBackground" Value="#0d1422"/>
+            <Setter Property="BorderThickness"          Value="1"/>
+            <Setter Property="BorderBrush"              Value="#1e3a5f"/>
+            <Setter Property="GridLinesVisibility"      Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#1e2a40"/>
+            <Setter Property="HeadersVisibility"        Value="Column"/>
+            <Setter Property="SelectionMode"            Value="Single"/>
+            <Setter Property="AutoGenerateColumns"      Value="False"/>
+            <Setter Property="CanUserAddRows"           Value="False"/>
+            <Setter Property="CanUserDeleteRows"        Value="False"/>
+            <Setter Property="IsReadOnly"               Value="True"/>
+            <Setter Property="FontSize"                 Value="12"/>
+            <Setter Property="RowHeight"                Value="28"/>
+        </Style>
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background"      Value="#0d1b3e"/>
+            <Setter Property="Foreground"      Value="#60a5fa"/>
+            <Setter Property="FontWeight"      Value="SemiBold"/>
+            <Setter Property="Padding"         Value="8,5"/>
+            <Setter Property="BorderBrush"     Value="#1e3a5f"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        </Style>
+        <Style TargetType="DataGridRow">
+            <Setter Property="Foreground" Value="#cbd5e1"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#1e3a6e"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1e2a4a"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="Padding"          Value="8,3"/>
+            <Setter Property="BorderThickness"  Value="0"/>
+            <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Background="#0a0f1e">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- Header -->
+            <RowDefinition Height="Auto"/>  <!-- Status -->
+            <RowDefinition Height="*"/>     <!-- Content -->
+            <RowDefinition Height="Auto"/>  <!-- Footer -->
+        </Grid.RowDefinitions>
+
+        <!-- ── Header ── -->
+        <Border Grid.Row="0" Background="#0d1b3e" Padding="20,12">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtTitle" Grid.Column="0"
+                           FontSize="18" FontWeight="Bold" Foreground="#60a5fa"
+                           VerticalAlignment="Center"/>
+                <TextBlock x:Name="TxtIp" Grid.Column="1"
+                           Foreground="#475569" FontSize="12"
+                           VerticalAlignment="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- ── Status ── -->
+        <TextBlock Grid.Row="1" x:Name="TxtStatus"
+                   Foreground="#475569" FontSize="11" Margin="20,6,20,2"
+                   TextWrapping="Wrap"/>
+
+        <!-- ── Spinner (durante raccolta) ── -->
+        <StackPanel x:Name="PanelSpinner" Grid.Row="2"
+                    VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock Text="⏳" FontSize="48" HorizontalAlignment="Center"/>
+            <TextBlock Text="Raccolta inventario in corso..."
+                       Foreground="#475569" FontSize="13" Margin="0,8,0,0"
+                       HorizontalAlignment="Center"/>
+        </StackPanel>
+
+        <!-- ── Contenuto (hardware + software) ── -->
+        <Grid x:Name="PanelContent" Grid.Row="2" Visibility="Collapsed" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300"/>   <!-- Hardware -->
+                <ColumnDefinition Width="*"/>     <!-- Software -->
+            </Grid.ColumnDefinitions>
+
+            <!-- Hardware -->
+            <ScrollViewer Grid.Column="0" Margin="20,0,10,0"
+                          VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <TextBlock Text="🖥️  Hardware" Foreground="#60a5fa"
+                               FontSize="13" FontWeight="SemiBold" Margin="0,0,0,12"/>
+
+                    <TextBlock Text="CPU" Style="{StaticResource HwLabel}"/>
+                    <TextBlock x:Name="TxtCpu" Style="{StaticResource HwValue}"/>
+
+                    <TextBlock Text="RAM" Style="{StaticResource HwLabel}"/>
+                    <TextBlock x:Name="TxtRam" Style="{StaticResource HwValue}"/>
+
+                    <TextBlock Text="Sistema operativo" Style="{StaticResource HwLabel}"/>
+                    <TextBlock x:Name="TxtOs" Style="{StaticResource HwValue}"/>
+
+                    <TextBlock Text="Ultimo avvio" Style="{StaticResource HwLabel}"/>
+                    <TextBlock x:Name="TxtLastBoot" Style="{StaticResource HwValue}"/>
+
+                    <TextBlock Text="Dischi" Style="{StaticResource HwLabel}"/>
+                    <TextBlock x:Name="TxtDisks" Style="{StaticResource HwValue}"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Software -->
+            <Grid Grid.Column="1" Margin="10,0,20,0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="📦  Software installati"
+                           Foreground="#60a5fa" FontSize="13" FontWeight="SemiBold"
+                           Margin="0,0,0,6"/>
+
+                <TextBlock Grid.Row="1" x:Name="TxtSwCount"
+                           Foreground="#475569" FontSize="11" Margin="0,0,0,8"/>
+
+                <TextBox Grid.Row="2" x:Name="TxtSearch"
+                         Background="#0d1b3e" Foreground="#e2e8f0"
+                         BorderBrush="#1e3a5f" Padding="8,5"
+                         FontSize="12" Margin="0,0,0,8"
+                         ui:ControlHelper.PlaceholderText="🔍  Cerca software o publisher..."
+                         TextChanged="TxtSearch_TextChanged"/>
+
+                <DataGrid Grid.Row="3" x:Name="SoftwareGrid">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Nome"       Binding="{Binding Name}"      Width="*"/>
+                        <DataGridTextColumn Header="Versione"   Binding="{Binding Version}"   Width="110"/>
+                        <DataGridTextColumn Header="Publisher"  Binding="{Binding Publisher}" Width="180"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+
+        <!-- ── Footer ── -->
+        <Border Grid.Row="3" Background="#0d1b3e" BorderThickness="0,1,0,0"
+                BorderBrush="#1e3a5f" Padding="16,10">
+            <StackPanel Orientation="Horizontal">
+                <Button Content="❌  Chiudi" Padding="14,6"
+                        Click="BtnClose_Click"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>

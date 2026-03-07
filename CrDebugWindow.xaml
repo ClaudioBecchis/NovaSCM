@@ -1,0 +1,228 @@
+<Window x:Class="PolarisManager.CrDebugWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        Title="NovaSCM — Task Sequence Debugger"
+        Width="820" Height="640"
+        MinWidth="640" MinHeight="480"
+        Background="#0a0f1e"
+        Foreground="#ccd6f6"
+        FontFamily="Consolas">
+
+    <Window.Resources>
+        <Style x:Key="ToolBtn" TargetType="Button">
+            <Setter Property="Padding"           Value="14,6"/>
+            <Setter Property="Margin"            Value="0,0,6,0"/>
+            <Setter Property="Background"        Value="#1e2d45"/>
+            <Setter Property="Foreground"        Value="#ccd6f6"/>
+            <Setter Property="BorderBrush"       Value="#2d4a7a"/>
+            <Setter Property="BorderThickness"   Value="1"/>
+            <Setter Property="FontFamily"        Value="Segoe UI"/>
+            <Setter Property="FontSize"          Value="12"/>
+            <Setter Property="Cursor"            Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#2d4a7a"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- toolbar -->
+            <RowDefinition Height="Auto"/>  <!-- stato CR -->
+            <RowDefinition Height="*"/>     <!-- split steps / variabili -->
+        </Grid.RowDefinitions>
+
+        <!-- ── Toolbar ── -->
+        <Border Grid.Row="0" Background="#111827" BorderBrush="#1e2d45"
+                BorderThickness="0,0,0,1" Padding="10,8">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnRefresh" Content="🔄  Aggiorna"
+                        Style="{StaticResource ToolBtn}" Click="BtnRefresh_Click"/>
+                <Button x:Name="BtnDownloadXml" Content="⬇️  Scarica XML"
+                        Style="{StaticResource ToolBtn}" Click="BtnDownloadXml_Click"/>
+                <Button x:Name="BtnCheckinNow" Content="📡  Simula check-in"
+                        Style="{StaticResource ToolBtn}" Click="BtnCheckinNow_Click"/>
+                <Separator Width="1" Background="#1e2d45" Margin="6,0"/>
+                <Button x:Name="BtnClose" Content="✕  Chiudi"
+                        Style="{StaticResource ToolBtn}" Click="BtnClose_Click"
+                        Background="#1a0a0a" BorderBrush="#4a1515"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ── Intestazione CR ── -->
+        <Border Grid.Row="1" Background="#0d1929" Padding="14,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <TextBlock x:Name="TxtCrTitle" Text="CR #0 — PC-NAME"
+                               FontSize="14" FontWeight="Bold" Foreground="#5ba3f5"
+                               FontFamily="Segoe UI" VerticalAlignment="Center"/>
+                    <TextBlock Text=" · " Foreground="#475569" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtCrDomain" Text="domain.local"
+                               Foreground="#94a3b8" FontFamily="Segoe UI" VerticalAlignment="Center"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <TextBlock Text="Stato: " Foreground="#475569" FontFamily="Segoe UI"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtCrStatus" Text="open"
+                               Foreground="#fbbf24" FontFamily="Segoe UI" FontWeight="Bold"
+                               VerticalAlignment="Center" Margin="0,0,20,0"/>
+                    <TextBlock Text="Ultimo check-in: " Foreground="#475569" FontFamily="Segoe UI"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtLastSeen" Text="—"
+                               Foreground="#10b981" FontFamily="Segoe UI"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ── Split pannelli ── -->
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="5"/>
+                <RowDefinition Height="200"/>
+            </Grid.RowDefinitions>
+
+            <!-- Steps list -->
+            <Grid Grid.Row="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Header colonne -->
+                <Border Grid.Row="0" Background="#111827" Padding="8,6">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="40"/>
+                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Step" Foreground="#475569" FontSize="11"/>
+                        <TextBlock Grid.Column="1" Text="✓"   Foreground="#475569" FontSize="11"/>
+                        <TextBlock Grid.Column="2" Text="Task Sequence Steps" Foreground="#475569" FontSize="11" Margin="8,0,0,0"/>
+                    </Grid>
+                </Border>
+
+                <ListBox x:Name="LstSteps" Grid.Row="1"
+                         Background="#0a0f1e" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         SelectionChanged="LstSteps_SelectionChanged">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding"          Value="0,2"/>
+                            <Setter Property="Background"       Value="Transparent"/>
+                            <Setter Property="BorderThickness"  Value="0"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#1e3a5f"/>
+                                </Trigger>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#111f33"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="6,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="40"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Indicatore corrente -->
+                                <TextBlock Grid.Column="0" Text="{Binding Pointer}"
+                                           Foreground="#fbbf24" FontWeight="Bold"
+                                           VerticalAlignment="Center" FontSize="13"/>
+                                <!-- Check completato -->
+                                <TextBlock Grid.Column="1" Text="{Binding Check}"
+                                           Foreground="#10b981"
+                                           VerticalAlignment="Center" FontSize="12"/>
+                                <!-- Descrizione step -->
+                                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="8,0,0,0">
+                                    <TextBlock Text="{Binding Pass}" Foreground="#475569"
+                                               FontSize="10" VerticalAlignment="Center"
+                                               Margin="0,0,6,0"/>
+                                    <TextBlock Text="{Binding Icon}" FontSize="13"
+                                               VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock Text="{Binding Label}" Foreground="{Binding RowColor}"
+                                               VerticalAlignment="Center" FontSize="12"/>
+                                    <TextBlock Text=" — " Foreground="#475569"
+                                               VerticalAlignment="Center"
+                                               Visibility="{Binding DetailVisibility}"/>
+                                    <TextBlock Text="{Binding Detail}" Foreground="#64748b"
+                                               FontSize="11" VerticalAlignment="Center"
+                                               Visibility="{Binding DetailVisibility}"/>
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </Grid>
+
+            <!-- Splitter -->
+            <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch"
+                          Background="#1e2d45" ShowsPreview="False"/>
+
+            <!-- Variables panel -->
+            <Grid Grid.Row="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Background="#111827" Padding="8,6">
+                    <TextBlock Text="Task Sequence Variables" Foreground="#475569" FontSize="11"/>
+                </Border>
+                <DataGrid x:Name="GridVars" Grid.Row="1"
+                          AutoGenerateColumns="False" IsReadOnly="True"
+                          CanUserResizeRows="False" RowHeight="22"
+                          Background="#0a0f1e" RowBackground="#0a0f1e"
+                          AlternatingRowBackground="#0d1424"
+                          BorderThickness="0" GridLinesVisibility="Horizontal"
+                          HorizontalGridLinesBrush="#1a2540"
+                          Foreground="#ccd6f6" FontSize="12"
+                          HeadersVisibility="Column">
+                    <DataGrid.ColumnHeaderStyle>
+                        <Style TargetType="DataGridColumnHeader">
+                            <Setter Property="Background"   Value="#111827"/>
+                            <Setter Property="Foreground"   Value="#475569"/>
+                            <Setter Property="FontSize"     Value="11"/>
+                            <Setter Property="Padding"      Value="8,4"/>
+                            <Setter Property="BorderBrush"  Value="#1e2d45"/>
+                            <Setter Property="BorderThickness" Value="0,0,1,0"/>
+                        </Style>
+                    </DataGrid.ColumnHeaderStyle>
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Variable" Binding="{Binding Name}"  Width="220"/>
+                        <DataGridTextColumn Header="Value"    Binding="{Binding Value}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Window>

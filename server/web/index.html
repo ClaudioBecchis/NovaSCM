@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovaSCM</title>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #12152a;
+  --sidebar:  #0d1020;
+  --card:     #1a1f38;
+  --card2:    #1f2540;
+  --border:   #2a3050;
+  --accent:   #4a9eff;
+  --accent2:  #2d6fd4;
+  --success:  #4caf50;
+  --warn:     #ff9800;
+  --error:    #f44336;
+  --text:     #dde3f5;
+  --muted:    #7880a0;
+  --radius:   8px;
+}
+
+body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; display: flex; height: 100vh; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar { width: 220px; min-width: 220px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+.logo { padding: 20px 16px 14px; border-bottom: 1px solid var(--border); }
+.logo h1 { font-size: 18px; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+.logo span { font-size: 11px; color: var(--muted); }
+nav { flex: 1; padding: 10px 0; }
+nav a { display: flex; align-items: center; gap: 10px; padding: 10px 16px; cursor: pointer; color: var(--muted); border-left: 3px solid transparent; transition: all .15s; font-size: 13.5px; }
+nav a:hover { background: rgba(74,158,255,.06); color: var(--text); }
+nav a.active { color: var(--accent); border-left-color: var(--accent); background: rgba(74,158,255,.08); }
+nav a .ico { font-size: 16px; width: 20px; text-align: center; }
+.sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+
+/* ── Main ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar { background: var(--sidebar); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
+.topbar h2 { font-size: 16px; font-weight: 600; }
+.topbar .actions { display: flex; gap: 8px; align-items: center; }
+.content { flex: 1; overflow-y: auto; padding: 20px 24px; }
+
+/* ── Cards ── */
+.grid { display: grid; gap: 16px; }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.card-title { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 8px; }
+.stat-num { font-size: 32px; font-weight: 700; line-height: 1; }
+.stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; padding: 8px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid rgba(42,48,80,.5); vertical-align: middle; }
+tr:hover td { background: rgba(255,255,255,.02); }
+tr:last-child td { border-bottom: none; }
+
+/* ── Badges ── */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+.badge-pending  { background: rgba(120,128,160,.2); color: var(--muted); }
+.badge-running  { background: rgba(255,152,0,.15);  color: var(--warn); }
+.badge-completed{ background: rgba(76,175,80,.15);  color: var(--success); }
+.badge-failed   { background: rgba(244,67,54,.15);  color: var(--error); }
+.badge-open     { background: rgba(74,158,255,.15); color: var(--accent); }
+.badge-all      { background: rgba(120,128,160,.15); color: var(--muted); }
+.badge-windows  { background: rgba(0,120,215,.15);  color: #4da6ff; }
+.badge-linux    { background: rgba(255,165,0,.15);  color: #ffb347; }
+
+/* ── Buttons ── */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all .15s; }
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-ghost:hover { background: var(--card2); color: var(--text); }
+.btn-danger { background: rgba(244,67,54,.12); color: var(--error); border: 1px solid rgba(244,67,54,.2); }
+.btn-danger:hover { background: rgba(244,67,54,.2); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-icon { padding: 5px 8px; }
+
+/* ── Form ── */
+.form-group { margin-bottom: 14px; }
+label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+input, select, textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; color: var(--text); font-size: 13px; outline: none; transition: border-color .15s; }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 80px; font-family: monospace; }
+select option { background: var(--card); }
+
+/* ── Modal ── */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { background: var(--card); border: 1px solid var(--border); border-radius: 10px; width: 500px; max-width: 95vw; max-height: 90vh; overflow-y: auto; }
+.modal-head { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.modal-head h3 { font-size: 15px; font-weight: 600; }
+.modal-body { padding: 20px; }
+.modal-foot { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── Progress ── */
+.progress-bar { background: var(--border); border-radius: 6px; height: 6px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 6px; transition: width .4s; }
+.progress-running   { background: var(--accent); }
+.progress-completed { background: var(--success); }
+.progress-failed    { background: var(--error); }
+
+/* ── Steps list ── */
+.step-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; background: var(--card2); }
+.step-num { width: 22px; height: 22px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.step-info { flex: 1; min-width: 0; }
+.step-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.step-tipo { font-size: 11px; color: var(--muted); }
+
+/* ── Live dot ── */
+.live { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--success); }
+.live::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1}50%{opacity:.3} }
+
+/* ── Misc ── */
+.mt { margin-top: 16px; }
+.mb { margin-bottom: 16px; }
+.flex { display: flex; align-items: center; gap: 8px; }
+.muted { color: var(--muted); font-size: 12px; }
+.empty { text-align: center; padding: 40px; color: var(--muted); }
+.divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+.tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; background: rgba(74,158,255,.1); color: var(--accent); font-family: monospace; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body x-data="app()" x-init="init()">
+
+<!-- ════ SIDEBAR ════ -->
+<div class="sidebar">
+  <div class="logo">
+    <h1>NovaSCM</h1>
+    <span>Workflow Engine</span>
+  </div>
+  <nav>
+    <a :class="{active: section==='dashboard'}" @click="section='dashboard'">
+      <span class="ico">📊</span> Dashboard
+    </a>
+    <a :class="{active: section==='workflows'}" @click="section='workflows'; loadWorkflows()">
+      <span class="ico">📋</span> Workflow
+    </a>
+    <a :class="{active: section==='assignments'}" @click="section='assignments'; loadAssignments()">
+      <span class="ico">🖥️</span> Assegnazioni
+    </a>
+    <a :class="{active: section==='cr'}" @click="section='cr'; loadCr()">
+      <span class="ico">📝</span> Change Request
+    </a>
+    <a :class="{active: section==='settings'}" @click="section='settings'; loadSettings()">
+      <span class="ico">⚙️</span> Impostazioni
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="live" x-show="liveOk">Live</div>
+    <div x-show="!liveOk" style="color:var(--error);font-size:11px">● Offline</div>
+    <div style="margin-top:4px">v1.0.6 — CT103</div>
+  </div>
+</div>
+
+<!-- ════ MAIN ════ -->
+<div class="main">
+
+  <!-- ── Topbar ── -->
+  <div class="topbar">
+    <h2 x-text="{dashboard:'Dashboard',workflows:'Workflow',assignments:'Assegnazioni',cr:'Change Request',settings:'Impostazioni'}[section]"></h2>
+    <div class="actions">
+      <span class="muted" x-text="lastUpdate"></span>
+      <button class="btn btn-ghost btn-sm" @click="loadAll()">↻ Aggiorna</button>
+      <template x-if="section==='workflows'">
+        <button class="btn btn-primary btn-sm" @click="openNewWorkflow()">+ Nuovo Workflow</button>
+      </template>
+      <template x-if="section==='assignments'">
+        <button class="btn btn-primary btn-sm" @click="openAssign()">+ Assegna</button>
+      </template>
+      <template x-if="section==='cr'">
+        <button class="btn btn-primary btn-sm" @click="openNewCr()">+ Nuova CR</button>
+      </template>
+    </div>
+  </div>
+
+  <!-- ════════════════ DASHBOARD ════════════════ -->
+  <div class="content" x-show="section==='dashboard'">
+    <div class="grid grid-4 mb">
+      <div class="card">
+        <div class="card-title">Workflow Definiti</div>
+        <div class="stat-num" x-text="workflows.length"></div>
+        <div class="stat-label">template disponibili</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Esecuzioni Attive</div>
+        <div class="stat-num" style="color:var(--warn)" x-text="assignments.filter(a=>a.status==='running').length"></div>
+        <div class="stat-label">workflow in corso</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Completati</div>
+        <div class="stat-num" style="color:var(--success)" x-text="assignments.filter(a=>a.status==='completed').length"></div>
+        <div class="stat-label">oggi</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Change Request</div>
+        <div class="stat-num" style="color:var(--accent)" x-text="crs.filter(c=>c.status==='open').length"></div>
+        <div class="stat-label">aperte</div>
+      </div>
+    </div>
+
+    <div class="grid grid-2">
+      <!-- Workflow in corso -->
+      <div class="card">
+        <div class="card-title">Esecuzioni in corso</div>
+        <template x-if="assignments.filter(a=>a.status==='running').length===0">
+          <div class="empty">Nessuna esecuzione attiva</div>
+        </template>
+        <template x-for="a in assignments.filter(a=>a.status==='running')" :key="a.id">
+          <div style="margin-top:12px">
+            <div class="flex mb" style="margin-bottom:6px">
+              <span style="font-weight:600" x-text="a.pc_name"></span>
+              <span class="muted" x-text="a.workflow_nome"></span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill progress-running" :style="`width:${progress(a)}%`"></div>
+            </div>
+            <div class="muted" style="margin-top:4px" x-text="`${progress(a)}% — last seen: ${ago(a.last_seen)}`"></div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Ultimi CR -->
+      <div class="card">
+        <div class="card-title">Ultime Change Request</div>
+        <template x-if="crs.length===0">
+          <div class="empty">Nessuna CR</div>
+        </template>
+        <template x-for="cr in crs.slice(0,5)" :key="cr.id">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-weight:600" x-text="cr.pc_name"></div>
+              <div class="muted" x-text="cr.domain"></div>
+            </div>
+            <span class="badge" :class="`badge-${cr.status}`" x-text="cr.status"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ WORKFLOW ════════════════ -->
+  <div class="content" x-show="section==='workflows'">
+    <template x-if="workflows.length===0">
+      <div class="empty card">Nessun workflow definito. Creane uno con il pulsante in alto.</div>
+    </template>
+    <div class="grid">
+      <template x-for="wf in workflows" :key="wf.id">
+        <div class="card">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:15px;font-weight:700" x-text="wf.nome"></div>
+              <div class="muted" x-text="wf.descrizione || 'Nessuna descrizione'"></div>
+              <div class="muted" style="margin-top:4px">
+                v<span x-text="wf.versione"></span> —
+                <span x-text="(wf.steps||[]).length"></span> step —
+                creato <span x-text="ago(wf.created_at)"></span>
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-shrink:0">
+              <button class="btn btn-ghost btn-sm" @click="openSteps(wf)">✏️ Step</button>
+              <button class="btn btn-ghost btn-sm" @click="openAssignFor(wf)">▶ Assegna</button>
+              <button class="btn btn-danger btn-sm btn-icon" @click="deleteWorkflow(wf)">🗑</button>
+            </div>
+          </div>
+
+          <!-- Step preview -->
+          <template x-if="(wf.steps||[]).length > 0">
+            <div style="margin-top:12px">
+              <template x-for="(s,i) in (wf.steps||[]).slice(0,4)" :key="s.id">
+                <div class="step-row">
+                  <div class="step-num" x-text="s.ordine"></div>
+                  <div class="step-info">
+                    <div class="step-name" x-text="s.nome"></div>
+                    <div class="step-tipo"><span class="tag" x-text="s.tipo"></span></div>
+                  </div>
+                  <span class="badge" :class="`badge-${s.platform||'all'}`" x-text="s.platform||'all'"></span>
+                </div>
+              </template>
+              <div class="muted" x-show="(wf.steps||[]).length > 4" x-text="`+ altri ${(wf.steps||[]).length - 4} step...`" style="padding:4px 12px"></div>
+            </div>
+          </template>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- ════════════════ ASSEGNAZIONI ════════════════ -->
+  <div class="content" x-show="section==='assignments'">
+    <template x-if="assignments.length===0">
+      <div class="empty card">Nessuna assegnazione. Usa il pulsante in alto per assegnare un workflow a un PC.</div>
+    </template>
+    <div class="table-wrap card" x-show="assignments.length>0">
+      <table>
+        <thead>
+          <tr>
+            <th>PC</th>
+            <th>Workflow</th>
+            <th>Stato</th>
+            <th>Progresso</th>
+            <th>Assegnato</th>
+            <th>Last seen</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="a in assignments" :key="a.id">
+            <tr>
+              <td style="font-weight:600" x-text="a.pc_name"></td>
+              <td x-text="a.workflow_nome"></td>
+              <td><span class="badge" :class="`badge-${a.status}`" x-text="a.status"></span></td>
+              <td style="min-width:120px">
+                <div class="progress-bar">
+                  <div class="progress-fill" :class="`progress-${a.status==='completed'?'completed':a.status==='failed'?'failed':'running'}`" :style="`width:${progress(a)}%`"></div>
+                </div>
+                <div class="muted" x-text="`${progress(a)}%`"></div>
+              </td>
+              <td class="muted" x-text="ago(a.assigned_at)"></td>
+              <td class="muted" x-text="ago(a.last_seen)"></td>
+              <td>
+                <button class="btn btn-ghost btn-sm btn-icon" @click="openDetail(a)" title="Dettaglio">🔍</button>
+                <button class="btn btn-danger btn-sm btn-icon" @click="deleteAssignment(a)" title="Elimina">🗑</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ════════════════ IMPOSTAZIONI ════════════════ -->
+  <div class="content" x-show="section==='settings'">
+    <div class="card" style="max-width:520px">
+      <div class="card-title">Workflow predefinito</div>
+      <p class="muted" style="margin-bottom:14px">Quando un Agent si connette per la prima volta senza una CR preassegnata, riceve questo workflow automaticamente.</p>
+      <div class="form-group">
+        <label>Workflow predefinito</label>
+        <select x-model.number="settings.default_workflow_id">
+          <option :value="null">— nessuno —</option>
+          <template x-for="wf in workflows" :key="wf.id">
+            <option :value="wf.id" x-text="wf.nome"></option>
+          </template>
+        </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+        <button class="btn btn-primary" @click="saveSettings()">💾 Salva</button>
+        <span class="muted" x-text="settingsSaved ? '✓ Salvato' : ''" style="color:var(--success)"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ CHANGE REQUEST ════════════════ -->
+  <div class="content" x-show="section==='cr'">
+    <template x-if="crs.length===0">
+      <div class="empty card">Nessuna Change Request.</div>
+    </template>
+    <div class="table-wrap card" x-show="crs.length>0">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th><th>PC</th><th>Dominio</th><th>Stato</th><th>Software</th><th>Creata</th><th>Last seen</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="cr in crs" :key="cr.id">
+            <tr>
+              <td class="muted" x-text="cr.id"></td>
+              <td style="font-weight:600" x-text="cr.pc_name"></td>
+              <td x-text="cr.domain"></td>
+              <td><span class="badge" :class="`badge-${cr.status}`" x-text="cr.status"></span></td>
+              <td class="muted" x-text="(cr.software||[]).length + ' pacchetti'"></td>
+              <td class="muted" x-text="ago(cr.created_at)"></td>
+              <td class="muted" x-text="ago(cr.last_seen)"></td>
+              <td>
+                <button class="btn btn-ghost btn-sm" @click="setCrStatus(cr,'in_progress')" x-show="cr.status==='open'">▶</button>
+                <button class="btn btn-ghost btn-sm" @click="setCrStatus(cr,'completed')" x-show="cr.status!=='completed'">✓</button>
+                <button class="btn btn-danger btn-sm btn-icon" @click="deleteCr(cr)">🗑</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<!-- ════════════════ MODALI ════════════════ -->
+
+<!-- Modal: Nuovo Workflow -->
+<div class="modal-bg" x-show="modal==='newWorkflow'" x-cloak @click.self="modal=null">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Nuovo Workflow</h3>
+      <button class="btn btn-ghost btn-icon" @click="modal=null">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Nome *</label>
+        <input x-model="form.nome" placeholder="es. Deploy Base Windows 11">
+      </div>
+      <div class="form-group">
+        <label>Descrizione</label>
+        <input x-model="form.descrizione" placeholder="Descrizione opzionale">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" @click="modal=null">Annulla</button>
+      <button class="btn btn-primary" @click="createWorkflow()">Crea</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Step Editor -->
+<div class="modal-bg" x-show="modal==='steps'" x-cloak @click.self="modal=null">
+  <div class="modal" style="width:600px">
+    <div class="modal-head">
+      <h3>Step — <span x-text="activeWf?.nome"></span></h3>
+      <button class="btn btn-ghost btn-icon" @click="modal=null">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Step list -->
+      <template x-if="(activeWf?.steps||[]).length===0">
+        <div class="empty" style="padding:20px">Nessuno step. Aggiungine uno sotto.</div>
+      </template>
+      <template x-for="s in activeWf?.steps||[]" :key="s.id">
+        <div class="step-row">
+          <div class="step-num" x-text="s.ordine"></div>
+          <div class="step-info">
+            <div class="step-name" x-text="s.nome"></div>
+            <div class="step-tipo">
+              <span class="tag" x-text="s.tipo"></span>
+              <span class="muted" x-text="JSON.stringify(JSON.parse(s.parametri||'{}'))"></span>
+            </div>
+          </div>
+          <span class="badge" :class="`badge-${s.platform||'all'}`" x-text="s.platform||'all'"></span>
+          <button class="btn btn-danger btn-sm btn-icon" @click="deleteStep(s)">🗑</button>
+        </div>
+      </template>
+
+      <hr class="divider">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;font-weight:600">AGGIUNGI STEP</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group">
+          <label>Ordine *</label>
+          <input type="number" x-model.number="stepForm.ordine" :placeholder="(activeWf?.steps||[]).length+1">
+        </div>
+        <div class="form-group">
+          <label>Platform</label>
+          <select x-model="stepForm.platform">
+            <option value="all">all</option>
+            <option value="windows">windows</option>
+            <option value="linux">linux</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Nome *</label>
+        <input x-model="stepForm.nome" placeholder="es. Installa 7-Zip">
+      </div>
+      <div class="form-group">
+        <label>Tipo *</label>
+        <select x-model="stepForm.tipo" @change="stepForm.parametri=defaultParams(stepForm.tipo)">
+          <optgroup label="Cross-platform">
+            <option value="shell_script">shell_script</option>
+            <option value="file_copy">file_copy</option>
+            <option value="reboot">reboot</option>
+            <option value="message">message</option>
+          </optgroup>
+          <optgroup label="Windows">
+            <option value="winget_install">winget_install</option>
+            <option value="windows_update">windows_update</option>
+            <option value="ps_script">ps_script</option>
+            <option value="reg_set">reg_set</option>
+          </optgroup>
+          <optgroup label="Linux">
+            <option value="apt_install">apt_install</option>
+            <option value="snap_install">snap_install</option>
+            <option value="systemd_service">systemd_service</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Parametri (JSON)</label>
+        <textarea x-model="stepForm.parametri" rows="3" style="font-family:monospace;font-size:12px"></textarea>
+      </div>
+      <div class="form-group">
+        <label>In caso di errore</label>
+        <select x-model="stepForm.su_errore">
+          <option value="stop">stop — blocca workflow</option>
+          <option value="continua">continua — vai al prossimo</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" @click="modal=null">Chiudi</button>
+      <button class="btn btn-primary" @click="addStep()">+ Aggiungi Step</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Assegna Workflow -->
+<div class="modal-bg" x-show="modal==='assign'" x-cloak @click.self="modal=null">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Assegna Workflow a PC</h3>
+      <button class="btn btn-ghost btn-icon" @click="modal=null">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Nome PC *</label>
+        <input x-model="assignForm.pc_name" placeholder="es. NOTEBOOK-01" style="text-transform:uppercase">
+      </div>
+      <div class="form-group">
+        <label>Workflow *</label>
+        <select x-model.number="assignForm.workflow_id">
+          <option value="">— seleziona —</option>
+          <template x-for="wf in workflows" :key="wf.id">
+            <option :value="wf.id" x-text="wf.nome"></option>
+          </template>
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" @click="modal=null">Annulla</button>
+      <button class="btn btn-primary" @click="assignWorkflow()">Assegna</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Dettaglio Assegnazione -->
+<div class="modal-bg" x-show="modal==='detail'" x-cloak @click.self="modal=null">
+  <div class="modal" style="width:560px">
+    <div class="modal-head">
+      <h3>
+        <span x-text="activeAssign?.pc_name"></span>
+        <span class="muted" style="font-weight:400"> — </span>
+        <span x-text="activeAssign?.workflow_nome"></span>
+      </h3>
+      <button class="btn btn-ghost btn-icon" @click="modal=null">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="flex mb">
+        <span class="badge" :class="`badge-${activeAssign?.status}`" x-text="activeAssign?.status"></span>
+        <span class="muted">avviato <span x-text="ago(activeAssign?.started_at)"></span></span>
+        <span class="live" x-show="activeAssign?.status==='running'">Live</span>
+      </div>
+      <div class="progress-bar mb" style="height:8px">
+        <div class="progress-fill" :class="`progress-${activeAssign?.status==='completed'?'completed':'running'}`" :style="`width:${progress(activeAssign)}%`"></div>
+      </div>
+      <template x-for="s in activeAssign?.steps||[]" :key="s.step_id">
+        <div class="step-row" :style="s.status==='running'?'border-color:var(--accent)':''">
+          <div class="step-num" :style="`background:${statusColor(s.status)}`" x-text="s.ordine"></div>
+          <div class="step-info">
+            <div class="step-name" x-text="s.nome"></div>
+            <div class="step-tipo"><span class="tag" x-text="s.tipo"></span></div>
+          </div>
+          <span class="badge" :class="`badge-${s.status}`" x-text="s.status"></span>
+        </div>
+      </template>
+      <div class="empty" x-show="(activeAssign?.steps||[]).length===0">Nessuno step ancora eseguito</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" @click="modal=null">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Nuova CR -->
+<div class="modal-bg" x-show="modal==='newCr'" x-cloak @click.self="modal=null">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>Nuova Change Request</h3>
+      <button class="btn btn-ghost btn-icon" @click="modal=null">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group">
+          <label>Nome PC *</label>
+          <input x-model="crForm.pc_name" placeholder="NOTEBOOK-01" style="text-transform:uppercase">
+        </div>
+        <div class="form-group">
+          <label>Dominio *</label>
+          <input x-model="crForm.domain" placeholder="workgroup o dominio AD">
+        </div>
+        <div class="form-group">
+          <label>Password Admin</label>
+          <input x-model="crForm.admin_pass" placeholder="Password locale">
+        </div>
+        <div class="form-group">
+          <label>DC IP</label>
+          <input x-model="crForm.dc_ip" placeholder="192.168.10.199">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Note</label>
+        <input x-model="crForm.notes" placeholder="Note opzionali">
+      </div>
+      <div class="form-group">
+        <label>Workflow (auto-assegnato all'Agent)</label>
+        <select x-model.number="crForm.workflow_id">
+          <option :value="null">— usa impostazione predefinita —</option>
+          <template x-for="wf in workflows" :key="wf.id">
+            <option :value="wf.id" x-text="wf.nome"></option>
+          </template>
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" @click="modal=null">Annulla</button>
+      <button class="btn btn-primary" @click="createCr()">Crea</button>
+    </div>
+  </div>
+</div>
+
+<style>[x-cloak]{display:none!important}</style>
+
+<script>
+function app() {
+  return {
+    section: 'dashboard',
+    modal: null,
+    liveOk: false,
+    lastUpdate: '',
+
+    workflows: [],
+    assignments: [],
+    crs: [],
+    settings: { default_workflow_id: null },
+    settingsSaved: false,
+
+    form: { nome: '', descrizione: '' },
+    stepForm: { ordine: 1, nome: '', tipo: 'winget_install', parametri: '{"id":""}', condizione: '', su_errore: 'stop', platform: 'all' },
+    assignForm: { pc_name: '', workflow_id: '' },
+    crForm: { pc_name: '', domain: 'WORKGROUP', admin_pass: '', dc_ip: '', notes: '', workflow_id: null },
+    activeWf: null,
+    activeAssign: null,
+
+    async init() {
+      await this.loadAll();
+      setInterval(() => this.loadAll(), 5000);
+    },
+
+    async loadAll() {
+      try {
+        await Promise.all([this.loadWorkflows(), this.loadAssignments(), this.loadCr(), this.loadSettings()]);
+        this.liveOk = true;
+        this.lastUpdate = new Date().toLocaleTimeString('it-IT');
+        // Aggiorna modal dettaglio se aperto
+        if (this.modal === 'detail' && this.activeAssign) {
+          const d = await this.api(`/api/pc-workflows/${this.activeAssign.id}`);
+          if (d) this.activeAssign = d;
+        }
+      } catch { this.liveOk = false; }
+    },
+
+    async loadWorkflows() {
+      const list = await this.api('/api/workflows');
+      if (!list) return;
+      // Carica steps per ogni workflow
+      this.workflows = await Promise.all(list.map(async wf => {
+        const full = await this.api(`/api/workflows/${wf.id}`);
+        return full || wf;
+      }));
+    },
+
+    async loadAssignments() {
+      const list = await this.api('/api/pc-workflows');
+      if (list) this.assignments = list;
+    },
+
+    async loadCr() {
+      const list = await this.api('/api/cr');
+      if (list) this.crs = list;
+    },
+
+    async loadSettings() {
+      const s = await this.api('/api/settings');
+      if (s) this.settings = { default_workflow_id: s.default_workflow_id ? parseInt(s.default_workflow_id) : null };
+    },
+
+    async saveSettings() {
+      const r = await this.api('/api/settings', 'PUT', { default_workflow_id: this.settings.default_workflow_id || '' });
+      if (r) {
+        this.settingsSaved = true;
+        setTimeout(() => { this.settingsSaved = false; }, 2500);
+      }
+    },
+
+    async api(url, method = 'GET', body = null) {
+      try {
+        const opts = { method, headers: { 'Content-Type': 'application/json' } };
+        if (body) opts.body = JSON.stringify(body);
+        const r = await fetch(url, opts);
+        if (!r.ok) return null;
+        return await r.json();
+      } catch { return null; }
+    },
+
+    // ── Workflow ──
+    openNewWorkflow() {
+      this.form = { nome: '', descrizione: '' };
+      this.modal = 'newWorkflow';
+    },
+    async createWorkflow() {
+      if (!this.form.nome.trim()) return;
+      const r = await this.api('/api/workflows', 'POST', this.form);
+      if (r) { this.modal = null; await this.loadWorkflows(); }
+    },
+    async deleteWorkflow(wf) {
+      if (!confirm(`Eliminare il workflow "${wf.nome}"?`)) return;
+      await this.api(`/api/workflows/${wf.id}`, 'DELETE');
+      await this.loadWorkflows();
+    },
+    openSteps(wf) {
+      this.activeWf = wf;
+      this.stepForm = { ordine: (wf.steps||[]).length + 1, nome: '', tipo: 'winget_install', parametri: '{"id":""}', condizione: '', su_errore: 'stop', platform: 'all' };
+      this.modal = 'steps';
+    },
+    async addStep() {
+      if (!this.stepForm.nome || !this.stepForm.tipo) return;
+      let p = this.stepForm.parametri;
+      try { JSON.parse(p); } catch { alert('Parametri JSON non valido'); return; }
+      const r = await this.api(`/api/workflows/${this.activeWf.id}/steps`, 'POST', { ...this.stepForm, parametri: JSON.parse(p) });
+      if (r) {
+        const full = await this.api(`/api/workflows/${this.activeWf.id}`);
+        this.activeWf = full;
+        this.stepForm.ordine++;
+        await this.loadWorkflows();
+      }
+    },
+    async deleteStep(s) {
+      await this.api(`/api/workflows/${this.activeWf.id}/steps/${s.id}`, 'DELETE');
+      const full = await this.api(`/api/workflows/${this.activeWf.id}`);
+      this.activeWf = full;
+      await this.loadWorkflows();
+    },
+    defaultParams(tipo) {
+      const map = {
+        winget_install:  '{"id":""}',
+        windows_update:  '{"category":"all","exclude_drivers":false,"reboot_after":false}',
+        apt_install:     '{"package":""}',
+        snap_install:   '{"package":"","classic":false}',
+        ps_script:      '{"script":""}',
+        shell_script:   '{"script":""}',
+        reg_set:        '{"path":"","name":"","value":"","type":"String"}',
+        file_copy:      '{"src":"","dst":""}',
+        systemd_service:'{"name":"","action":"start"}',
+        reboot:         '{"delay":5}',
+        message:        '{"text":""}',
+      };
+      return map[tipo] || '{}';
+    },
+
+    // ── Assignments ──
+    openAssign() {
+      this.assignForm = { pc_name: '', workflow_id: '' };
+      this.modal = 'assign';
+    },
+    openAssignFor(wf) {
+      this.assignForm = { pc_name: '', workflow_id: wf.id };
+      this.section = 'assignments';
+      this.modal = 'assign';
+    },
+    async assignWorkflow() {
+      if (!this.assignForm.pc_name || !this.assignForm.workflow_id) return;
+      const r = await this.api('/api/pc-workflows', 'POST', {
+        pc_name: this.assignForm.pc_name.toUpperCase(),
+        workflow_id: this.assignForm.workflow_id
+      });
+      if (r) { this.modal = null; await this.loadAssignments(); }
+      else alert('Errore: workflow già assegnato a questo PC?');
+    },
+    async openDetail(a) {
+      const d = await this.api(`/api/pc-workflows/${a.id}`);
+      this.activeAssign = d || a;
+      this.modal = 'detail';
+    },
+    async deleteAssignment(a) {
+      if (!confirm(`Eliminare assegnazione ${a.pc_name} → ${a.workflow_nome}?`)) return;
+      await this.api(`/api/pc-workflows/${a.id}`, 'DELETE');
+      await this.loadAssignments();
+    },
+
+    // ── CR ──
+    openNewCr() {
+      this.crForm = { pc_name: '', domain: 'WORKGROUP', admin_pass: '', dc_ip: '', notes: '', workflow_id: null };
+      this.modal = 'newCr';
+    },
+    async createCr() {
+      if (!this.crForm.pc_name || !this.crForm.domain) return;
+      const r = await this.api('/api/cr', 'POST', this.crForm);
+      if (r) { this.modal = null; await this.loadCr(); }
+      else alert('Errore: PC già esistente?');
+    },
+    async setCrStatus(cr, status) {
+      await this.api(`/api/cr/${cr.id}/status`, 'PUT', { status });
+      await this.loadCr();
+    },
+    async deleteCr(cr) {
+      if (!confirm(`Eliminare CR per ${cr.pc_name}?`)) return;
+      await this.api(`/api/cr/${cr.id}`, 'DELETE');
+      await this.loadCr();
+    },
+
+    // ── Helpers ──
+    progress(a) {
+      if (!a) return 0;
+      if (a.status === 'completed') return 100;
+      if (a.status === 'pending') return 0;
+      const steps = a.steps || [];
+      if (!steps.length) return 0;
+      const done = steps.filter(s => s.status === 'done' || s.status === 'skipped').length;
+      return Math.round(done / steps.length * 100);
+    },
+    statusColor(s) {
+      return { pending:'var(--border)', running:'var(--accent)', done:'var(--success)', error:'var(--error)', skipped:'var(--muted)' }[s] || 'var(--border)';
+    },
+    ago(iso) {
+      if (!iso) return '—';
+      const d = new Date(iso), now = new Date();
+      const sec = Math.floor((now - d) / 1000);
+      if (sec < 60) return `${sec}s fa`;
+      if (sec < 3600) return `${Math.floor(sec/60)}m fa`;
+      if (sec < 86400) return `${Math.floor(sec/3600)}h fa`;
+      return d.toLocaleDateString('it-IT');
+    },
+  }
+}
+</script>
+</body>
+</html>

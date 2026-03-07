@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>NovaSCM</AssemblyName>
+    <Product>NovaSCM</Product>
+    <Version>1.0.6</Version>
+    <ApplicationIcon>Assets\novascm.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModernWpfUI" Version="0.9.6" />
+    <PackageReference Include="QRCoder" Version="1.7.0" />
+    <PackageReference Include="Microsoft.VisualBasic" Version="10.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\novascm.ico"/>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Escludi la sottocartella NovaSCMAgent (progetto separato Worker Service) -->
+    <Compile Remove="NovaSCMAgent\**"/>
+    <EmbeddedResource Remove="NovaSCMAgent\**"/>
+    <None Remove="NovaSCMAgent\**"/>
+  </ItemGroup>
+
+</Project>

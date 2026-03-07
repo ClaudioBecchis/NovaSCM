@@ -1,0 +1,28 @@
+<Window x:Class="PolarisManager.QrWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        Title="📱 QR Code Enrollment" Height="420" Width="360"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Background="#0a0f1e" Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" x:Name="TxtTitle" FontSize="15" FontWeight="SemiBold"
+                   Foreground="#60a5fa" TextAlignment="Center" Margin="0,0,0,12"/>
+
+        <Image Grid.Row="1" x:Name="QrImage" Stretch="Uniform"
+               MaxWidth="280" MaxHeight="280" Margin="0,0,0,12"/>
+
+        <TextBlock Grid.Row="2" x:Name="TxtUrl" Foreground="#475569" FontSize="10"
+                   TextAlignment="Center" TextWrapping="Wrap" Margin="0,0,0,12"/>
+
+        <Button Grid.Row="3" Content="Chiudi" HorizontalAlignment="Center"
+                Width="100" Click="BtnClose_Click"/>
+    </Grid>
+</Window>

@@ -1,0 +1,373 @@
+"""
+NovaSCM Agent — Workflow Executor
+Gira come servizio (Windows Service / systemd).
+Fa polling dell'API, esegue workflow assegnati, riporta stato step per step.
+
+Config: %ProgramData%\NovaSCM\agent.json  (Windows)
+        /etc/novascm/agent.json           (Linux)
+State:  %ProgramData%\NovaSCM\state.json  (Windows)
+        /var/lib/novascm/state.json       (Linux)
+Log:    %ProgramData%\NovaSCM\agent.log   (Windows)
+        /var/log/novascm/agent.log        (Linux)
+"""
+
+import os, sys, json, time, platform, subprocess, socket, logging, traceback
+from datetime import datetime
+from urllib.request import urlopen, Request
+from urllib.error import URLError
+from urllib.parse import urlencode
+
+# ── Costanti ──────────────────────────────────────────────────────────────────
+IS_WINDOWS = platform.system() == "Windows"
+IS_LINUX   = platform.system() == "Linux"
+AGENT_VER  = "1.0.0"
+POLL_SEC   = 60          # polling ogni 60 secondi
+STEP_TIMEOUT = 600       # timeout massimo per step (10 min)
+
+if IS_WINDOWS:
+    BASE_DIR  = os.path.join(os.environ.get("ProgramData", "C:\\ProgramData"), "NovaSCM")
+    STATE_DIR = BASE_DIR
+    LOG_DIR   = BASE_DIR
+else:
+    BASE_DIR  = "/etc/novascm"
+    STATE_DIR = "/var/lib/novascm"
+    LOG_DIR   = "/var/log/novascm"
+
+CONFIG_FILE = os.path.join(BASE_DIR, "agent.json")
+STATE_FILE  = os.path.join(STATE_DIR, "state.json")
+LOG_FILE    = os.path.join(LOG_DIR, "agent.log")
+
+for d in [BASE_DIR, STATE_DIR, LOG_DIR]:
+    os.makedirs(d, exist_ok=True)
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+        logging.StreamHandler(sys.stdout),
+    ]
+)
+log = logging.getLogger("novascm-agent")
+
+# ── Config ────────────────────────────────────────────────────────────────────
+DEFAULT_CONFIG = {
+    "api_url":   "http://192.168.20.110:9091",
+    "poll_sec":  POLL_SEC,
+    "pc_name":   socket.gethostname().upper(),
+}
+
+def load_config():
+    if not os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(DEFAULT_CONFIG, f, indent=2)
+        log.info(f"Config creata: {CONFIG_FILE}")
+    with open(CONFIG_FILE) as f:
+        cfg = json.load(f)
+    cfg.setdefault("pc_name", socket.gethostname().upper())
+    cfg.setdefault("poll_sec", POLL_SEC)
+    return cfg
+
+# ── State (persistenza tra riavvii) ──────────────────────────────────────────
+def load_state():
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_state(state):
+    with open(STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
+
+def clear_state():
+    if os.path.exists(STATE_FILE):
+        os.remove(STATE_FILE)
+
+# ── API Client ────────────────────────────────────────────────────────────────
+def api_get(base_url, path):
+    try:
+        url = f"{base_url}{path}"
+        req = Request(url, headers={"User-Agent": f"NovaSCM-Agent/{AGENT_VER}"})
+        with urlopen(req, timeout=15) as r:
+            return json.loads(r.read())
+    except URLError as e:
+        log.warning(f"API GET {path}: {e}")
+        return None
+    except Exception as e:
+        log.error(f"API GET {path}: {e}")
+        return None
+
+def api_post(base_url, path, body):
+    try:
+        url  = f"{base_url}{path}"
+        data = json.dumps(body).encode("utf-8")
+        req  = Request(url, data=data, method="POST",
+                       headers={"Content-Type": "application/json",
+                                "User-Agent": f"NovaSCM-Agent/{AGENT_VER}"})
+        with urlopen(req, timeout=15) as r:
+            return json.loads(r.read())
+    except Exception as e:
+        log.warning(f"API POST {path}: {e}")
+        return None
+
+# ── Step Executor ─────────────────────────────────────────────────────────────
+def get_os_platform():
+    return "windows" if IS_WINDOWS else "linux"
+
+def run_cmd(cmd, shell=True, timeout=STEP_TIMEOUT):
+    """Esegue un comando e restituisce (ok, output)."""
+    try:
+        r = subprocess.run(
+            cmd, shell=shell, capture_output=True, text=True,
+            timeout=timeout, encoding="utf-8", errors="replace"
+        )
+        out = (r.stdout + r.stderr).strip()
+        return r.returncode == 0, out
+    except subprocess.TimeoutExpired:
+        return False, f"Timeout dopo {timeout}s"
+    except Exception as e:
+        return False, str(e)
+
+def execute_step(step):
+    """Esegue uno step e restituisce (ok, output)."""
+    tipo      = step["tipo"]
+    parametri = json.loads(step.get("parametri") or "{}")
+    my_os     = get_os_platform()
+    plat      = step.get("platform", "all")
+
+    # Skip se step non è per questa piattaforma
+    if plat != "all" and plat != my_os:
+        log.info(f"  SKIP (platform={plat}, sono {my_os})")
+        return None, f"Skipped: platform={plat}"
+
+    log.info(f"  Tipo: {tipo} | Params: {parametri}")
+
+    # ── winget_install ──
+    if tipo == "winget_install":
+        pkg_id = parametri.get("id", "")
+        if not pkg_id:
+            return False, "Parametro 'id' mancante"
+        cmd = f'winget install --id "{pkg_id}" --silent --accept-package-agreements --accept-source-agreements'
+        return run_cmd(cmd)
+
+    # ── apt_install ──
+    elif tipo == "apt_install":
+        pkg = parametri.get("package", "")
+        if not pkg:
+            return False, "Parametro 'package' mancante"
+        cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {pkg}"
+        return run_cmd(cmd)
+
+    # ── snap_install ──
+    elif tipo == "snap_install":
+        pkg     = parametri.get("package", "")
+        classic = "--classic" if parametri.get("classic") else ""
+        if not pkg:
+            return False, "Parametro 'package' mancante"
+        return run_cmd(f"snap install {pkg} {classic}".strip())
+
+    # ── ps_script ──
+    elif tipo == "ps_script":
+        script = parametri.get("script", "")
+        if not script:
+            return False, "Parametro 'script' mancante"
+        if IS_WINDOWS:
+            cmd = ["powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]
+        else:
+            cmd = ["pwsh", "-NonInteractive", "-Command", script]
+        return run_cmd(cmd, shell=False)
+
+    # ── shell_script ──
+    elif tipo == "shell_script":
+        script = parametri.get("script", "")
+        if not script:
+            return False, "Parametro 'script' mancante"
+        if IS_WINDOWS:
+            return run_cmd(f"cmd /c {script}")
+        else:
+            return run_cmd(f"bash -c '{script}'")
+
+    # ── reg_set (Windows only) ──
+    elif tipo == "reg_set":
+        if not IS_WINDOWS:
+            return None, "Skipped: reg_set è solo Windows"
+        path  = parametri.get("path", "")
+        name  = parametri.get("name", "")
+        value = parametri.get("value", "")
+        rtype = parametri.get("type", "REG_SZ")
+        cmd   = f'reg add "{path}" /v "{name}" /t {rtype} /d "{value}" /f'
+        return run_cmd(cmd)
+
+    # ── systemd_service (Linux only) ──
+    elif tipo == "systemd_service":
+        if not IS_LINUX:
+            return None, "Skipped: systemd_service è solo Linux"
+        name   = parametri.get("name", "")
+        action = parametri.get("action", "start")  # start | stop | enable | restart
+        if not name:
+            return False, "Parametro 'name' mancante"
+        return run_cmd(f"systemctl {action} {name}")
+
+    # ── file_copy ──
+    elif tipo == "file_copy":
+        src = parametri.get("src", "")
+        dst = parametri.get("dst", "")
+        if not src or not dst:
+            return False, "Parametri 'src' e 'dst' obbligatori"
+        if IS_WINDOWS:
+            return run_cmd(f'copy /Y "{src}" "{dst}"')
+        else:
+            return run_cmd(f'cp -f "{src}" "{dst}"')
+
+    # ── reboot ──
+    elif tipo == "reboot":
+        delay = parametri.get("delay", 5)
+        log.info(f"  Riavvio programmato tra {delay}s")
+        if IS_WINDOWS:
+            run_cmd(f"shutdown /r /t {delay}")
+        else:
+            run_cmd(f"shutdown -r +{max(1, delay//60)}")
+        return True, f"Riavvio programmato tra {delay}s"
+
+    # ── message ──
+    elif tipo == "message":
+        text = parametri.get("text", "")
+        log.info(f"  MSG: {text}")
+        return True, text
+
+    else:
+        return False, f"Tipo step sconosciuto: {tipo}"
+
+# ── Workflow Runner ───────────────────────────────────────────────────────────
+def run_workflow(cfg, workflow):
+    """Esegue il workflow step per step, con persistenza stato per gestire riavvii."""
+    pc_name    = cfg["pc_name"]
+    api_url    = cfg["api_url"]
+    pw_id      = workflow["id"]
+    steps      = workflow.get("steps", [])
+
+    # Stato persistente: ricorda fino a dove siamo arrivati dopo un riavvio
+    state = load_state()
+    resume_from = state.get("resume_step", 0)  # step_id da cui riprendere
+
+    if resume_from:
+        log.info(f"Riprendo workflow dopo riavvio — da step_id={resume_from}")
+
+    needs_reboot = False
+
+    for step in steps:
+        step_id  = step["step_id"]
+        step_num = step["ordine"]
+        nome     = step["nome"]
+
+        # Salta step già completati (resume dopo reboot)
+        if resume_from and step_id <= resume_from:
+            log.info(f"[{step_num}] {nome} — già completato, salto")
+            continue
+
+        log.info(f"[{step_num}/{len(steps)}] {nome}")
+
+        # Segnala 'running'
+        api_post(api_url, f"/api/pc/{pc_name}/workflow/step", {
+            "step_id": step_id,
+            "status":  "running",
+            "output":  "",
+            "ts":      datetime.now().isoformat()
+        })
+
+        # Esegui
+        ok, output = execute_step(step)
+        output = (output or "")[:2000]  # max 2000 char
+
+        # Skip (piattaforma non compatibile)
+        if ok is None:
+            log.info(f"  → SKIPPED: {output}")
+            api_post(api_url, f"/api/pc/{pc_name}/workflow/step", {
+                "step_id": step_id,
+                "status":  "skipped",
+                "output":  output,
+                "ts":      datetime.now().isoformat()
+            })
+            continue
+
+        status = "done" if ok else "error"
+        log.info(f"  → {status.upper()}: {output[:200]}")
+
+        api_post(api_url, f"/api/pc/{pc_name}/workflow/step", {
+            "step_id": step_id,
+            "status":  status,
+            "output":  output,
+            "ts":      datetime.now().isoformat()
+        })
+
+        # Gestione errore
+        if not ok:
+            su_errore = step.get("su_errore", "stop")
+            if su_errore == "stop":
+                log.error(f"Step fallito con su_errore=stop — workflow interrotto")
+                return False
+            else:
+                log.warning(f"Step fallito con su_errore=continua — proseguo")
+
+        # Gestione reboot: salva stato e ferma, l'Agent riprenderà dopo il reboot
+        if step["tipo"] == "reboot" and ok:
+            save_state({"pw_id": pw_id, "resume_step": step_id})
+            log.info("Stato salvato per resume dopo reboot")
+            needs_reboot = True
+            break
+
+    if not needs_reboot:
+        clear_state()
+        log.info("Workflow completato")
+    return True
+
+# ── Main Loop ─────────────────────────────────────────────────────────────────
+def main_loop():
+    log.info(f"NovaSCM Agent v{AGENT_VER} avviato — OS: {platform.system()}")
+    cfg = load_config()
+    log.info(f"PC: {cfg['pc_name']} | API: {cfg['api_url']} | Poll: {cfg['poll_sec']}s")
+
+    while True:
+        try:
+            cfg = load_config()  # rilegge config ad ogni ciclo (hot reload)
+            pc  = cfg["pc_name"]
+            url = cfg["api_url"]
+
+            # Controlla se c'è uno stato salvato (resume dopo reboot)
+            state = load_state()
+            if state.get("pw_id"):
+                log.info(f"Resume rilevato per pw_id={state['pw_id']}")
+
+            # Polling workflow assegnato
+            workflow = api_get(url, f"/api/pc/{pc}/workflow")
+
+            if workflow and "error" not in workflow:
+                log.info(f"Workflow trovato: '{workflow.get('workflow_nome')}' (id={workflow.get('id')})")
+                run_workflow(cfg, workflow)
+            else:
+                log.debug("Nessun workflow in attesa")
+
+        except KeyboardInterrupt:
+            log.info("Agent fermato manualmente")
+            sys.exit(0)
+        except Exception:
+            log.error(f"Errore nel loop principale:\n{traceback.format_exc()}")
+
+        time.sleep(cfg.get("poll_sec", POLL_SEC))
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--once":
+        # Modalità singola esecuzione (per test/debug)
+        cfg = load_config()
+        wf  = api_get(cfg["api_url"], f"/api/pc/{cfg['pc_name']}/workflow")
+        if wf and "error" not in wf:
+            run_workflow(cfg, wf)
+        else:
+            print("Nessun workflow assegnato.")
+    else:
+        main_loop()
