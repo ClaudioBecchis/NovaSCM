@@ -1,0 +1,42 @@
+# .NET build output
+bin/
+obj/
+
+# Visual Studio / Rider
+*.user
+*.suo
+.vs/
+.idea/
+*.DotSettings.user
+
+# Publish output (single-file exe, too large for git)
+**/publish/
+
+# Database files (contain real data)
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+
+# NovaSCM Agent build output
+NovaSCMAgent/bin/
+NovaSCMAgent/obj/
+
+# Secrets / config locale (se aggiunto in futuro)
+appsettings.local.json
+config.local.json
+.env

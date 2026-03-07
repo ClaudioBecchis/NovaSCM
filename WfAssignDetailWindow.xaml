@@ -1,0 +1,122 @@
+<Window x:Class="PolarisManager.WfAssignDetailWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        Title="Dettaglio Deployment" Height="540" Width="560"
+        WindowStartupLocation="CenterScreen"
+        Background="#0a0f1e" Foreground="#dde3f5" FontSize="13">
+
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock x:Name="TxtTitle"
+                       FontSize="16" FontWeight="Bold" Foreground="#60a5fa"/>
+            <TextBlock x:Name="TxtSubtitle"
+                       FontSize="12" Foreground="#475569" Margin="0,3,0,0"/>
+        </StackPanel>
+
+        <!-- Stato + progress -->
+        <Grid Grid.Row="1" Margin="0,0,0,10">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="TxtStatus" Grid.Column="0"
+                       FontWeight="SemiBold" VerticalAlignment="Center"
+                       Margin="0,0,12,0"/>
+            <ProgressBar x:Name="PrgMain" Grid.Column="1"
+                         Height="10" Maximum="100"
+                         Background="#1e3a5f" Foreground="#3b82f6"
+                         VerticalAlignment="Center"/>
+            <TextBlock x:Name="TxtProgress" Grid.Column="2"
+                       Foreground="#60a5fa" FontWeight="Bold"
+                       Margin="10,0,0,0" VerticalAlignment="Center"/>
+        </Grid>
+
+        <!-- Last seen -->
+        <TextBlock x:Name="TxtLastSeen" Grid.Row="2"
+                   Foreground="#475569" FontSize="11"
+                   Margin="0,0,0,10"/>
+
+        <!-- Step list -->
+        <DataGrid x:Name="GridSteps" Grid.Row="3"
+                  AutoGenerateColumns="False"
+                  IsReadOnly="True" CanUserAddRows="False"
+                  Background="#0a0f1e" RowBackground="#0a0f1e"
+                  AlternatingRowBackground="#0d1422"
+                  BorderBrush="#1e3a5f" GridLinesVisibility="Horizontal"
+                  HorizontalGridLinesBrush="#1e2a40"
+                  HeadersVisibility="Column" SelectionMode="Single"
+                  FontSize="12" RowHeight="32">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="#"      Binding="{Binding Ordine}"  Width="40"/>
+                <DataGridTextColumn Header="Nome"   Binding="{Binding Nome}"    Width="*"/>
+                <DataGridTextColumn Header="Tipo"   Binding="{Binding Tipo}"    Width="140"/>
+                <DataGridTemplateColumn Header="Stato" Width="90">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Status}"
+                                       Foreground="{Binding StatusColor}"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center" Margin="4,0"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Output" Binding="{Binding Output}"  Width="200"/>
+            </DataGrid.Columns>
+            <DataGrid.ColumnHeaderStyle>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background"   Value="#0d1b3e"/>
+                    <Setter Property="Foreground"   Value="#60a5fa"/>
+                    <Setter Property="FontWeight"   Value="SemiBold"/>
+                    <Setter Property="Padding"      Value="8,6"/>
+                    <Setter Property="BorderBrush"  Value="#1e3a5f"/>
+                    <Setter Property="BorderThickness" Value="0,0,1,1"/>
+                </Style>
+            </DataGrid.ColumnHeaderStyle>
+            <DataGrid.RowStyle>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Foreground" Value="#cbd5e1"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#1e3a6e"/>
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#1e2a4a"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </DataGrid.RowStyle>
+        </DataGrid>
+
+        <!-- Footer -->
+        <Grid Grid.Row="4" Margin="0,12,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="TxtRefreshStatus"
+                       Grid.Column="0" Foreground="#475569" FontSize="11"
+                       VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="↻ Aggiorna"
+                    Margin="0,0,8,0" Padding="16,7" Cursor="Hand"
+                    Background="#0c1e40" BorderBrush="#2563eb" Foreground="#93c5fd"
+                    BorderThickness="1" Click="BtnRefresh_Click"/>
+            <Button Grid.Column="2" Content="Chiudi"
+                    Padding="16,7" Cursor="Hand"
+                    Background="#1e2a40" BorderBrush="#2a3a5f" Foreground="#94a3b8"
+                    BorderThickness="1" Click="BtnClose_Click"/>
+        </Grid>
+    </Grid>
+</Window>

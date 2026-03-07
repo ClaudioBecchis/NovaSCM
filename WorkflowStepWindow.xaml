@@ -1,0 +1,145 @@
+<Window x:Class="PolarisManager.WorkflowStepWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        Title="Proprietà Step" Height="520" Width="480"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize"
+        Background="#0a0f1e" Foreground="#dde3f5" FontSize="13">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#94a3b8"/>
+            <Setter Property="FontSize"   Value="12"/>
+            <Setter Property="Margin"     Value="0,10,0,3"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Background"   Value="#0d1b3e"/>
+            <Setter Property="Foreground"   Value="#e2e8f0"/>
+            <Setter Property="BorderBrush"  Value="#1e3a5f"/>
+            <Setter Property="Padding"      Value="8,5"/>
+            <Setter Property="FontSize"     Value="13"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Background"   Value="#0d1b3e"/>
+            <Setter Property="Foreground"   Value="#e2e8f0"/>
+            <Setter Property="BorderBrush"  Value="#1e3a5f"/>
+            <Setter Property="Padding"      Value="8,4"/>
+            <Setter Property="FontSize"     Value="13"/>
+        </Style>
+        <Style x:Key="BtnOk" TargetType="Button">
+            <Setter Property="Background"   Value="#052e16"/>
+            <Setter Property="BorderBrush"  Value="#16a34a"/>
+            <Setter Property="Foreground"   Value="#4ade80"/>
+            <Setter Property="Padding"      Value="20,8"/>
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="FontWeight"   Value="SemiBold"/>
+            <Setter Property="Cursor"       Value="Hand"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style x:Key="BtnCancel" TargetType="Button">
+            <Setter Property="Background"   Value="#1e2a40"/>
+            <Setter Property="BorderBrush"  Value="#2a3a5f"/>
+            <Setter Property="Foreground"   Value="#94a3b8"/>
+            <Setter Property="Padding"      Value="20,8"/>
+            <Setter Property="FontSize"     Value="13"/>
+            <Setter Property="Cursor"       Value="Hand"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Titolo -->
+        <TextBlock Grid.Row="0" x:Name="TxtTitle"
+                   Text="Aggiungi Step"
+                   FontSize="16" FontWeight="Bold"
+                   Foreground="#60a5fa" Margin="0,0,0,16"/>
+
+        <!-- Form -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+
+                <!-- Nome + Ordine -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="80"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                        <TextBlock Text="Nome *"/>
+                        <TextBox x:Name="TxtNome" ToolTip="Nome descrittivo dello step"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Ordine *"/>
+                        <TextBox x:Name="TxtOrdine" Text="1"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Tipo -->
+                <TextBlock Text="Tipo *"/>
+                <ComboBox x:Name="CmbTipo" SelectionChanged="CmbTipo_SelectionChanged">
+                    <ComboBoxItem Content="message"          Tag="message"/>
+                    <ComboBoxItem Content="shell_script"     Tag="shell_script"/>
+                    <ComboBoxItem Content="file_copy"        Tag="file_copy"/>
+                    <ComboBoxItem Content="reboot"           Tag="reboot"/>
+                    <ComboBoxItem Content="winget_install"   Tag="winget_install"   IsSelected="True"/>
+                    <ComboBoxItem Content="windows_update"   Tag="windows_update"/>
+                    <ComboBoxItem Content="ps_script"        Tag="ps_script"/>
+                    <ComboBoxItem Content="reg_set"          Tag="reg_set"/>
+                    <ComboBoxItem Content="apt_install"      Tag="apt_install"/>
+                    <ComboBoxItem Content="snap_install"     Tag="snap_install"/>
+                    <ComboBoxItem Content="systemd_service"  Tag="systemd_service"/>
+                </ComboBox>
+
+                <!-- Platform -->
+                <TextBlock Text="Piattaforma"/>
+                <ComboBox x:Name="CmbPlatform">
+                    <ComboBoxItem Content="all"     Tag="all"     IsSelected="True"/>
+                    <ComboBoxItem Content="windows" Tag="windows"/>
+                    <ComboBoxItem Content="linux"   Tag="linux"/>
+                </ComboBox>
+
+                <!-- Parametri -->
+                <TextBlock Text="Parametri (JSON)"/>
+                <TextBox x:Name="TxtParametri"
+                         Height="110" AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" FontSize="12"
+                         Text="{}{&quot;id&quot;:&quot;&quot;}"/>
+
+                <!-- Helper contestuale -->
+                <Border Background="#0d1b3e" BorderBrush="#1e3a5f" BorderThickness="1"
+                        CornerRadius="4" Padding="10,8" Margin="0,4,0,0">
+                    <TextBlock x:Name="TxtHelper"
+                               Foreground="#475569" FontFamily="Consolas" FontSize="11"
+                               TextWrapping="Wrap"
+                               Text='{}{&quot;id&quot;:&quot;Mozilla.Firefox&quot;}  — ID winget del pacchetto'/>
+                </Border>
+
+                <!-- Su errore -->
+                <TextBlock Text="In caso di errore"/>
+                <ComboBox x:Name="CmbSuErrore">
+                    <ComboBoxItem Content="stop — blocca il workflow"  Tag="stop"     IsSelected="True"/>
+                    <ComboBoxItem Content="continua — prossimo step"   Tag="continua"/>
+                </ComboBox>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Pulsanti -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Content="Annulla" Style="{StaticResource BtnCancel}"
+                    Margin="0,0,8,0" Click="BtnCancel_Click"/>
+            <Button Content="OK" Style="{StaticResource BtnOk}"
+                    Click="BtnOk_Click" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>
