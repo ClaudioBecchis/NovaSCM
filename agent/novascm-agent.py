@@ -53,7 +53,7 @@ log = logging.getLogger("novascm-agent")
 
 # ── Config ────────────────────────────────────────────────────────────────────
 DEFAULT_CONFIG = {
-    "api_url":   "http://192.168.1.100:9091",
+    "api_url":   "http://YOUR-SERVER-IP:9091",
     "poll_sec":  POLL_SEC,
     "pc_name":   socket.gethostname().upper(),
 }
