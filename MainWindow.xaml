@@ -331,7 +331,7 @@
                         </Border>
                         <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
                             <StackPanel>
-                                <TextBlock Text="4" FontSize="22" FontWeight="Bold" Foreground="#60a5fa"/>
+                                <TextBlock Text="4" FontSize="22" FontWeight="Bold" Foreground="#1D4ED8"/>
                                 <TextBlock Text="Con certificato" Foreground="#64748b" FontSize="11"/>
                             </StackPanel>
                         </Border>
