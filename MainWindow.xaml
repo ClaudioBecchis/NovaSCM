@@ -498,8 +498,9 @@
                 <!-- Workspace: Amministrazione -->
                 <TreeViewItem x:Name="TvGroupAdmin" IsExpanded="True" Padding="4,4"
                               Header="⚙️  Amministrazione" Visibility="Collapsed">
-                    <TreeViewItem Header="⚙️  Impostazioni"   Tag="12" Padding="4,3" Selected="NavTree_ItemSelected"/>
-                    <TreeViewItem Header="ℹ️  About"           Tag="11" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="🖥️  Proxmox"        Tag="11" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="⚙️  Impostazioni"   Tag="13" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="ℹ️  About"           Tag="12" Padding="4,3" Selected="NavTree_ItemSelected"/>
                 </TreeViewItem>
             </TreeView>
 
@@ -752,6 +753,33 @@
                         </Grid>
                     </Border>
 
+                    <!-- Change Log panel -->
+                    <Border x:Name="ChangeLogPanel" Visibility="Collapsed"
+                            Background="#0f172a" CornerRadius="6" MaxHeight="220">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="12,8,12,4">
+                                <TextBlock Text="📋  Modifiche rilevate" Foreground="#fbbf24"
+                                           FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="TxtChangeLogTime" Foreground="#64748b"
+                                           FontSize="11" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                                <Button Content="✕ Chiudi" Margin="16,0,0,0" Padding="8,3"
+                                        Background="Transparent" BorderBrush="#334155"
+                                        Foreground="#94a3b8" FontSize="11" Cursor="Hand"
+                                        Click="BtnCloseChangeLog_Click"/>
+                            </StackPanel>
+                            <TextBox Grid.Row="1" x:Name="TxtChangeLog"
+                                     Background="Transparent" Foreground="#e2e8f0"
+                                     BorderThickness="0" FontFamily="Consolas" FontSize="12"
+                                     IsReadOnly="True" TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
+                                     Padding="12,4,12,10"/>
+                        </Grid>
+                    </Border>
+
                     <!-- Tabella device -->
                     <DataGrid x:Name="NetGrid" SelectionMode="Extended"
                               MouseDoubleClick="NetGrid_DoubleClick"
@@ -837,6 +865,9 @@
                         <Button Content="📤  Esporta CSV" Style="{StaticResource BtnBlue}"
                                 Click="BtnExportCsv_Click"
                                 ToolTip="Esporta la lista device in formato CSV"/>
+                        <Button Content="📊  Report HTML" Style="{StaticResource BtnBlue}"
+                                Click="BtnExportHtml_Click"
+                                ToolTip="Genera report HTML della rete (si apre nel browser)"/>
                         <TextBlock VerticalAlignment="Center" Margin="12,0,0,0"
                                    Foreground="#475569" FontSize="11"
                                    Text="Doppio click per porte  •  Ctrl+click multi-selezione"/>
@@ -2014,6 +2045,172 @@
                                   Background="#F8FAFC">
                         <StackPanel x:Name="WikiContent" Margin="32,24,32,24"/>
                     </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB PROXMOX ─── -->
+            <TabItem Header="🖥️  Proxmox">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Barra connessione -->
+                    <Border Grid.Row="0" Background="#1e293b" Padding="12,8">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="Host:" Foreground="#94a3b8" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBox x:Name="TxtPveHost" Width="160" Padding="6,4"
+                                     Background="#0f172a" Foreground="#e2e8f0" BorderBrush="#334155"
+                                     FontFamily="Consolas" FontSize="12"
+                                     Text="192.168.10.201"
+                                     ToolTip="IP o hostname del nodo Proxmox"/>
+                            <TextBlock Text="Utente:" Foreground="#94a3b8" VerticalAlignment="Center" Margin="10,0,6,0"/>
+                            <TextBox x:Name="TxtPveUser" Width="120" Padding="6,4"
+                                     Background="#0f172a" Foreground="#e2e8f0" BorderBrush="#334155"
+                                     FontFamily="Consolas" FontSize="12" Text="root@pam"/>
+                            <TextBlock Text="Password:" Foreground="#94a3b8" VerticalAlignment="Center" Margin="10,0,6,0"/>
+                            <PasswordBox x:Name="TxtPvePass" Width="120" Padding="6,4"
+                                         Background="#0f172a" Foreground="#e2e8f0" BorderBrush="#334155"
+                                         FontSize="12"/>
+                            <Button Content="🔌  Connetti" Style="{StaticResource BtnGreen}"
+                                    Padding="12,5" Margin="12,0,0,0"
+                                    Click="BtnPveConnect_Click"/>
+                            <Button Content="🔄  Aggiorna" Style="{StaticResource BtnBlue}"
+                                    x:Name="BtnPveRefresh" Padding="10,5" IsEnabled="False"
+                                    Click="BtnPveRefresh_Click"/>
+                            <TextBlock x:Name="TxtPveStatus" Foreground="#4ade80"
+                                       VerticalAlignment="Center" Margin="16,0,0,0" FontSize="12"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Contenuto: nodi + VM/CT -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220" MinWidth="160"/>
+                            <ColumnDefinition Width="5"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                                      Background="#D0D5DC"/>
+
+                        <!-- Pannello sinistro: nodi -->
+                        <Border Grid.Column="0" Background="#f8fafc" BorderBrush="#e2e8f0" BorderThickness="0,0,1,0">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="*"/>
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="  🖥️  Nodi" FontWeight="SemiBold"
+                                           Background="#e2e8f0" Padding="8,6" FontSize="13"/>
+                                <ListBox Grid.Row="1" x:Name="LstPveNodes"
+                                         Background="Transparent" BorderThickness="0"
+                                         SelectionChanged="LstPveNodes_SelectionChanged">
+                                    <ListBox.ItemContainerStyle>
+                                        <Style TargetType="ListBoxItem">
+                                            <Setter Property="Padding" Value="10,8"/>
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                        </Style>
+                                    </ListBox.ItemContainerStyle>
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <StackPanel>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding StatusIcon}" FontSize="14" Margin="0,0,6,0"/>
+                                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="13"/>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding CpuText}" Foreground="#475569" FontSize="11" Margin="20,2,0,0"/>
+                                                <TextBlock Text="{Binding RamText}" Foreground="#475569" FontSize="11" Margin="20,0,0,0"/>
+                                                <TextBlock Text="{Binding GuestText}" Foreground="#1d4ed8" FontSize="11" Margin="20,0,0,2"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </Grid>
+                        </Border>
+
+                        <!-- Pannello destro: VM/CT -->
+                        <Grid Grid.Column="2">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Toolbar azioni -->
+                            <Border Grid.Row="0" Background="#f1f5f9" Padding="8,6"
+                                    BorderBrush="#e2e8f0" BorderThickness="0,0,0,1">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Content="▶  Start"  Style="{StaticResource BtnGreen}"
+                                            Padding="10,4" Click="BtnPveStart_Click"
+                                            x:Name="BtnPveStart" IsEnabled="False"/>
+                                    <Button Content="⏹  Stop"   Style="{StaticResource BtnRed}"
+                                            Padding="10,4" Click="BtnPveStop_Click"
+                                            x:Name="BtnPveStop" IsEnabled="False"/>
+                                    <Button Content="🔄  Reboot" Style="{StaticResource BtnAmber}"
+                                            Padding="10,4" Click="BtnPveReboot_Click"
+                                            x:Name="BtnPveReboot" IsEnabled="False"/>
+                                    <Button Content="⏸  Suspend" Style="{StaticResource BtnBlue}"
+                                            Padding="10,4" Click="BtnPveSuspend_Click"
+                                            x:Name="BtnPveSuspend" IsEnabled="False"/>
+                                    <Separator Width="1" Background="#d1d5db" Margin="6,0"/>
+                                    <Button Content="📟  Console" Style="{StaticResource BtnBlue}"
+                                            Padding="10,4" Click="BtnPveConsole_Click"
+                                            x:Name="BtnPveConsole" IsEnabled="False"
+                                            ToolTip="Apri console VNC nel browser"/>
+                                    <Separator Width="1" Background="#d1d5db" Margin="6,0"/>
+                                    <TextBox x:Name="TxtPveFilter" Width="180" Padding="6,4"
+                                             Background="White" BorderBrush="#d1d5db"
+                                             FontSize="12" Tag="🔍  Filtra VM/CT..."
+                                             ToolTip="Filtra per nome o VMID"
+                                             TextChanged="TxtPveFilter_TextChanged"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- DataGrid VM/CT -->
+                            <DataGrid Grid.Row="1" x:Name="DgPveGuests"
+                                      AutoGenerateColumns="False"
+                                      IsReadOnly="True"
+                                      GridLinesVisibility="Horizontal"
+                                      HeadersVisibility="Column"
+                                      Background="White"
+                                      RowBackground="White"
+                                      AlternatingRowBackground="#f8fafc"
+                                      BorderThickness="0"
+                                      FontSize="12"
+                                      SelectionMode="Single"
+                                      SelectionChanged="DgPveGuests_SelectionChanged"
+                                      CanUserSortColumns="True">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="VMID"   Binding="{Binding Vmid}"     Width="60"  CanUserSort="True"/>
+                                    <DataGridTextColumn Header="Nome"   Binding="{Binding Name}"     Width="*"   CanUserSort="True"/>
+                                    <DataGridTextColumn Header="Tipo"   Binding="{Binding TypeLabel}" Width="55"  CanUserSort="True"/>
+                                    <DataGridTextColumn Header="Stato"  Binding="{Binding StatusLabel}" Width="80" CanUserSort="True">
+                                        <DataGridTextColumn.ElementStyle>
+                                            <Style TargetType="TextBlock">
+                                                <Style.Triggers>
+                                                    <Trigger Property="Text" Value="▶ running">
+                                                        <Setter Property="Foreground" Value="#16a34a"/>
+                                                    </Trigger>
+                                                    <Trigger Property="Text" Value="⏹ stopped">
+                                                        <Setter Property="Foreground" Value="#dc2626"/>
+                                                    </Trigger>
+                                                    <Trigger Property="Text" Value="⏸ paused">
+                                                        <Setter Property="Foreground" Value="#d97706"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </DataGridTextColumn.ElementStyle>
+                                    </DataGridTextColumn>
+                                    <DataGridTextColumn Header="CPU %"  Binding="{Binding CpuLabel}"  Width="65"  CanUserSort="True"/>
+                                    <DataGridTextColumn Header="RAM"    Binding="{Binding RamLabel}"   Width="90"  CanUserSort="True"/>
+                                    <DataGridTextColumn Header="Disco"  Binding="{Binding DiskLabel}"  Width="90"  CanUserSort="True"/>
+                                    <DataGridTextColumn Header="Uptime" Binding="{Binding UptimeLabel}" Width="90" CanUserSort="True"/>
+                                    <DataGridTextColumn Header="Nodo"   Binding="{Binding Node}"       Width="80"  CanUserSort="True"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
+                    </Grid>
                 </Grid>
             </TabItem>
 
