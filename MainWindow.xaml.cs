@@ -1221,10 +1221,10 @@ public partial class MainWindow : Window
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private void BtnOpenWebsite_Click(object s, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo("https://github.com/novascm/novascm") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo("https://polariscore.it") { UseShellExecute = true });
 
     private void BtnOpenGitHub_Click(object s, RoutedEventArgs e) =>
-        Process.Start(new ProcessStartInfo("https://github.com/novascm/novascm") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo("https://github.com/ClaudioBecchis/NovaSCM") { UseShellExecute = true });
 
     private void BtnDemoSCCM_Click(object s, RoutedEventArgs e)   => new DemoSCCM().Show();
     private void BtnDemoAI_Click(object s, RoutedEventArgs e)     => new DemoAI().Show();
