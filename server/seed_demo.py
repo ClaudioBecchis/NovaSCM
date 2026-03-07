@@ -163,7 +163,7 @@ def main():
     print(f"  - 6 Change Request")
     print(f"  - 4 assegnazioni (completed/running/running/pending)")
     print(f"  - default_workflow_id = {wf1}")
-    print(f"  Apri: http://192.168.20.110:9091")
+    print(f"  Apri: http://YOUR-SERVER-IP:9091")
 
 if __name__ == "__main__":
     main()

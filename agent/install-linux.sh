@@ -1,10 +1,10 @@
 #!/bin/bash
 # NovaSCM Agent Installer — Linux (Debian/Ubuntu)
-# Uso: sudo bash install-linux.sh --api-url http://192.168.20.110:9091
+# Uso: sudo bash install-linux.sh --api-url http://YOUR-SERVER-IP:9091
 
 set -e
 
-API_URL="http://192.168.20.110:9091"
+API_URL="http://YOUR-SERVER-IP:9091"
 PC_NAME=$(hostname | tr '[:lower:]' '[:upper:]')
 POLL_SEC=60
 AGENT_DIR="/opt/novascm-agent"
