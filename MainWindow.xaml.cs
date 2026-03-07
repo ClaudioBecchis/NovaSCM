@@ -75,11 +75,11 @@ record OuiRecord(
     [property: JsonPropertyName("vendorName")] string VendorName,
     [property: JsonPropertyName("private")]    bool   Private);
 
-record CertRow(string Icon, string Name, string Mac, string Created, string Expires, string Status);
-record AppQueueRow(string Pc, string Ip, string Mac, string Apps, string Status);
-record AppCatRow(string Category, string Items);
-record OpsiRow(string Name, string Version, string Status, string Updated);
-record PcRow(string Icon, string Name, string Ip, string Os, string Cpu, string Ram, string Status, string Agent);
+public record CertRow(string Icon, string Name, string Mac, string Created, string Expires, string Status);
+public record AppQueueRow(string Pc, string Ip, string Mac, string Apps, string Status);
+public record AppCatRow(string Category, string Items);
+public record OpsiRow(string Name, string Version, string Status, string Updated);
+public record PcRow(string Icon, string Name, string Ip, string Os, string Cpu, string Ram, string Status, string Agent);
 
 // ── Workflow models ────────────────────────────────────────────────────────────
 public class WfRow : INotifyPropertyChanged
@@ -182,6 +182,19 @@ class AppConfig
     public string NovaSCMApiUrl { get; set; } = "";
 }
 
+public class CrRow
+{
+    public int    Id           { get; set; }
+    public string PcName       { get; set; } = "";
+    public string Domain       { get; set; } = "";
+    public string Ou           { get; set; } = "";
+    public string AssignedUser { get; set; } = "";
+    public string Status       { get; set; } = "";
+    public string CreatedAt    { get; set; } = "";
+    public string Notes        { get; set; } = "";
+    public string LastSeen     { get; set; } = "";
+}
+
 public partial class MainWindow : Window
 {
     private static readonly string ConfigPath =
@@ -204,17 +217,19 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Database.Initialize();
         // Forza render del primo tab al caricamento
         Dispatcher.BeginInvoke(() =>
         {
             MainTabs.SelectedIndex = 0;
             UpdateNavState(0);
+            SwitchWorkspace("asset");
         }, System.Windows.Threading.DispatcherPriority.Render);
         bool firstRun = !File.Exists(ConfigPath);
         LoadConfig();
         NetGrid.ItemsSource     = _netRows;
         LstPackages.ItemsSource = _deployPackages;
-        LoadDemoData();
+        LoadFromDatabase();
         RefreshProfiles();
         InitCrTab();
         InitWorkflowTab();
@@ -327,6 +342,7 @@ public partial class MainWindow : Window
         _scanCts?.Dispose();
         _scanCts = new CancellationTokenSource();
         var token = _scanCts.Token;
+        StartRadar();
 
         int total = ips.Count, done = 0, found = 0;
         ScanProgress.Maximum = total;
@@ -353,7 +369,7 @@ public partial class MainWindow : Window
                         if (reply.Status == IPStatus.Success)
                         {
                             var row = new DeviceRow { Ip = ip.ToString(), Status = "🟢 Online" };
-                            Dispatcher.Invoke(() => { _netRows.Add(row); found++; });
+                            Dispatcher.Invoke(() => { _netRows.Add(row); found++; AddRadarBlip(row); TxtRadarStatus.Text = $"● SCANNING — {found} FOUND"; });
                             App.Log($"  Online: {ip}");
 
                             _ = Task.Run(async () =>
@@ -445,6 +461,11 @@ public partial class MainWindow : Window
         TxtScanStatus.Text = msg;
         SetStatus(msg);
         App.Log($"Scansione terminata: {found}/{total}");
+        StopRadar(found);
+
+        // Salva risultati scansione nel DB
+        foreach (var d in _netRows)
+            Database.UpsertDevice(d);
 
         // Arricchisce con tipo connessione da UniFi (anche MAC mancanti per altre VLAN)
         if (!token.IsCancellationRequested && !string.IsNullOrEmpty(_config.UnifiUrl))
@@ -457,6 +478,888 @@ public partial class MainWindow : Window
         BtnScan.IsEnabled    = true;
         BtnScanAll.IsEnabled = true;
         BtnStop.IsEnabled    = false;
+    }
+
+    // ── Live Ping Graph ───────────────────────────────────────────────────────
+    private CancellationTokenSource? _pingCts;
+    private readonly List<double> _pingHistory = [];
+    private const int PingHistoryMax = 60;
+
+    private void NetGrid_SelectionChanged(object s, SelectionChangedEventArgs e)
+    {
+        if (NetGrid.SelectedItem is DeviceRow dev && dev.Status.Contains("Online") ||
+            NetGrid.SelectedItem is DeviceRow d2 && d2.Status.Contains("🟢"))
+        {
+            var target = NetGrid.SelectedItem as DeviceRow;
+            if (target == null) return;
+            StartPingGraph(target.Ip, target.Name != "—" ? target.Name : target.Ip);
+        }
+        else
+        {
+            StopPingGraph();
+        }
+    }
+
+    private void StartPingGraph(string ip, string label)
+    {
+        StopPingGraph();
+        _pingHistory.Clear();
+        PingPanel.Visibility = Visibility.Visible;
+        TxtPingHost.Text     = label;
+        TxtPingLast.Text     = "— ms";
+        TxtPingAvg.Text      = "avg: — ms";
+        TxtPingMin.Text      = "min: — ms";
+        TxtPingMax.Text      = "max: — ms";
+
+        _pingCts = new CancellationTokenSource();
+        var token = _pingCts.Token;
+
+        Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                double ms = -1;
+                try
+                {
+                    using var ping = new System.Net.NetworkInformation.Ping();
+                    var reply = await ping.SendPingAsync(ip, 1000);
+                    ms = reply.Status == System.Net.NetworkInformation.IPStatus.Success
+                        ? reply.RoundtripTime : -1;
+                }
+                catch { ms = -1; }
+
+                Dispatcher.Invoke(() =>
+                {
+                    _pingHistory.Add(ms);
+                    if (_pingHistory.Count > PingHistoryMax)
+                        _pingHistory.RemoveAt(0);
+                    UpdatePingGraph(ms);
+                });
+
+                await Task.Delay(1000, token).ContinueWith(_ => { });
+            }
+        }, token);
+    }
+
+    private void StopPingGraph()
+    {
+        _pingCts?.Cancel();
+        _pingCts = null;
+        PingPanel.Visibility = Visibility.Collapsed;
+        _pingHistory.Clear();
+    }
+
+    private void UpdatePingGraph(double latestMs)
+    {
+        PingCanvas.Children.Clear();
+        double w = PingCanvas.ActualWidth;
+        double h = PingCanvas.ActualHeight;
+        if (w < 10 || h < 10 || _pingHistory.Count < 2) return;
+
+        var valid = _pingHistory.Where(v => v >= 0).ToList();
+        if (valid.Count == 0) return;
+
+        double maxMs = Math.Max(valid.Max(), 200);
+        double minMs = 0;
+
+        // Linee griglia orizzontali
+        foreach (var ms in new[] { maxMs * 0.25, maxMs * 0.5, maxMs * 0.75 })
+        {
+            double gy = h - ((ms - minMs) / (maxMs - minMs)) * h;
+            var gl = new System.Windows.Shapes.Line
+            {
+                X1 = 0, Y1 = gy, X2 = w, Y2 = gy,
+                Stroke = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(25, 255, 255, 255)),
+                StrokeThickness = 1
+            };
+            PingCanvas.Children.Add(gl);
+            var lbl = new TextBlock
+            {
+                Text = $"{ms:0}ms", FontSize = 8,
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(100, 148, 163, 184))
+            };
+            Canvas.SetLeft(lbl, 2);
+            Canvas.SetTop(lbl, gy - 10);
+            PingCanvas.Children.Add(lbl);
+        }
+
+        // Area fill sotto la curva
+        var geo = new System.Windows.Media.StreamGeometry();
+        using (var ctx = geo.Open())
+        {
+            bool first = true;
+            for (int i = 0; i < _pingHistory.Count; i++)
+            {
+                if (_pingHistory[i] < 0) continue;
+                double x = (double)i / (PingHistoryMax - 1) * w;
+                double y = h - ((_pingHistory[i] - minMs) / (maxMs - minMs)) * h;
+                if (first) { ctx.BeginFigure(new System.Windows.Point(x, h), true, true); first = false; }
+                ctx.LineTo(new System.Windows.Point(x, y), true, false);
+            }
+            if (!first)
+            {
+                ctx.LineTo(new System.Windows.Point(w, h), true, false);
+            }
+        }
+        geo.Freeze();
+        var fill = new System.Windows.Shapes.Path
+        {
+            Data = geo,
+            Fill = new System.Windows.Media.LinearGradientBrush(
+                System.Windows.Media.Color.FromArgb(80, 16, 185, 129),
+                System.Windows.Media.Color.FromArgb(0,  16, 185, 129),
+                90)
+        };
+        PingCanvas.Children.Add(fill);
+
+        // Linea principale
+        var lineGeo = new System.Windows.Media.StreamGeometry();
+        using (var ctx = lineGeo.Open())
+        {
+            bool first = true;
+            for (int i = 0; i < _pingHistory.Count; i++)
+            {
+                if (_pingHistory[i] < 0) continue;
+                double x = (double)i / (PingHistoryMax - 1) * w;
+                double y = h - ((_pingHistory[i] - minMs) / (maxMs - minMs)) * h;
+                if (first) { ctx.BeginFigure(new System.Windows.Point(x, y), false, false); first = false; }
+                else ctx.LineTo(new System.Windows.Point(x, y), true, false);
+            }
+        }
+        lineGeo.Freeze();
+
+        // Colore in base alla latenza
+        var lineColor = latestMs < 0   ? System.Windows.Media.Color.FromRgb(239, 68, 68)
+                      : latestMs < 50  ? System.Windows.Media.Color.FromRgb(16, 185, 129)
+                      : latestMs < 150 ? System.Windows.Media.Color.FromRgb(245, 158, 11)
+                      :                  System.Windows.Media.Color.FromRgb(239, 68, 68);
+
+        var linePath = new System.Windows.Shapes.Path
+        {
+            Data = lineGeo,
+            Stroke = new System.Windows.Media.SolidColorBrush(lineColor),
+            StrokeThickness = 2,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = lineColor, BlurRadius = 6, ShadowDepth = 0, Opacity = 0.8
+            }
+        };
+        PingCanvas.Children.Add(linePath);
+
+        // Punto corrente
+        if (latestMs >= 0)
+        {
+            double lx = ((double)(_pingHistory.Count - 1) / (PingHistoryMax - 1)) * w;
+            double ly = h - ((latestMs - minMs) / (maxMs - minMs)) * h;
+            var dot = new System.Windows.Shapes.Ellipse
+            {
+                Width = 8, Height = 8,
+                Fill = new System.Windows.Media.SolidColorBrush(lineColor),
+                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = lineColor, BlurRadius = 10, ShadowDepth = 0
+                }
+            };
+            Canvas.SetLeft(dot, lx - 4);
+            Canvas.SetTop(dot,  ly - 4);
+            PingCanvas.Children.Add(dot);
+        }
+
+        // Aggiorna statistiche
+        TxtPingLast.Text = latestMs >= 0 ? $"{latestMs} ms" : "timeout";
+        TxtPingLast.Foreground = new System.Windows.Media.SolidColorBrush(lineColor);
+        if (valid.Count > 0)
+        {
+            TxtPingAvg.Text = $"avg: {valid.Average():0} ms";
+            TxtPingMin.Text = $"min: {valid.Min():0} ms";
+            TxtPingMax.Text = $"max: {valid.Max():0} ms";
+        }
+    }
+
+    // ── Network Radar ─────────────────────────────────────────────────────────
+    private const double RadarW = 700, RadarH = 480;
+    private double _radarCx, _radarCy, _radarMaxR;
+    private System.Windows.Controls.Canvas? _radarBlipLayer;
+
+    private void StartRadar()
+    {
+        _radarBlipLayer = null;
+        RadarCanvas.Children.Clear();
+        RadarPanel.Visibility  = Visibility.Visible;
+        RadarPanel.Opacity     = 1;
+        NetGrid.Visibility     = Visibility.Collapsed;
+        MapPanel.Visibility    = Visibility.Collapsed;
+
+        _radarCx   = RadarW / 2;
+        _radarCy   = RadarH / 2;
+        _radarMaxR = Math.Min(_radarCx, _radarCy) * 0.86;
+
+        DrawRadarBackground();
+        StartRadarSweep();
+    }
+
+    private void StopRadar(int devices)
+    {
+        Dispatcher.BeginInvoke(async () =>
+        {
+            TxtRadarStatus.Text = $"● SCAN COMPLETE — {devices} DEVICES FOUND";
+            await Task.Delay(2500);
+            var fade = new System.Windows.Media.Animation.DoubleAnimation(
+                1, 0, new Duration(TimeSpan.FromSeconds(1.2)));
+            fade.Completed += (_, _) =>
+            {
+                RadarPanel.Visibility = Visibility.Collapsed;
+                NetGrid.Visibility    = Visibility.Visible;
+            };
+            RadarPanel.BeginAnimation(UIElement.OpacityProperty, fade);
+        });
+    }
+
+    private void DrawRadarBackground()
+    {
+        double cx = _radarCx, cy = _radarCy, maxR = _radarMaxR;
+
+        // Dot grid
+        for (int gx = 0; gx < RadarW; gx += 24)
+            for (int gy = 0; gy < RadarH; gy += 24)
+            {
+                var d = new System.Windows.Shapes.Rectangle
+                {
+                    Width = 1.2, Height = 1.2,
+                    Fill = new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromArgb(35, 0, 200, 80))
+                };
+                Canvas.SetLeft(d, gx); Canvas.SetTop(d, gy);
+                RadarCanvas.Children.Add(d);
+            }
+
+        // Concentric rings
+        for (int i = 1; i <= 4; i++)
+        {
+            double r = maxR * i / 4;
+            var ring = new System.Windows.Shapes.Ellipse
+            {
+                Width = r * 2, Height = r * 2,
+                Stroke = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(55, 0, 200, 80)),
+                StrokeThickness = 1
+            };
+            Canvas.SetLeft(ring, cx - r); Canvas.SetTop(ring, cy - r);
+            RadarCanvas.Children.Add(ring);
+
+            var rl = new TextBlock
+            {
+                Text = $"/{i * 64}", FontSize = 8,
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(70, 0, 200, 80))
+            };
+            Canvas.SetLeft(rl, cx + r - 18); Canvas.SetTop(rl, cy + 3);
+            RadarCanvas.Children.Add(rl);
+        }
+
+        // Cross + diagonal lines
+        foreach (var (x1, y1, x2, y2) in new[]
+        {
+            (cx - maxR, cy, cx + maxR, cy),
+            (cx, cy - maxR, cx, cy + maxR),
+            (cx - maxR * .707, cy - maxR * .707, cx + maxR * .707, cy + maxR * .707),
+            (cx - maxR * .707, cy + maxR * .707, cx + maxR * .707, cy - maxR * .707)
+        })
+        {
+            RadarCanvas.Children.Add(new System.Windows.Shapes.Line
+            {
+                X1 = x1, Y1 = y1, X2 = x2, Y2 = y2,
+                Stroke = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(22, 0, 200, 80)),
+                StrokeThickness = 1
+            });
+        }
+
+        // Center blip
+        var center = new System.Windows.Shapes.Ellipse
+        {
+            Width = 9, Height = 9,
+            Fill = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(0, 255, 100)),
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = System.Windows.Media.Color.FromRgb(0, 255, 100),
+                BlurRadius = 14, ShadowDepth = 0
+            }
+        };
+        Canvas.SetLeft(center, cx - 4.5); Canvas.SetTop(center, cy - 4.5);
+        RadarCanvas.Children.Add(center);
+
+        // Header
+        var hdr = new TextBlock
+        {
+            Text = "POLARISCORE ◆ NETWORK RADAR ◆ LIVE SCAN",
+            FontSize = 10, FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+            Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromArgb(140, 0, 200, 80))
+        };
+        Canvas.SetLeft(hdr, 12); Canvas.SetTop(hdr, 9);
+        RadarCanvas.Children.Add(hdr);
+    }
+
+    private void StartRadarSweep()
+    {
+        double cx = _radarCx, cy = _radarCy, maxR = _radarMaxR;
+
+        // Sweep cone — layers of fading trail lines
+        var sweepCanvas = new System.Windows.Controls.Canvas
+        {
+            Width = RadarW, Height = RadarH,
+            RenderTransformOrigin = new System.Windows.Point(cx / RadarW, cy / RadarH),
+            RenderTransform = new System.Windows.Media.RotateTransform(0)
+        };
+
+        for (int trail = 0; trail <= 50; trail += 2)
+        {
+            byte alpha = (byte)((50 - trail) / 50.0 * (trail == 0 ? 230 : 90));
+            double rad  = (-90 - trail) * Math.PI / 180;
+            var tl = new System.Windows.Shapes.Line
+            {
+                X1 = cx, Y1 = cy,
+                X2 = cx + maxR * Math.Cos(rad),
+                Y2 = cy + maxR * Math.Sin(rad),
+                Stroke = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(alpha, 0, 220, 80)),
+                StrokeThickness = trail == 0 ? 2.5 : 1.5
+            };
+            if (trail == 0)
+                tl.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color = System.Windows.Media.Color.FromRgb(0, 255, 80),
+                    BlurRadius = 14, ShadowDepth = 0, Opacity = 1
+                };
+            sweepCanvas.Children.Add(tl);
+        }
+        RadarCanvas.Children.Add(sweepCanvas);
+
+        var rot = (System.Windows.Media.RotateTransform)sweepCanvas.RenderTransform;
+        rot.BeginAnimation(System.Windows.Media.RotateTransform.AngleProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(0, 360,
+                new Duration(TimeSpan.FromSeconds(3)))
+            {
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+            });
+
+        // Blip layer on top
+        _radarBlipLayer = new System.Windows.Controls.Canvas { Width = RadarW, Height = RadarH };
+        RadarCanvas.Children.Add(_radarBlipLayer);
+    }
+
+    private void AddRadarBlip(DeviceRow device)
+    {
+        if (_radarBlipLayer == null) return;
+
+        var parts = device.Ip.Split('.');
+        if (parts.Length < 4 ||
+            !int.TryParse(parts[2], out int third) ||
+            !int.TryParse(parts[3], out int fourth)) return;
+
+        double ringF = ((third % 30) + 10.0) / 40.0;
+        double r     = _radarMaxR * ringF * 0.92;
+        double angle = fourth / 254.0 * 360 - 90;
+        double rad   = angle * Math.PI / 180;
+        double bx    = _radarCx + r * Math.Cos(rad);
+        double by    = _radarCy + r * Math.Sin(rad);
+
+        bool online = device.Status.Contains("Online") || device.Status.Contains("🟢");
+        var col = online
+            ? System.Windows.Media.Color.FromRgb(0,  255, 100)
+            : System.Windows.Media.Color.FromRgb(255, 60,  60);
+
+        // Pulse ring
+        var pulse = new System.Windows.Shapes.Ellipse
+        {
+            Width = 18, Height = 18,
+            Stroke = new System.Windows.Media.SolidColorBrush(col),
+            StrokeThickness = 1.5, Opacity = 0.8,
+            RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+            RenderTransform = new System.Windows.Media.ScaleTransform(1, 1)
+        };
+        Canvas.SetLeft(pulse, bx - 9); Canvas.SetTop(pulse, by - 9);
+        var sx = new System.Windows.Media.Animation.DoubleAnimation(1, 2.8,
+            new Duration(TimeSpan.FromSeconds(1.8))) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever };
+        ((System.Windows.Media.ScaleTransform)pulse.RenderTransform).BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, sx);
+        ((System.Windows.Media.ScaleTransform)pulse.RenderTransform).BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(1, 2.8, new Duration(TimeSpan.FromSeconds(1.8))) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
+        pulse.BeginAnimation(UIElement.OpacityProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(0.8, 0,
+                new Duration(TimeSpan.FromSeconds(1.8))) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
+        _radarBlipLayer.Children.Add(pulse);
+
+        // Core dot
+        var dot = new System.Windows.Shapes.Ellipse
+        {
+            Width = 8, Height = 8, Opacity = 0,
+            Fill = new System.Windows.Media.SolidColorBrush(col),
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = col, BlurRadius = 10, ShadowDepth = 0
+            }
+        };
+        Canvas.SetLeft(dot, bx - 4); Canvas.SetTop(dot, by - 4);
+        dot.BeginAnimation(UIElement.OpacityProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(0, 1,
+                new Duration(TimeSpan.FromSeconds(0.4))));
+        _radarBlipLayer.Children.Add(dot);
+
+        // Label
+        var lbl = new TextBlock
+        {
+            Text = device.Name != "—" ? device.Name : device.Ip,
+            FontSize = 8, Opacity = 0,
+            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+            Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromArgb(200, 0, 220, 80))
+        };
+        Canvas.SetLeft(lbl, bx + 7); Canvas.SetTop(lbl, by - 5);
+        lbl.BeginAnimation(UIElement.OpacityProperty,
+            new System.Windows.Media.Animation.DoubleAnimation(0, 1,
+                new Duration(TimeSpan.FromSeconds(0.7))));
+        _radarBlipLayer.Children.Add(lbl);
+    }
+
+    // ── Mappa rete visuale ────────────────────────────────────────────────────
+    private bool _mapVisible = false;
+
+    private void BtnToggleMap_Click(object s, RoutedEventArgs e)
+    {
+        _mapVisible = !_mapVisible;
+        MapPanel.Visibility = _mapVisible ? Visibility.Visible : Visibility.Collapsed;
+        NetGrid.Visibility  = _mapVisible ? Visibility.Collapsed : Visibility.Visible;
+        BtnToggleMap.Content = _mapVisible ? "☰  Lista" : "🗺  Mappa";
+        if (_mapVisible) DrawNetworkMap();
+    }
+
+    private void DrawNetworkMap()
+    {
+        NetMapCanvas.Children.Clear();
+
+        var devices = _netRows.ToList();
+        if (devices.Count == 0) return;
+
+        double cx = NetMapCanvas.Width  / 2;
+        double cy = NetMapCanvas.Height / 2;
+
+        // Disegna griglia di sfondo
+        for (int x = 0; x < NetMapCanvas.Width;  x += 60)
+        {
+            var line = new System.Windows.Shapes.Line
+            {
+                X1 = x, Y1 = 0, X2 = x, Y2 = NetMapCanvas.Height,
+                Stroke = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(20, 255, 255, 255)),
+                StrokeThickness = 1
+            };
+            NetMapCanvas.Children.Add(line);
+        }
+        for (int y = 0; y < NetMapCanvas.Height; y += 60)
+        {
+            var line = new System.Windows.Shapes.Line
+            {
+                X1 = 0, Y1 = y, X2 = NetMapCanvas.Width, Y2 = y,
+                Stroke = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromArgb(20, 255, 255, 255)),
+                StrokeThickness = 1
+            };
+            NetMapCanvas.Children.Add(line);
+        }
+
+        // Trova il gateway (IP con .1 o .254)
+        var gateway = devices.FirstOrDefault(d =>
+            d.Ip.EndsWith(".1") || d.Ip.EndsWith(".254") ||
+            d.DeviceType.Contains("Router") || d.DeviceType.Contains("Gateway"))
+            ?? devices[0];
+
+        // Gateway al centro
+        DrawNode(cx, cy, gateway, isGateway: true);
+
+        // Altri device in cerchi concentrici
+        var others = devices.Where(d => d != gateway).ToList();
+        int perRing  = Math.Min(12, others.Count);
+        double ringR = Math.Min(cx, cy) * 0.65;
+
+        for (int i = 0; i < others.Count; i++)
+        {
+            int    ring  = i / perRing;
+            int    pos   = i % perRing;
+            int    count = Math.Min(perRing, others.Count - ring * perRing);
+            double r     = ringR + ring * 90;
+            double angle = (2 * Math.PI * pos / count) - Math.PI / 2;
+            double x     = cx + r * Math.Cos(angle);
+            double y     = cy + r * Math.Sin(angle);
+
+            // Linea di connessione verso il gateway
+            bool online = others[i].Status.Contains("Online") || others[i].Status.Contains("🟢");
+            var connLine = new System.Windows.Shapes.Line
+            {
+                X1 = cx, Y1 = cy, X2 = x, Y2 = y,
+                Stroke = new System.Windows.Media.SolidColorBrush(
+                    online
+                    ? System.Windows.Media.Color.FromArgb(60, 16, 185, 129)
+                    : System.Windows.Media.Color.FromArgb(30, 100, 116, 139)),
+                StrokeThickness = online ? 1.5 : 1,
+                StrokeDashArray = online ? null : new System.Windows.Media.DoubleCollection { 4, 4 }
+            };
+            NetMapCanvas.Children.Add(connLine);
+
+            DrawNode(x, y, others[i], isGateway: false);
+        }
+    }
+
+    private void DrawNode(double x, double y, DeviceRow device, bool isGateway)
+    {
+        bool online = device.Status.Contains("Online") || device.Status.Contains("🟢");
+
+        var nodeColor = isGateway
+            ? System.Windows.Media.Color.FromRgb(245, 158, 11)    // amber
+            : online
+                ? System.Windows.Media.Color.FromRgb(16, 185, 129) // green
+                : System.Windows.Media.Color.FromRgb(239, 68, 68);  // red
+
+        double r = isGateway ? 28 : 20;
+
+        if (online)
+        {
+            // Anello pulse animato
+            var pulse = new System.Windows.Shapes.Ellipse
+            {
+                Width = r * 2, Height = r * 2,
+                Stroke = new System.Windows.Media.SolidColorBrush(nodeColor),
+                StrokeThickness = 2,
+                Opacity = 0.6,
+                RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
+                RenderTransform = new System.Windows.Media.ScaleTransform(1, 1)
+            };
+            Canvas.SetLeft(pulse, x - r);
+            Canvas.SetTop(pulse,  y - r);
+            NetMapCanvas.Children.Add(pulse);
+
+            var anim = new System.Windows.Media.Animation.DoubleAnimation(1, 2.2,
+                new Duration(TimeSpan.FromSeconds(1.8)))
+            {
+                AutoReverse = false, RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                EasingFunction = new System.Windows.Media.Animation.CubicEase()
+            };
+            var animO = new System.Windows.Media.Animation.DoubleAnimation(0.6, 0,
+                new Duration(TimeSpan.FromSeconds(1.8)))
+            {
+                RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever
+            };
+            ((System.Windows.Media.ScaleTransform)pulse.RenderTransform).BeginAnimation(
+                System.Windows.Media.ScaleTransform.ScaleXProperty, anim);
+            ((System.Windows.Media.ScaleTransform)pulse.RenderTransform).BeginAnimation(
+                System.Windows.Media.ScaleTransform.ScaleYProperty,
+                new System.Windows.Media.Animation.DoubleAnimation(1, 2.2,
+                    new Duration(TimeSpan.FromSeconds(1.8)))
+                {
+                    RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever,
+                    EasingFunction = new System.Windows.Media.Animation.CubicEase()
+                });
+            pulse.BeginAnimation(UIElement.OpacityProperty, animO);
+        }
+
+        // Cerchio principale
+        var node = new System.Windows.Shapes.Ellipse
+        {
+            Width  = r * 2, Height = r * 2,
+            Fill   = new System.Windows.Media.RadialGradientBrush(
+                System.Windows.Media.Color.FromArgb(255,
+                    (byte)Math.Min(255, nodeColor.R + 60),
+                    (byte)Math.Min(255, nodeColor.G + 60),
+                    (byte)Math.Min(255, nodeColor.B + 60)),
+                nodeColor),
+            Stroke = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromArgb(200, nodeColor.R, nodeColor.G, nodeColor.B)),
+            StrokeThickness = 2,
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color     = nodeColor,
+                BlurRadius = 12, ShadowDepth = 0,
+                Opacity   = online ? 0.8 : 0.3
+            }
+        };
+        Canvas.SetLeft(node, x - r);
+        Canvas.SetTop(node,  y - r);
+        NetMapCanvas.Children.Add(node);
+
+        // Icona
+        var icon = new TextBlock
+        {
+            Text = isGateway ? "🌐" : device.Icon,
+            FontSize = isGateway ? 16 : 13,
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            VerticalAlignment   = System.Windows.VerticalAlignment.Center,
+            IsHitTestVisible    = false
+        };
+        Canvas.SetLeft(icon, x - r + (r * 0.45));
+        Canvas.SetTop(icon,  y - r + (r * 0.35));
+        NetMapCanvas.Children.Add(icon);
+
+        // Etichetta IP
+        var label = new TextBlock
+        {
+            Text       = device.Name != "—" ? device.Name : device.Ip,
+            FontSize   = 9,
+            Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(148, 163, 184)),
+            MaxWidth   = 80,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextAlignment = TextAlignment.Center
+        };
+        Canvas.SetLeft(label, x - 40);
+        Canvas.SetTop(label,  y + r + 3);
+        NetMapCanvas.Children.Add(label);
+
+        // IP piccolo sotto il nome
+        var ipLabel = new TextBlock
+        {
+            Text       = device.Ip,
+            FontSize   = 8,
+            Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromArgb(150, 100, 116, 139)),
+            MaxWidth   = 80,
+            TextAlignment = TextAlignment.Center
+        };
+        Canvas.SetLeft(ipLabel, x - 40);
+        Canvas.SetTop(ipLabel,  y + r + 14);
+        NetMapCanvas.Children.Add(ipLabel);
+
+        // Tooltip al click
+        node.ToolTip = $"{device.Ip}  {device.Name}\n{device.DeviceType}  {device.Mac}\n{device.Status}";
+    }
+
+    // ── IP Subnet Heatmap ─────────────────────────────────────────────────────
+    private bool _heatmapVisible = false;
+
+    private void BtnToggleHeatmap_Click(object s, RoutedEventArgs e)
+    {
+        _heatmapVisible = !_heatmapVisible;
+        HeatmapPanel.Visibility = _heatmapVisible ? Visibility.Visible : Visibility.Collapsed;
+        NetGrid.Visibility      = _heatmapVisible ? Visibility.Collapsed : Visibility.Visible;
+        // Se la mappa è aperta, chiudila
+        if (_heatmapVisible && _mapVisible)
+        {
+            _mapVisible = false;
+            MapPanel.Visibility = Visibility.Collapsed;
+            BtnToggleMap.Content = "🗺  Mappa";
+        }
+        BtnToggleHeatmap.Content = _heatmapVisible ? "☰  Lista" : "⬛  Heatmap";
+        if (_heatmapVisible) DrawHeatmap();
+    }
+
+    private void DrawHeatmap()
+    {
+        HeatmapCanvas.Children.Clear();
+
+        // Subnet base dai campi nella barra di scansione
+        var baseText = TxtScanIp.Text.Trim();
+        var parts    = baseText.Split('.');
+        string prefix = parts.Length >= 3 ? $"{parts[0]}.{parts[1]}.{parts[2]}" : "192.168.10";
+
+        // Costruisci dizionario IP → device
+        var byIp = _netRows.ToDictionary(d => d.Ip, d => d);
+
+        const int cols    = 16;
+        const int rows    = 16;   // 256 celle: .0-.255
+        const double cell = 46;
+        const double gap  = 4;
+        const double ox   = 10;
+        const double oy   = 44;
+
+        // Header colonne (0-15)
+        for (int c = 0; c < cols; c++)
+        {
+            var hdr = new TextBlock
+            {
+                Text       = (c * rows).ToString(),
+                FontSize   = 9,
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(71, 85, 105)),
+                Width = cell, TextAlignment = TextAlignment.Center
+            };
+            Canvas.SetLeft(hdr, ox + c * (cell + gap));
+            Canvas.SetTop(hdr, oy - 18);
+            HeatmapCanvas.Children.Add(hdr);
+        }
+
+        for (int i = 0; i < 256; i++)
+        {
+            int col = i % cols;
+            int row = i / cols;
+
+            string ip   = $"{prefix}.{i}";
+            double x    = ox + col * (cell + gap);
+            double y    = oy + row * (cell + gap);
+
+            bool isOnline  = byIp.TryGetValue(ip, out var dev) &&
+                             (dev.Status.Contains("Online") || dev.Status.Contains("🟢"));
+            bool hasCert   = isOnline && dev!.CertStatus.Contains("✅");
+            bool isGw      = ip.EndsWith(".1") || ip.EndsWith(".254");
+            bool isScanned = byIp.ContainsKey(ip);
+
+            var fill = hasCert   ? System.Windows.Media.Color.FromRgb(0x3b, 0x82, 0xf6)  // blue
+                     : isGw && isOnline ? System.Windows.Media.Color.FromRgb(0xf5, 0x9e, 0x0b) // amber
+                     : isOnline  ? System.Windows.Media.Color.FromRgb(0x10, 0xb9, 0x81)  // green
+                     : isScanned ? System.Windows.Media.Color.FromRgb(0x1e, 0x2e, 0x55)  // dark blue (offline)
+                                 : System.Windows.Media.Color.FromRgb(0x0d, 0x14, 0x28); // very dark (unknown)
+
+            var rect = new System.Windows.Shapes.Rectangle
+            {
+                Width  = cell, Height = cell,
+                Fill   = new System.Windows.Media.SolidColorBrush(fill),
+                RadiusX = 3, RadiusY = 3,
+                Opacity = isOnline ? 1.0 : 0.7
+            };
+
+            if (isOnline)
+                rect.Effect = new System.Windows.Media.Effects.DropShadowEffect
+                {
+                    Color     = fill,
+                    BlurRadius = 8, ShadowDepth = 0, Opacity = 0.5
+                };
+
+            rect.ToolTip = isScanned && dev != null
+                ? $"{ip}  —  {dev.Name}\n{dev.DeviceType}  {dev.Mac}\n{dev.Status}"
+                : $"{ip}  —  non scansionato";
+
+            Canvas.SetLeft(rect, x);
+            Canvas.SetTop(rect, y);
+            HeatmapCanvas.Children.Add(rect);
+
+            // Label IP (ultimo ottetto)
+            var lbl = new TextBlock
+            {
+                Text       = i.ToString(),
+                FontSize   = 8,
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    isOnline
+                    ? System.Windows.Media.Color.FromRgb(226, 232, 240)
+                    : System.Windows.Media.Color.FromRgb(71, 85, 105)),
+                Width = cell, TextAlignment = TextAlignment.Center,
+                IsHitTestVisible = false
+            };
+            Canvas.SetLeft(lbl, x);
+            Canvas.SetTop(lbl, y + (cell / 2) - 6);
+            HeatmapCanvas.Children.Add(lbl);
+
+            // Icona per device online
+            if (isOnline && dev != null)
+            {
+                var ico = new TextBlock
+                {
+                    Text     = dev.Icon,
+                    FontSize = 11,
+                    IsHitTestVisible = false,
+                    Width = cell, TextAlignment = TextAlignment.Center
+                };
+                Canvas.SetLeft(ico, x);
+                Canvas.SetTop(ico, y + 4);
+                HeatmapCanvas.Children.Add(ico);
+            }
+        }
+    }
+
+    // ── Matrix Rain (About tab) ───────────────────────────────────────────────
+    private System.Windows.Threading.DispatcherTimer? _matrixTimer;
+    private readonly Random _matrixRng = new();
+    private int[]?   _matrixHead;   // posizione Y della "testa" di ogni colonna
+    private double[] _matrixX = [];
+    private const int MatrixCharPx = 16;
+    private const string MatrixChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789アイウエオカキクケコ<>{}[]|/\\";
+
+    private void StartMatrixRain()
+    {
+        if (_matrixTimer?.IsEnabled == true) return;
+
+        MatrixCanvas.Children.Clear();
+        double w = MatrixCanvas.ActualWidth;
+        double h = MatrixCanvas.ActualHeight;
+        if (w < 10 || h < 10) return;
+
+        int numCols = (int)(w / MatrixCharPx);
+        _matrixHead = new int[numCols];
+        _matrixX    = new double[numCols];
+
+        for (int i = 0; i < numCols; i++)
+        {
+            _matrixX[i]    = i * MatrixCharPx;
+            _matrixHead[i] = -_matrixRng.Next(1, (int)(h / MatrixCharPx) + 5);
+        }
+
+        _matrixTimer = new System.Windows.Threading.DispatcherTimer
+            { Interval = TimeSpan.FromMilliseconds(55) };
+        _matrixTimer.Tick += MatrixTick;
+        _matrixTimer.Start();
+    }
+
+    private void StopMatrixRain()
+    {
+        _matrixTimer?.Stop();
+        _matrixTimer = null;
+        MatrixCanvas.Children.Clear();
+        _matrixHead = null;
+    }
+
+    private void MatrixTick(object? sender, EventArgs e)
+    {
+        if (_matrixHead == null) return;
+        double h = MatrixCanvas.ActualHeight;
+        int maxRow = (int)(h / MatrixCharPx) + 2;
+
+        // Rimuovi i vecchi TextBlock (ridisegniamo tutto)
+        MatrixCanvas.Children.Clear();
+
+        for (int col = 0; col < _matrixHead.Length; col++)
+        {
+            int head = _matrixHead[col];
+            double x = _matrixX[col];
+
+            // Disegna la colonna
+            for (int row = Math.Max(0, head - 20); row <= head; row++)
+            {
+                if (row < 0) continue;
+                double y = row * MatrixCharPx;
+                if (y > h) break;
+
+                double dist    = head - row;
+                byte   alpha   = dist == 0 ? (byte)255
+                               : dist <= 3  ? (byte)(200 - dist * 40)
+                               : (byte)Math.Max(20, 120 - dist * 8);
+                byte   green   = dist == 0 ? (byte)255 : (byte)(180 - dist * 6);
+                var    color   = dist == 0
+                    ? System.Windows.Media.Color.FromRgb(200, 255, 200)   // bianco-verde (testa)
+                    : System.Windows.Media.Color.FromArgb(alpha, 0, (byte)Math.Max(80, (int)green), 0);
+
+                var ch = new TextBlock
+                {
+                    Text       = MatrixChars[_matrixRng.Next(MatrixChars.Length)].ToString(),
+                    FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                    FontSize   = MatrixCharPx - 2,
+                    Foreground = new System.Windows.Media.SolidColorBrush(color),
+                    Width      = MatrixCharPx,
+                    TextAlignment = TextAlignment.Center,
+                    IsHitTestVisible = false
+                };
+                Canvas.SetLeft(ch, x);
+                Canvas.SetTop(ch,  y);
+                MatrixCanvas.Children.Add(ch);
+            }
+
+            // Avanza la testa
+            _matrixHead[col]++;
+            if (_matrixHead[col] > maxRow + 5)
+                _matrixHead[col] = -_matrixRng.Next(5, 20);
+        }
     }
 
     // ── Helpers scansione ─────────────────────────────────────────────────────
@@ -799,24 +1702,40 @@ public partial class MainWindow : Window
     }
 
     // ── Dati demo (altri tab) ─────────────────────────────────────────────────
-    private void LoadDemoData()
+    private void LoadFromDatabase()
     {
-        CertGrid.ItemsSource = new ObservableCollection<CertRow>
+        // ── Certificati ──────────────────────────────────────────────────────
+        var certs = Database.GetCerts();
+        if (certs.Count == 0)
         {
-            new("💻","PC-OFFICE-01","AA:BB:CC:11:22:33","2026-01-15","2036-01-15","✅ Attivo"),
-            new("💻","PC-OFFICE-02","AA:BB:CC:11:22:34","2026-01-15","2036-01-15","✅ Attivo"),
-            new("📱","Smartphone-1","AA:BB:CC:11:22:35","2026-02-01","2036-02-01","✅ Attivo"),
-            new("💻","LAPTOP-01",   "AA:BB:CC:11:22:36","2026-03-01","2036-03-01","✅ Attivo"),
-            new("💻","PC-VECCHIO",  "AA:BB:CC:11:22:37","2025-06-01","2035-06-01","⏸ Revocato"),
-        };
+            // Prima esecuzione: popola con dati demo e salva nel DB
+            certs =
+            [
+                new("💻","PC-OFFICE-01","AA:BB:CC:11:22:33","2026-01-15","2036-01-15","✅ Attivo"),
+                new("💻","PC-OFFICE-02","AA:BB:CC:11:22:34","2026-01-15","2036-01-15","✅ Attivo"),
+                new("📱","Smartphone-1","AA:BB:CC:11:22:35","2026-02-01","2036-02-01","✅ Attivo"),
+                new("💻","LAPTOP-01",   "AA:BB:CC:11:22:36","2026-03-01","2036-03-01","✅ Attivo"),
+                new("💻","PC-VECCHIO",  "AA:BB:CC:11:22:37","2025-06-01","2035-06-01","⏸ Revocato"),
+            ];
+            foreach (var c in certs) Database.UpsertCert(c);
+        }
+        CertGrid.ItemsSource = new ObservableCollection<CertRow>(certs);
 
-        AppQueueGrid.ItemsSource = new ObservableCollection<AppQueueRow>
+        // ── App Queue ─────────────────────────────────────────────────────────
+        var queue = Database.GetAppQueue();
+        if (queue.Count == 0)
         {
-            new("💻 pc-office-01","192.168.1.101","AA:BB:CC:11:22:33","VLC, Firefox", "⏳ In installazione"),
-            new("💻 pc-office-02","192.168.1.102","AA:BB:CC:11:22:34","—",            "✅ Aggiornato"),
-            new("💻 laptop-01",   "192.168.1.103","AA:BB:CC:11:22:36","7-Zip",        "⏳ In attesa"),
-        };
+            queue =
+            [
+                new("💻 pc-office-01","192.168.1.101","AA:BB:CC:11:22:33","VLC, Firefox","⏳ In installazione"),
+                new("💻 pc-office-02","192.168.1.102","AA:BB:CC:11:22:34","—",           "✅ Aggiornato"),
+                new("💻 laptop-01",   "192.168.1.103","AA:BB:CC:11:22:36","7-Zip",       "⏳ In attesa"),
+            ];
+            foreach (var q in queue) Database.UpsertAppQueue(q);
+        }
+        AppQueueGrid.ItemsSource = new ObservableCollection<AppQueueRow>(queue);
 
+        // ── Catalogo App (statico) ─────────────────────────────────────────────
         AppCatalog.ItemsSource = new[]
         {
             new AppCatRow("🌐 Browser",  "Firefox   │   Chrome   │   Brave   │   Edge"),
@@ -827,22 +1746,44 @@ public partial class MainWindow : Window
             new AppCatRow("⭐ Mie App",  "Pioneer MCACC   │   Custom App 1"),
         };
 
-        OpsiGrid.ItemsSource = new ObservableCollection<OpsiRow>
+        // ── OPSI ──────────────────────────────────────────────────────────────
+        var opsi = Database.GetOpsi();
+        if (opsi.Count == 0)
         {
-            new("firefox",       "132.0", "✅ OK",       "2026-03-01"),
-            new("vlc",           "3.0.21","✅ OK",       "2026-02-28"),
-            new("pioneer-mcacc", "1.0.0", "✅ OK",       "2026-03-04"),
-            new("chrome",        "124.0", "⚠️ Aggiorna","2026-01-15"),
-            new("7zip",          "24.08", "✅ OK",       "2026-03-02"),
-        };
+            opsi =
+            [
+                new("firefox",       "132.0", "✅ OK",        "2026-03-01"),
+                new("vlc",           "3.0.21","✅ OK",        "2026-02-28"),
+                new("pioneer-mcacc", "1.0.0", "✅ OK",        "2026-03-04"),
+                new("chrome",        "124.0", "⚠️ Aggiorna","2026-01-15"),
+                new("7zip",          "24.08", "✅ OK",        "2026-03-02"),
+            ];
+            foreach (var o in opsi) Database.UpsertOpsi(o);
+        }
+        OpsiGrid.ItemsSource = new ObservableCollection<OpsiRow>(opsi);
 
-        PcGrid.ItemsSource = new ObservableCollection<PcRow>
+        // ── PC Gestiti ────────────────────────────────────────────────────────
+        var pcs = Database.GetPcs();
+        if (pcs.Count == 0)
         {
-            new("💻","PC-OFFICE-01","192.168.1.101","Win 11 Pro", "12%","8.2/32 GB","🟢 Online","✅"),
-            new("💻","PC-OFFICE-02","192.168.1.102","Win 11 Pro", "4%", "4.1/32 GB","🟢 Online","✅"),
-            new("💻","LAPTOP-01",   "192.168.1.103","Win 11 Home","8%", "6.3/16 GB","🟢 Online","✅"),
-            new("💻","PC-VECCHIO",  "—",            "Win 10 Pro", "—",  "—",        "🔴 Offline","⚠️"),
-        };
+            pcs =
+            [
+                new("💻","PC-OFFICE-01","192.168.1.101","Win 11 Pro", "12%","8.2/32 GB","🟢 Online","✅"),
+                new("💻","PC-OFFICE-02","192.168.1.102","Win 11 Pro", "4%", "4.1/32 GB","🟢 Online","✅"),
+                new("💻","LAPTOP-01",   "192.168.1.103","Win 11 Home","8%", "6.3/16 GB","🟢 Online","✅"),
+                new("💻","PC-VECCHIO",  "—",            "Win 10 Pro", "—",  "—",        "🔴 Offline","⚠️"),
+            ];
+            foreach (var p in pcs) Database.UpsertPc(p);
+        }
+        PcGrid.ItemsSource = new ObservableCollection<PcRow>(pcs);
+
+        // ── Dispositivi rete (ultima scansione) ───────────────────────────────
+        var devices = Database.GetDevices();
+        foreach (var d in devices)
+        {
+            d.WasOnline = d.Status.Contains("Online");
+            _netRows.Add(d);
+        }
     }
 
     // ── Handler pulsanti ──────────────────────────────────────────────────────
@@ -1188,11 +2129,294 @@ public partial class MainWindow : Window
     private void BtnUpdateAgent_Click(object s, RoutedEventArgs e) =>
         SetStatus("🔄 Aggiornamento agent... (demo)");
 
+    // ═══════════════════════════════════════════════════════════════
+    //  TAB SCCM
+    // ═══════════════════════════════════════════════════════════════
+
+    private System.Net.Http.HttpClient? _sccmClient;
+    private string _sccmBase = "";
+    private string _sccmCurrentSection = "devices";
+
+    public class SccmItem
+    {
+        public string Name        { get; set; } = "";
+        public string Type        { get; set; } = "";
+        public string Status      { get; set; } = "";
+        public string LastContact { get; set; } = "";
+        public string Info        { get; set; } = "";
+    }
+
+    private async void BtnSccmConnect_Click(object s, RoutedEventArgs e)
+    {
+        var server = TxtSccmServer.Text.Trim();
+        var userFull = TxtSccmUser.Text.Trim();
+        var pass   = TxtSccmPass.Password;
+
+        var parts  = userFull.Split('\\');
+        var user   = parts.Length == 2 ? parts[1] : userFull;
+        var domain = parts.Length == 2 ? parts[0] : "";
+
+        _sccmBase = $"https://{server}/AdminService/wmi/";
+
+        var handler = new System.Net.Http.HttpClientHandler
+        {
+            Credentials = new System.Net.NetworkCredential(user, pass, domain),
+            ServerCertificateCustomValidationCallback = (_, _, _, _) => true
+        };
+        _sccmClient?.Dispose();
+        _sccmClient = new System.Net.Http.HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
+        _sccmClient.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+
+        TxtSccmConnStatus.Text = "Connessione...";
+        TxtSccmConnStatus.Foreground = System.Windows.Media.Brushes.Gray;
+
+        try
+        {
+            var resp = await _sccmClient.GetAsync(_sccmBase + "SMS_Site?$select=SiteName,SiteCode,Version&$top=1");
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync();
+            var doc  = System.Text.Json.JsonDocument.Parse(json);
+            var site = doc.RootElement.GetProperty("value").EnumerateArray().FirstOrDefault();
+            var siteName = site.TryGetProperty("SiteName", out var sn) ? sn.GetString() : server;
+            var siteCode = site.TryGetProperty("SiteCode", out var sc) ? sc.GetString() : "";
+
+            TxtSccmConnStatus.Text = $"✅  {siteName} ({siteCode})";
+            TxtSccmConnStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(21, 128, 61));
+            BtnSccmRefresh.IsEnabled = true;
+            await LoadSccmSection(_sccmCurrentSection);
+        }
+        catch (Exception ex)
+        {
+            TxtSccmConnStatus.Text = $"❌  {ex.Message}";
+            TxtSccmConnStatus.Foreground = System.Windows.Media.Brushes.Red;
+            TxtSccmStatus.Text = "Connessione fallita";
+        }
+    }
+
+    private async void BtnSccmRefresh_Click(object s, RoutedEventArgs e) =>
+        await LoadSccmSection(_sccmCurrentSection);
+
+    private async void SccmNavTree_SelectedItemChanged(object s, RoutedPropertyChangedEventArgs<object> e)
+    {
+        if (e.NewValue is TreeViewItem item && item.Tag is string tag)
+            await LoadSccmSection(tag);
+    }
+
+    private Task LoadSccmSection(string tag)
+    {
+        _sccmCurrentSection = tag;
+        return tag switch
+        {
+            "devices"       => LoadSccmDevices(),
+            "collections"   => LoadSccmCollections(),
+            "tasksequences" => LoadSccmTaskSequences(),
+            "applications"  => LoadSccmApplications(),
+            "deployments"   => LoadSccmDeployments(),
+            _               => Task.CompletedTask
+        };
+    }
+
+    private async Task LoadSccmDevices()
+    {
+        if (_sccmClient == null) return;
+        TxtSccmSection.Text = "Dispositivi";
+        TxtSccmStatus.Text  = "Caricamento dispositivi...";
+        BtnSccmClientAction.IsEnabled = false;
+        BtnSccmDeploy.IsEnabled       = false;
+        BtnSccmRunTs.IsEnabled        = false;
+        try
+        {
+            var url  = _sccmBase + "SMS_R_System?$select=Name,LastLogonUserName,LastHardwareScan,Active,OperatingSystemNameandVersion&$top=500";
+            var json = await _sccmClient.GetStringAsync(url);
+            var doc  = System.Text.Json.JsonDocument.Parse(json);
+            var items = new List<SccmItem>();
+            foreach (var v in doc.RootElement.GetProperty("value").EnumerateArray())
+            {
+                var lastScan = v.TryGetProperty("LastHardwareScan", out var ls) ? ls.GetString() ?? "" : "";
+                if (lastScan.Length > 10) lastScan = lastScan[..10];
+                items.Add(new SccmItem
+                {
+                    Name        = v.TryGetProperty("Name", out var n)       ? n.GetString() ?? "" : "",
+                    Type        = v.TryGetProperty("OperatingSystemNameandVersion", out var os) ? (os.GetString() ?? "").Replace("Microsoft Windows NT ", "Win ") : "Windows",
+                    Status      = v.TryGetProperty("Active", out var a)     && a.GetInt32() == 1 ? "Attivo" : "Inattivo",
+                    LastContact = lastScan,
+                    Info        = v.TryGetProperty("LastLogonUserName", out var u) ? u.GetString() ?? "" : ""
+                });
+            }
+            SccmGrid.ItemsSource = items;
+            TxtSccmStatus.Text   = $"{items.Count} dispositivi";
+            if (items.Count > 0) BtnSccmClientAction.IsEnabled = true;
+        }
+        catch (Exception ex) { TxtSccmStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private async Task LoadSccmCollections()
+    {
+        if (_sccmClient == null) return;
+        TxtSccmSection.Text = "Collezioni";
+        TxtSccmStatus.Text  = "Caricamento collezioni...";
+        BtnSccmClientAction.IsEnabled = false;
+        BtnSccmDeploy.IsEnabled       = true;
+        BtnSccmRunTs.IsEnabled        = false;
+        try
+        {
+            var url  = _sccmBase + "SMS_Collection?$select=Name,CollectionID,MemberCount,CollectionType,Comment&$top=200";
+            var json = await _sccmClient.GetStringAsync(url);
+            var doc  = System.Text.Json.JsonDocument.Parse(json);
+            var items = new List<SccmItem>();
+            foreach (var v in doc.RootElement.GetProperty("value").EnumerateArray())
+            {
+                var ct = v.TryGetProperty("CollectionType", out var ctype) ? ctype.GetInt32() : 0;
+                items.Add(new SccmItem
+                {
+                    Name        = v.TryGetProperty("Name",         out var n)  ? n.GetString()  ?? "" : "",
+                    Type        = ct == 2 ? "Dispositivi" : ct == 1 ? "Utenti" : "Altra",
+                    Status      = v.TryGetProperty("MemberCount",  out var mc) ? $"{mc.GetInt32()} membri" : "",
+                    LastContact = v.TryGetProperty("CollectionID", out var ci) ? ci.GetString() ?? "" : "",
+                    Info        = v.TryGetProperty("Comment",      out var co) ? co.GetString() ?? "" : ""
+                });
+            }
+            SccmGrid.ItemsSource = items;
+            TxtSccmStatus.Text   = $"{items.Count} collezioni";
+        }
+        catch (Exception ex) { TxtSccmStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private async Task LoadSccmTaskSequences()
+    {
+        if (_sccmClient == null) return;
+        TxtSccmSection.Text = "Task Sequences";
+        TxtSccmStatus.Text  = "Caricamento Task Sequences...";
+        BtnSccmClientAction.IsEnabled = false;
+        BtnSccmDeploy.IsEnabled       = true;
+        BtnSccmRunTs.IsEnabled        = true;
+        try
+        {
+            var url  = _sccmBase + "SMS_TaskSequencePackage?$select=Name,PackageID,Version,LastRefreshTime&$top=100";
+            var json = await _sccmClient.GetStringAsync(url);
+            var doc  = System.Text.Json.JsonDocument.Parse(json);
+            var items = new List<SccmItem>();
+            foreach (var v in doc.RootElement.GetProperty("value").EnumerateArray())
+            {
+                var lr = v.TryGetProperty("LastRefreshTime", out var lrt) ? lrt.GetString() ?? "" : "";
+                if (lr.Length > 10) lr = lr[..10];
+                items.Add(new SccmItem
+                {
+                    Name        = v.TryGetProperty("Name",      out var n) ? n.GetString() ?? "" : "",
+                    Type        = "Task Sequence",
+                    Status      = v.TryGetProperty("Version",   out var ver) ? $"v{ver.GetString()}" : "",
+                    LastContact = lr,
+                    Info        = v.TryGetProperty("PackageID", out var pid) ? pid.GetString() ?? "" : ""
+                });
+            }
+            SccmGrid.ItemsSource = items;
+            TxtSccmStatus.Text   = $"{items.Count} Task Sequences";
+        }
+        catch (Exception ex) { TxtSccmStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private async Task LoadSccmApplications()
+    {
+        if (_sccmClient == null) return;
+        TxtSccmSection.Text = "Applicazioni";
+        TxtSccmStatus.Text  = "Caricamento applicazioni...";
+        BtnSccmClientAction.IsEnabled = false;
+        BtnSccmDeploy.IsEnabled       = true;
+        BtnSccmRunTs.IsEnabled        = false;
+        try
+        {
+            var url  = _sccmBase + "SMS_Application?$select=LocalizedDisplayName,SoftwareVersion,IsDeployed,DateCreated,NumberOfDependentDTs&$top=200&$filter=IsLatest eq true";
+            var json = await _sccmClient.GetStringAsync(url);
+            var doc  = System.Text.Json.JsonDocument.Parse(json);
+            var items = new List<SccmItem>();
+            foreach (var v in doc.RootElement.GetProperty("value").EnumerateArray())
+            {
+                var dc = v.TryGetProperty("DateCreated", out var dcp) ? dcp.GetString() ?? "" : "";
+                if (dc.Length > 10) dc = dc[..10];
+                var deployed = v.TryGetProperty("IsDeployed", out var isd) && isd.GetBoolean();
+                items.Add(new SccmItem
+                {
+                    Name        = v.TryGetProperty("LocalizedDisplayName", out var n)  ? n.GetString()   ?? "" : "",
+                    Type        = v.TryGetProperty("SoftwareVersion",      out var sv) ? sv.GetString()  ?? "" : "",
+                    Status      = deployed ? "Distribuita" : "Non distribuita",
+                    LastContact = dc,
+                    Info        = v.TryGetProperty("NumberOfDependentDTs", out var dt) ? $"{dt.GetInt32()} deployment type" : ""
+                });
+            }
+            SccmGrid.ItemsSource = items;
+            TxtSccmStatus.Text   = $"{items.Count} applicazioni";
+        }
+        catch (Exception ex) { TxtSccmStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private async Task LoadSccmDeployments()
+    {
+        if (_sccmClient == null) return;
+        TxtSccmSection.Text = "Deployments";
+        TxtSccmStatus.Text  = "Caricamento deployments...";
+        BtnSccmClientAction.IsEnabled = false;
+        BtnSccmDeploy.IsEnabled       = false;
+        BtnSccmRunTs.IsEnabled        = false;
+        try
+        {
+            var url  = _sccmBase + "SMS_DeploymentSummary?$select=SoftwareName,CollectionName,NumberSuccess,NumberInProgress,NumberErrors,DeploymentTime&$top=200";
+            var json = await _sccmClient.GetStringAsync(url);
+            var doc  = System.Text.Json.JsonDocument.Parse(json);
+            var items = new List<SccmItem>();
+            foreach (var v in doc.RootElement.GetProperty("value").EnumerateArray())
+            {
+                var ok  = v.TryGetProperty("NumberSuccess",    out var ns) ? ns.GetInt32() : 0;
+                var ip  = v.TryGetProperty("NumberInProgress", out var ni) ? ni.GetInt32() : 0;
+                var err = v.TryGetProperty("NumberErrors",     out var ne) ? ne.GetInt32() : 0;
+                var dt  = v.TryGetProperty("DeploymentTime",  out var dtp) ? dtp.GetString() ?? "" : "";
+                if (dt.Length > 10) dt = dt[..10];
+                items.Add(new SccmItem
+                {
+                    Name        = v.TryGetProperty("SoftwareName",   out var n) ? n.GetString() ?? "" : "",
+                    Type        = v.TryGetProperty("CollectionName", out var c) ? c.GetString() ?? "" : "",
+                    Status      = err > 0 ? $"⚠️ {err} errori" : ip > 0 ? $"🔄 {ip} in corso" : $"✅ {ok} ok",
+                    LastContact = dt,
+                    Info        = $"✅{ok}  🔄{ip}  ❌{err}"
+                });
+            }
+            SccmGrid.ItemsSource = items;
+            TxtSccmStatus.Text   = $"{items.Count} deployments";
+        }
+        catch (Exception ex) { TxtSccmStatus.Text = $"Errore: {ex.Message}"; }
+    }
+
+    private void SccmGrid_SelectionChanged(object s, SelectionChangedEventArgs e) { }
+
+    private void BtnSccmClientAction_Click(object s, RoutedEventArgs e)
+    {
+        if (SccmGrid.SelectedItem is not SccmItem item) return;
+        System.Windows.MessageBox.Show(
+            $"Azioni disponibili per {item.Name}:\n\n• Machine Policy Retrieval\n• Hardware Inventory\n• Software Inventory\n\n(Funzione in sviluppo)",
+            "Azione client SCCM", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void BtnSccmDeploy_Click(object s, RoutedEventArgs e)
+    {
+        if (SccmGrid.SelectedItem is not SccmItem item) return;
+        System.Windows.MessageBox.Show(
+            $"Deploy di '{item.Name}' — funzione in sviluppo.\nUsa la SCCM Console per i deploy avanzati.",
+            "Deploy SCCM", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void BtnSccmRunTs_Click(object s, RoutedEventArgs e)
+    {
+        if (SccmGrid.SelectedItem is not SccmItem item) return;
+        System.Windows.MessageBox.Show(
+            $"Avvio Task Sequence '{item.Name}' — funzione in sviluppo.\nUsa la SCCM Console per avviare le TS.",
+            "Avvia Task Sequence", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
     private void BtnSaveSettings_Click(object s, RoutedEventArgs e)
     {
         SaveConfig();
         TxtSettingsStatus.Text = "✅ Impostazioni salvate";
-        TxtSettingsStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+        TxtSettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         SetStatus("💾 Configurazione salvata");
     }
 
@@ -1209,7 +2433,7 @@ public partial class MainWindow : Window
                 ? $"✅ Connesso a {url}"
                 : $"⚠️ HTTP {(int)resp.StatusCode}";
             TxtSettingsStatus.Foreground = resp.IsSuccessStatusCode
-                ? System.Windows.Media.Brushes.LightGreen
+                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61))
                 : System.Windows.Media.Brushes.Orange;
         }
         catch (Exception ex)
@@ -1236,7 +2460,7 @@ public partial class MainWindow : Window
     [
         "Rete", "Certificati", "Applicazioni", "OPSI",
         "PC", "Deploy OS", "Workflow", "Richieste",
-        "Impostazioni", "About"
+        "SCCM", "Impostazioni", "About"
     ];
 
     private readonly Button[] _navBtns = [];
@@ -1247,12 +2471,122 @@ public partial class MainWindow : Window
             MainTabs.SelectedIndex = idx;
     }
 
+    // ── Ribbon handlers ──────────────────────────────────────────────
+    private void RibbonTab_Click(object s, RoutedEventArgs e) { }
+
+    private void RibbonBtnNuovo_Click(object s, RoutedEventArgs e)
+    {
+        switch (MainTabs.SelectedIndex)
+        {
+            case 1:  BtnNewCert_Click(s, e);      break;   // Certificati → nuovo cert
+            case 3:  BtnOpsiCreate_Click(s, e);   break;   // OPSI → crea pacchetto
+            case 6:  BtnWfNew_Click(s, e);        break;   // Workflow → nuovo workflow
+            case 7:  BtnCrCreate_Click(s, e);     break;   // Richieste → crea CR
+            default: SetStatus("Usa i controlli nel pannello corrente per creare un nuovo elemento"); break;
+        }
+    }
+
+    private void RibbonBtnProprieta_Click(object s, RoutedEventArgs e) =>
+        SetStatus("Seleziona un elemento nel pannello per vederne le proprietà");
+
+    private void RibbonBtnElimina_Click(object s, RoutedEventArgs e) =>
+        SetStatus("Seleziona un elemento e usa il pulsante Elimina nel pannello");
+
+    private void RibbonBtnDistribuisci_Click(object s, RoutedEventArgs e)
+    {
+        MainTabs.SelectedIndex = 5;   // Deploy OS
+        SwitchWorkspace("software");
+        SetStatus("Deploy OS — configura e genera i file di installazione");
+    }
+
+    private void RibbonBtnStato_Click(object s, RoutedEventArgs e)
+    {
+        MainTabs.SelectedIndex = 6;   // Workflow
+        SwitchWorkspace("software");
+        SetStatus("Workflow — monitora lo stato delle distribuzioni");
+    }
+
+    private void RibbonBtnAggiorna_Click(object s, RoutedEventArgs e)
+    {
+        switch (MainTabs.SelectedIndex)
+        {
+            case 0:  BtnScan_Click(s, e);          break;   // Rete → scansiona
+            case 7:  BtnCrRefresh_Click(s, e);     break;   // Richieste → aggiorna lista
+            case 8:  BtnSccmRefresh_Click(s, e);   break;   // SCCM → aggiorna
+            default: SetStatus("Aggiornamento — usa il pulsante Aggiorna nel pannello corrente"); break;
+        }
+    }
+
+    private void RibbonBtnImporta_Click(object s, RoutedEventArgs e) =>
+        SetStatus("Importa — funzione in sviluppo");
+
+    private void RibbonBtnEsporta_Click(object s, RoutedEventArgs e) =>
+        SetStatus("Esporta — funzione in sviluppo");
+
+    private void RibbonBtnImpostazioni_Click(object s, RoutedEventArgs e)
+    {
+        MainTabs.SelectedIndex = 9;
+        SwitchWorkspace("admin");
+    }
+
+    // ── Workspace switcher ────────────────────────────────────────────
+    private void WsBtn_Click(object s, RoutedEventArgs e)
+    {
+        if (s is Button btn)
+        {
+            var ws = btn.Name switch
+            {
+                "WsBtnAsset"    => "asset",
+                "WsBtnSoftware" => "software",
+                "WsBtnMonitor"  => "monitor",
+                "WsBtnAdmin"    => "admin",
+                _ => "asset"
+            };
+            SwitchWorkspace(ws);
+        }
+    }
+
+    private void SwitchWorkspace(string ws)
+    {
+        TvGroupAsset.Visibility    = ws == "asset"    ? Visibility.Visible : Visibility.Collapsed;
+        TvGroupSoftware.Visibility = ws == "software" ? Visibility.Visible : Visibility.Collapsed;
+        TvGroupMonitor.Visibility  = ws == "monitor"  ? Visibility.Visible : Visibility.Collapsed;
+        TvGroupAdmin.Visibility    = ws == "admin"    ? Visibility.Visible : Visibility.Collapsed;
+
+        TxtWsHeader.Text = ws switch
+        {
+            "asset"    => "Asset e Conformità",
+            "software" => "Libreria Software",
+            "monitor"  => "Monitoraggio",
+            "admin"    => "Amministrazione",
+            _ => ""
+        };
+
+        var active   = FindResource("WsBtnActive") as System.Windows.Style;
+        var inactive = FindResource("WsBtn")       as System.Windows.Style;
+        WsBtnAsset.Style    = ws == "asset"    ? active : inactive;
+        WsBtnSoftware.Style = ws == "software" ? active : inactive;
+        WsBtnMonitor.Style  = ws == "monitor"  ? active : inactive;
+        WsBtnAdmin.Style    = ws == "admin"    ? active : inactive;
+    }
+
+    // ── TreeView navigation ───────────────────────────────────────────
+    private void NavTree_ItemSelected(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.TreeViewItem item &&
+            int.TryParse(item.Tag?.ToString(), out int idx))
+        {
+            MainTabs.SelectedIndex = idx;
+            e.Handled = true;
+        }
+    }
+
     private void UpdateNavState(int idx)
     {
         var btns = new[]
         {
             NavRete, NavCert, NavApp, NavOpsi, NavPc,
-            NavDeploy, NavWorkflow, NavRichieste, NavImpostazioni, NavAbout
+            NavDeploy, NavWorkflow, NavRichieste, NavSccm, NavImpostazioni, NavAbout
         };
         var active   = FindResource("NavSideBtnActive") as System.Windows.Style;
         var inactive = FindResource("NavSideBtn")       as System.Windows.Style;
@@ -1500,7 +2834,7 @@ public partial class MainWindow : Window
         RefreshProfiles();
         CboProfiles.SelectedItem   = name;
         TxtDeployStatus.Text       = $"💾  Profilo '{name}' salvato";
-        TxtDeployStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+        TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
     }
 
     private void BtnLoadProfile_Click(object s, RoutedEventArgs e)
@@ -1512,7 +2846,7 @@ public partial class MainWindow : Window
         if (cfg == null) return;
         ApplyProfileToUi(cfg);
         TxtDeployStatus.Text       = $"📂  Profilo '{name}' caricato";
-        TxtDeployStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+        TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
     }
 
     private void BtnImportProfile_Click(object s, RoutedEventArgs e)
@@ -1538,7 +2872,7 @@ public partial class MainWindow : Window
             CboProfiles.SelectedItem   = name;
             ApplyProfileToUi(cfg);
             TxtDeployStatus.Text       = $"📁  Profilo '{name}' importato e caricato";
-            TxtDeployStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+            TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         }
         catch (Exception ex)
         {
@@ -1717,19 +3051,6 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<string> _crPackages = [];
     private string CrApiBase => _config.NovaSCMApiUrl;
 
-    class CrRow
-    {
-        public int    Id           { get; set; }
-        public string PcName       { get; set; } = "";
-        public string Domain       { get; set; } = "";
-        public string Ou           { get; set; } = "";
-        public string AssignedUser { get; set; } = "";
-        public string Status       { get; set; } = "";
-        public string CreatedAt    { get; set; } = "";
-        public string Notes        { get; set; } = "";
-        public string LastSeen     { get; set; } = "";
-    }
-
     private void InitCrTab()
     {
         LstCrPackages.ItemsSource = _crPackages;
@@ -1747,6 +3068,26 @@ public partial class MainWindow : Window
         {
             await LoadWorkflowsAsync();
             await LoadWorkflowAssignmentsAsync();
+        }
+        else if (header.Contains("About"))
+        {
+            await Task.Delay(150);
+            StartMatrixRain();
+        }
+        else if (header.Contains("PC"))
+        {
+            StopMatrixRain();
+            if (_gaugeTimer == null) StartGauges();
+        }
+        else if (header.Contains("Wiki"))
+        {
+            StopMatrixRain();
+            if (WikiNavList.SelectedItem == null && WikiNavList.Items.Count > 0)
+                WikiNavList.SelectedIndex = 0;
+        }
+        else
+        {
+            StopMatrixRain();
         }
     }
 
@@ -1773,6 +3114,13 @@ public partial class MainWindow : Window
             _crPackages.Remove(pkg);
     }
 
+    private void SvPanel_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        var sv = (System.Windows.Controls.ScrollViewer)sender;
+        sv.ScrollToVerticalOffset(sv.VerticalOffset - e.Delta / 3.0);
+        e.Handled = true;
+    }
+
     private void BtnCrCopyDjoin_Click(object s, RoutedEventArgs e)
     {
         var pcName = TxtCrPcName.Text.Trim().ToUpper();
@@ -1790,7 +3138,7 @@ public partial class MainWindow : Window
                   $"[System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes(\"$env:TEMP\\{pcName}.djoin\"))";
         Clipboard.SetText(cmd);
         TxtCrStatus.Text       = "📋  Comando copiato — esegui sul DC, incolla l'output in 'ODJ Blob'";
-        TxtCrStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+        TxtCrStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
     }
 
     private async void BtnCrCreate_Click(object s, RoutedEventArgs e)
@@ -1827,8 +3175,23 @@ public partial class MainWindow : Window
             var json = await resp.Content.ReadAsStringAsync();
             if (resp.IsSuccessStatusCode)
             {
+                // Salva anche nel DB locale (cache)
+                try
+                {
+                    var respDoc = System.Text.Json.JsonDocument.Parse(json);
+                    int newId   = respDoc.RootElement.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
+                    Database.UpsertCr(new CrRow
+                    {
+                        Id = newId, PcName = pcName,
+                        Domain = TxtCrDomain.Text.Trim(), Ou = TxtCrOu.Text.Trim(),
+                        AssignedUser = TxtCrAssignedUser.Text.Trim(),
+                        Status = "pending", CreatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                        Notes = TxtCrNotes.Text.Trim(),
+                    });
+                }
+                catch { }
                 TxtCrStatus.Text       = $"✅  CR creato per {pcName}";
-                TxtCrStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+                TxtCrStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
                 TxtCrPcName.Clear();
                 await LoadCrListAsync();
             }
@@ -1842,8 +3205,19 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            TxtCrStatus.Text       = $"❌  Errore connessione: {ex.Message}";
-            TxtCrStatus.Foreground = System.Windows.Media.Brushes.Tomato;
+            // Salva in DB locale se il server non è disponibile
+            Database.InsertCr(new CrRow
+            {
+                PcName = pcName,
+                Domain = TxtCrDomain.Text.Trim(), Ou = TxtCrOu.Text.Trim(),
+                AssignedUser = TxtCrAssignedUser.Text.Trim(),
+                Status = "pending", CreatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                Notes = TxtCrNotes.Text.Trim(),
+            });
+            TxtCrStatus.Text       = $"📴  Salvato localmente (server non disponibile): {ex.Message}";
+            TxtCrStatus.Foreground = System.Windows.Media.Brushes.SteelBlue;
+            TxtCrPcName.Clear();
+            await LoadCrListAsync();
         }
     }
 
@@ -1852,42 +3226,47 @@ public partial class MainWindow : Window
 
     private async Task LoadCrListAsync()
     {
-        if (string.IsNullOrEmpty(CrApiBase))
+        // Prova prima il server API; se non disponibile usa il DB locale
+        if (!string.IsNullOrEmpty(CrApiBase))
         {
-            TxtCrStatus.Text       = "⚙️  Configura l'URL API NovaSCM nelle Impostazioni";
-            TxtCrStatus.Foreground = System.Windows.Media.Brushes.Gold;
-            return;
-        }
-        try
-        {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var json = await http.GetStringAsync(CrApiBase);
-            var doc  = System.Text.Json.JsonDocument.Parse(json);
-            var rows = new List<CrRow>();
-            foreach (var el in doc.RootElement.EnumerateArray())
+            try
             {
-                rows.Add(new CrRow
+                using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                var json = await http.GetStringAsync(CrApiBase);
+                var doc  = System.Text.Json.JsonDocument.Parse(json);
+                var rows = new List<CrRow>();
+                foreach (var el in doc.RootElement.EnumerateArray())
                 {
-                    Id           = el.TryGetProperty("id",            out var i)  ? i.GetInt32()              : 0,
-                    PcName       = el.TryGetProperty("pc_name",       out var p)  ? p.GetString() ?? ""       : "",
-                    Domain       = el.TryGetProperty("domain",        out var d)  ? d.GetString() ?? ""       : "",
-                    Ou           = el.TryGetProperty("ou",            out var o)  ? o.GetString() ?? ""       : "",
-                    AssignedUser = el.TryGetProperty("assigned_user", out var u)  ? u.GetString() ?? ""       : "",
-                    Status       = el.TryGetProperty("status",        out var st) ? st.GetString() ?? ""      : "",
-                    CreatedAt    = el.TryGetProperty("created_at",    out var ca) ? ca.GetString() ?? ""      : "",
-                    Notes        = el.TryGetProperty("notes",         out var n)  ? n.GetString() ?? ""       : "",
-                    LastSeen     = el.TryGetProperty("last_seen",     out var ls) ? ls.GetString() ?? ""      : "",
-                });
+                    var cr = new CrRow
+                    {
+                        Id           = el.TryGetProperty("id",            out var i)  ? i.GetInt32()         : 0,
+                        PcName       = el.TryGetProperty("pc_name",       out var p)  ? p.GetString() ?? ""  : "",
+                        Domain       = el.TryGetProperty("domain",        out var d)  ? d.GetString() ?? ""  : "",
+                        Ou           = el.TryGetProperty("ou",            out var o)  ? o.GetString() ?? ""  : "",
+                        AssignedUser = el.TryGetProperty("assigned_user", out var u)  ? u.GetString() ?? ""  : "",
+                        Status       = el.TryGetProperty("status",        out var st) ? st.GetString() ?? "" : "",
+                        CreatedAt    = el.TryGetProperty("created_at",    out var ca) ? ca.GetString() ?? "" : "",
+                        Notes        = el.TryGetProperty("notes",         out var n)  ? n.GetString() ?? ""  : "",
+                        LastSeen     = el.TryGetProperty("last_seen",     out var ls) ? ls.GetString() ?? "" : "",
+                    };
+                    rows.Add(cr);
+                    Database.UpsertCr(cr);   // cache locale
+                }
+                CrGrid.ItemsSource = rows;
+                var col = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
+                TxtCrStatus.Text       = $"{rows.Count} richieste";
+                TxtCrStatus.Foreground = col;
+                return;
             }
-            CrGrid.ItemsSource = rows;
-            TxtCrStatus.Text       = $"🔄  {rows.Count} richieste";
-            TxtCrStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+            catch { /* fallback a DB locale */ }
         }
-        catch (Exception ex)
-        {
-            TxtCrStatus.Text       = $"❌  {ex.Message}";
-            TxtCrStatus.Foreground = System.Windows.Media.Brushes.Tomato;
-        }
+
+        // Offline: legge dal DB locale
+        var local = Database.GetCrs();
+        CrGrid.ItemsSource = local;
+        var offline = string.IsNullOrEmpty(CrApiBase) ? "⚙️  Configura URL API nelle Impostazioni" : $"📴  Offline — {local.Count} richieste dal DB locale";
+        TxtCrStatus.Text       = offline;
+        TxtCrStatus.Foreground = string.IsNullOrEmpty(CrApiBase) ? System.Windows.Media.Brushes.Gold : System.Windows.Media.Brushes.SteelBlue;
     }
 
     private void CrGrid_SelectionChanged(object s, SelectionChangedEventArgs e) { }
@@ -1974,7 +3353,7 @@ public partial class MainWindow : Window
             var xml = await http.GetStringAsync($"{CrApiBase}/by-name/{cr.PcName}/autounattend.xml");
             File.WriteAllText(dlg.FileName, xml, System.Text.Encoding.UTF8);
             TxtCrStatus.Text       = $"💾  Salvato: {dlg.FileName}";
-            TxtCrStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+            TxtCrStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         }
         catch (Exception ex)
         {
@@ -2034,7 +3413,7 @@ public partial class MainWindow : Window
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
 
             TxtCrStatus.Text       = $"✅  File generati in {folder}";
-            TxtCrStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+            TxtCrStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         }
         catch (Exception ex)
         {
@@ -2067,7 +3446,7 @@ public partial class MainWindow : Window
         BtnDeployUsb.IsEnabled  = true;
         BtnDeployPxe.IsEnabled  = true;
 
-        TxtDeployStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+        TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         TxtDeployStatus.Text =
             $"✅  File generati — {cfg.WinEdition} · {cfg.WingetPackages.Count} software · " +
             $"{(cfg.IncludeAgent ? "agente incluso" : "senza agente")}\n" +
@@ -2090,7 +3469,7 @@ public partial class MainWindow : Window
         File.Copy(Path.Combine(_deployTmpDir, "postinstall.ps1"),
                   Path.Combine(dst,           "postinstall.ps1"),  overwrite: true);
         TxtDeployStatus.Text       = $"💾  File salvati in: {dst}";
-        TxtDeployStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+        TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         App.Log($"[Deploy] Salvati in {dst}");
     }
 
@@ -2141,7 +3520,7 @@ public partial class MainWindow : Window
         if (File.Exists(publishExe))
             File.Copy(publishExe, Path.Combine(drive.Name, "NovaSCM.exe"), overwrite: true);
 
-        TxtDeployStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+        TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         TxtDeployStatus.Text =
             $"🖴  File copiati su {drive.Name}\n" +
             "Passo successivo: copia i file di Windows 11 ISO sulla stessa USB (con Rufus o 7-Zip), poi avvia il PC.";
@@ -2184,7 +3563,7 @@ public partial class MainWindow : Window
                 }
             });
 
-            TxtDeployStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+            TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
             TxtDeployStatus.Text       = $"🌐  File copiati su {pxeIp}:{pxePath}";
             App.Log($"[Deploy] PXE upload OK → {pxeIp}:{pxePath}");
         }
@@ -2615,14 +3994,16 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             _wfRows.Clear();
             foreach (var el in doc.RootElement.EnumerateArray())
             {
-                _wfRows.Add(new WfRow
+                var wf = new WfRow
                 {
                     Id          = el.TryGetProperty("id",          out var i)  ? i.GetInt32()        : 0,
                     Nome        = el.TryGetProperty("nome",        out var n)  ? n.GetString() ?? "" : "",
                     Descrizione = el.TryGetProperty("descrizione", out var d)  ? d.GetString() ?? "" : "",
                     Versione    = el.TryGetProperty("versione",    out var v)  ? v.GetInt32()        : 1,
                     StepCount   = el.TryGetProperty("steps",       out var st) ? st.GetArrayLength() : 0,
-                });
+                };
+                _wfRows.Add(wf);
+                Database.UpsertWorkflow(wf);   // cache locale
             }
 
             // Riseleziona il workflow precedente se ancora presente
@@ -2633,12 +4014,19 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             }
 
             TxtWfStatus.Text = $"✅  {_wfRows.Count} workflow";
-            TxtWfStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+            TxtWfStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         }
-        catch (Exception ex)
+        catch
         {
-            TxtWfStatus.Text = $"❌  {ex.Message}";
-            TxtWfStatus.Foreground = System.Windows.Media.Brushes.Tomato;
+            // Fallback: carica dal DB locale
+            _wfRows.Clear();
+            foreach (var wf in Database.GetWorkflows()) _wfRows.Add(wf);
+            TxtWfStatus.Text       = _wfRows.Count > 0
+                ? $"📴  Offline — {_wfRows.Count} workflow dal DB locale"
+                : "⚙️  Configura l'URL API NovaSCM nelle Impostazioni";
+            TxtWfStatus.Foreground = _wfRows.Count > 0
+                ? System.Windows.Media.Brushes.SteelBlue
+                : System.Windows.Media.Brushes.Gold;
         }
     }
 
@@ -2683,7 +4071,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             {
                 var status   = el.TryGetProperty("status",       out var st) ? st.GetString() ?? "" : "";
                 var progress = status == "completed" ? 100 : 0;
-                _wfAssignRows.Add(new WfAssignRow
+                var a = new WfAssignRow
                 {
                     Id           = el.TryGetProperty("id",            out var i)  ? i.GetInt32()         : 0,
                     PcName       = el.TryGetProperty("pc_name",       out var p)  ? p.GetString() ?? ""  : "",
@@ -2691,12 +4079,19 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                     WorkflowId   = el.TryGetProperty("workflow_id",   out var wi) ? wi.GetInt32()        : 0,
                     Status       = status,
                     Progress     = progress,
-                    AssignedAt   = el.TryGetProperty("assigned_at",   out var a)  ? a.GetString() ?? ""  : "",
+                    AssignedAt   = el.TryGetProperty("assigned_at",   out var at) ? at.GetString() ?? "" : "",
                     LastSeen     = el.TryGetProperty("last_seen",     out var ls) ? ls.GetString() ?? "" : "",
-                });
+                };
+                _wfAssignRows.Add(a);
+                Database.UpsertAssignment(a);   // cache locale
             }
         }
-        catch { }
+        catch
+        {
+            // Fallback: carica dal DB locale
+            _wfAssignRows.Clear();
+            foreach (var a in Database.GetAssignments()) _wfAssignRows.Add(a);
+        }
     }
 
     private async void LstWorkflows_SelectionChanged(object s, SelectionChangedEventArgs e)
@@ -2727,7 +4122,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             {
                 await LoadWorkflowsAsync();
                 TxtWfStatus.Text = $"✅  Workflow '{win.WfNome}' creato";
-                TxtWfStatus.Foreground = System.Windows.Media.Brushes.LightGreen;
+                TxtWfStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
             }
         }
         catch (Exception ex)
@@ -2967,4 +4362,445 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnWfRefreshAssign_Click(object s, RoutedEventArgs e)
         => await LoadWorkflowAssignmentsAsync();
+
+    // ── Supporta il progetto ──────────────────────────────────────────────────
+    private void BtnKofi_Click(object s, RoutedEventArgs e)
+        => Process.Start(new ProcessStartInfo("https://ko-fi.com/polariscore") { UseShellExecute = true });
+
+    private void BtnGitHubSponsor_Click(object s, RoutedEventArgs e)
+        => Process.Start(new ProcessStartInfo("https://github.com/sponsors/claudiobecchis") { UseShellExecute = true });
+
+    private void BtnPayPal_Click(object s, RoutedEventArgs e)
+        => Process.Start(new ProcessStartInfo("https://paypal.me/CBECCHIS") { UseShellExecute = true });
+
+    // ── KONAMI CODE ───────────────────────────────────────────────────────────
+    private static readonly System.Windows.Input.Key[] KonamiSequence =
+    [
+        System.Windows.Input.Key.Up,   System.Windows.Input.Key.Up,
+        System.Windows.Input.Key.Down, System.Windows.Input.Key.Down,
+        System.Windows.Input.Key.Left, System.Windows.Input.Key.Right,
+        System.Windows.Input.Key.Left, System.Windows.Input.Key.Right,
+        System.Windows.Input.Key.B,    System.Windows.Input.Key.A
+    ];
+    private readonly List<System.Windows.Input.Key> _konamiInput = [];
+    private bool _konamiActive = false;
+
+    private void Window_PreviewKeyDown(object s, System.Windows.Input.KeyEventArgs e)
+    {
+        _konamiInput.Add(e.Key);
+        if (_konamiInput.Count > KonamiSequence.Length)
+            _konamiInput.RemoveAt(0);
+        if (!_konamiActive && _konamiInput.Count == KonamiSequence.Length &&
+            _konamiInput.SequenceEqual(KonamiSequence))
+            _ = ActivateKonamiAsync();
+    }
+
+    private async Task ActivateKonamiAsync()
+    {
+        _konamiActive = true;
+        _konamiInput.Clear();
+
+        // Avvia matrix rain nell'overlay
+        KonamiOverlay.Visibility = Visibility.Visible;
+        KonamiCanvas.Background  = System.Windows.Media.Brushes.Transparent;
+
+        string[] msgs = [
+            "ACCESSO ILLIMITATO SBLOCCATO 🚀",
+            "SEI UN VERO SYSADMIN 🏆",
+            "POLARISCORE MODE: ON ⚡",
+            "COFFEE++ ☕  BUGS-- 🐛"
+        ];
+        TxtKonamiSub.Text = msgs[new Random().Next(msgs.Length)];
+
+        // Glitch animation: flash 3 volte
+        for (int i = 0; i < 3; i++)
+        {
+            KonamiOverlay.Opacity = 0.4;
+            await Task.Delay(80);
+            KonamiOverlay.Opacity = 1.0;
+            await Task.Delay(80);
+        }
+
+        // Matrix rain nel canvas overlay
+        await Task.Delay(3500);
+
+        // Fade out
+        var fade = new System.Windows.Media.Animation.DoubleAnimation(1, 0,
+            new Duration(TimeSpan.FromMilliseconds(600)));
+        fade.Completed += (_, _) =>
+        {
+            KonamiOverlay.Visibility = Visibility.Collapsed;
+            KonamiOverlay.Opacity    = 1;
+            KonamiCanvas.Children.Clear();
+            _konamiActive = false;
+        };
+        KonamiOverlay.BeginAnimation(UIElement.OpacityProperty, fade);
+    }
+
+    // ── System Gauges (PC tab) ─────────────────────────────────────────────────
+    private System.Windows.Threading.DispatcherTimer? _gaugeTimer;
+    private System.Diagnostics.PerformanceCounter? _cpuCounter;
+
+    private void StartGauges()
+    {
+        try { _cpuCounter = new System.Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total"); }
+        catch { _cpuCounter = null; }
+
+        _gaugeTimer = new System.Windows.Threading.DispatcherTimer
+            { Interval = TimeSpan.FromSeconds(1.5) };
+        _gaugeTimer.Tick += (_, _) => UpdateGauges();
+        _gaugeTimer.Start();
+        UpdateGauges();
+    }
+
+    private void StopGauges()
+    {
+        _gaugeTimer?.Stop();
+        _gaugeTimer = null;
+    }
+
+    private void UpdateGauges()
+    {
+        float cpu = 0;
+        try { _cpuCounter?.NextValue(); cpu = _cpuCounter?.NextValue() ?? 0; }
+        catch { }
+
+        var mem   = GC.GetGCMemoryInfo();
+        float ram = mem.TotalAvailableMemoryBytes > 0
+            ? (float)(1.0 - (double)mem.MemoryLoadBytes / mem.TotalAvailableMemoryBytes) * 100
+            : 0;
+        // Simpler: use Environment working set as rough proxy
+        long usedBytes  = Environment.WorkingSet;
+        float ramUsed   = (float)(usedBytes / (1024.0 * 1024.0));
+
+        // Disk
+        float disk = 0;
+        try
+        {
+            var drive = new DriveInfo(Path.GetPathRoot(Environment.SystemDirectory) ?? "C:\\");
+            disk = (float)(1.0 - (double)drive.AvailableFreeSpace / drive.TotalSize) * 100;
+        }
+        catch { }
+
+        // Network (send rough counter)
+        float net = 0;
+        try
+        {
+            var netIfs = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces();
+            long totalBytes = netIfs.Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+                                    .Sum(n => n.GetIPStatistics().BytesSent + n.GetIPStatistics().BytesReceived);
+            net = Math.Min(100, (float)(totalBytes / 1e9 % 100));
+        }
+        catch { }
+
+        DrawArcGauge(GaugeCpu,  cpu,  100, "CPU",  "#3b82f6", $"{cpu:F0}%");
+        DrawArcGauge(GaugeRam,  Math.Min(100, ramUsed / 40 * 100), 100, "RAM",  "#10b981", $"{ramUsed:F0} MB");
+        DrawArcGauge(GaugeDisk, disk, 100, "Disco","#f59e0b", $"{disk:F0}%");
+        DrawArcGauge(GaugeNet,  net,  100, "NET",  "#a78bfa", "● " + (net > 10 ? "Attivo" : "Idle"));
+    }
+
+    private static void DrawArcGauge(Canvas canvas, float value, float max,
+                                     string label, string hexColor, string valText)
+    {
+        canvas.Children.Clear();
+        double w = canvas.ActualWidth;
+        double h = canvas.ActualHeight;
+        if (w < 10 || h < 10) { canvas.Dispatcher.BeginInvoke(() => DrawArcGauge(canvas, value, max, label, hexColor, valText)); return; }
+
+        var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hexColor);
+        double cx    = w / 2;
+        double cy    = h * 0.6;
+        double r     = Math.Min(w, h) * 0.38;
+        double start = 210 * Math.PI / 180;  // -150 gradi
+        double end   = 330 * Math.PI / 180;  // +150 gradi
+        double span  = (end - start + 2 * Math.PI) % (2 * Math.PI);  // 300 gradi totali
+        double pct   = Math.Clamp(value / max, 0, 1);
+
+        // Track grigio
+        var track = ArcPath(cx, cy, r, start, start + span * Math.PI * 2 / Math.PI, color, 0.15);
+        // Hmm, let me use a simpler arc approach
+
+        // Track arc (background) — always full 300°
+        DrawArc(canvas, cx, cy, r + 2, 210, 330, System.Windows.Media.Color.FromArgb(40, 100, 116, 139), 10);
+
+        // Value arc — proportional
+        if (pct > 0.01)
+        {
+            // Color based on value
+            var arcColor = pct < 0.6 ? color
+                         : pct < 0.85 ? System.Windows.Media.Color.FromRgb(245, 158, 11)
+                                       : System.Windows.Media.Color.FromRgb(239, 68, 68);
+            DrawArc(canvas, cx, cy, r + 2, 210, 210 + 300 * pct, arcColor, 10);
+        }
+
+        // Glow dot at tip
+        if (pct > 0.01)
+        {
+            double tipAngle = (210 + 300 * pct) * Math.PI / 180;
+            double tx = cx + (r + 2) * Math.Cos(tipAngle);
+            double ty = cy + (r + 2) * Math.Sin(tipAngle);
+            var dot = new System.Windows.Shapes.Ellipse
+            {
+                Width = 8, Height = 8,
+                Fill = new System.Windows.Media.SolidColorBrush(color),
+                Effect = new System.Windows.Media.Effects.DropShadowEffect
+                    { Color = color, BlurRadius = 10, ShadowDepth = 0, Opacity = 0.9 }
+            };
+            Canvas.SetLeft(dot, tx - 4);
+            Canvas.SetTop(dot,  ty - 4);
+            canvas.Children.Add(dot);
+        }
+
+        // Valore testo
+        var txt = new TextBlock
+        {
+            Text      = valText,
+            FontFamily= new System.Windows.Media.FontFamily("Consolas"),
+            FontSize  = 11, FontWeight = FontWeights.Bold,
+            Foreground= new System.Windows.Media.SolidColorBrush(color),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center
+        };
+        txt.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        Canvas.SetLeft(txt, cx - txt.DesiredSize.Width / 2);
+        Canvas.SetTop(txt,  cy - 8);
+        canvas.Children.Add(txt);
+
+        // Label
+        var lbl = new TextBlock
+        {
+            Text      = label,
+            FontFamily= new System.Windows.Media.FontFamily("Consolas"),
+            FontSize  = 9,
+            Foreground= new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(71, 85, 105)),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Center
+        };
+        lbl.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        Canvas.SetLeft(lbl, cx - lbl.DesiredSize.Width / 2);
+        Canvas.SetTop(lbl,  cy + 10);
+        canvas.Children.Add(lbl);
+    }
+
+    private static void DrawArc(Canvas canvas, double cx, double cy, double r,
+                                 double startDeg, double endDeg,
+                                 System.Windows.Media.Color color, double thickness)
+    {
+        if (endDeg <= startDeg) return;
+        double sa = startDeg * Math.PI / 180;
+        double ea = endDeg   * Math.PI / 180;
+        double x1 = cx + r * Math.Cos(sa);
+        double y1 = cy + r * Math.Sin(sa);
+        double x2 = cx + r * Math.Cos(ea);
+        double y2 = cy + r * Math.Sin(ea);
+        bool largeArc = (endDeg - startDeg) > 180;
+
+        var geo = new System.Windows.Media.PathGeometry();
+        var fig = new System.Windows.Media.PathFigure { StartPoint = new System.Windows.Point(x1, y1) };
+        fig.Segments.Add(new System.Windows.Media.ArcSegment(
+            new System.Windows.Point(x2, y2),
+            new System.Windows.Size(r, r),
+            0, largeArc, System.Windows.Media.SweepDirection.Clockwise, true));
+        geo.Figures.Add(fig);
+
+        var path = new System.Windows.Shapes.Path
+        {
+            Data            = geo,
+            Stroke          = new System.Windows.Media.SolidColorBrush(color),
+            StrokeThickness = thickness,
+            StrokeStartLineCap = System.Windows.Media.PenLineCap.Round,
+            StrokeEndLineCap   = System.Windows.Media.PenLineCap.Round,
+        };
+        canvas.Children.Add(path);
+    }
+
+    private static System.Windows.Shapes.Path ArcPath(double cx, double cy, double r,
+        double sa, double ea, System.Windows.Media.Color color, double opacity) => new();
+
+    // ── Wiki ──────────────────────────────────────────────────────────────────
+    private static readonly Dictionary<string, (string Title, string Icon, string[] Sections)> WikiData = new()
+    {
+        ["overview"] = ("Panoramica", "🏠", [
+            "Cos'è NovaSCM|NovaSCM è uno strumento open source per la gestione di reti e fleet di PC. Combina scansione di rete, gestione certificati WiFi EAP-TLS, deploy Windows automatizzato, OPSI, SCCM e workflow di automazione in un'unica interfaccia.",
+            "Requisiti|• Windows 10/11 (64-bit)\n• .NET 9.0 Runtime\n• Accesso alla rete da gestire\n• (Opzionale) Server NovaSCM per workflow e change requests",
+            "Architettura|NovaSCM funziona in modalità offline-first: tutti i dati vengono salvati in un database SQLite locale (%APPDATA%\\PolarisManager\\novascm.db) e sincronizzati con il server quando disponibile.",
+            "Primo avvio|Al primo avvio, vai nel tab ⚙️ Impostazioni e configura almeno l'URL del server NovaSCM (se disponibile). Puoi usare l'app anche senza server — le funzionalità offline restano disponibili."
+        ]),
+        ["scan"] = ("Scansione Rete", "📡", [
+            "Come funziona|NovaSCM esegue ping ICMP su tutti gli IP della subnet. Per ogni host online, legge il MAC dall'ARP table e lo confronta con il database OUI per identificare il vendor.",
+            "Scansione base|1. Inserisci l'IP base (es. 192.168.10.0) e la subnet mask (es. 24)\n2. Clicca ▶ Scansiona\n3. I device vengono mostrati in tempo reale nella tabella\n4. Doppio click su un device per la scansione porte",
+            "Scansione multi-VLAN|Configura le subnet multiple in ⚙️ Impostazioni (una per riga, formato 192.168.x.0/24). Usa il pulsante 🌐 Tutte le VLAN per scansionare tutto in parallelo.",
+            "Vista Heatmap|Clicca ⬛ Heatmap per vedere tutti i 254 IP della subnet come griglia colorata:\n• 🟢 Verde = online\n• 🔵 Blu = ha certificato EAP-TLS\n• 🟡 Amber = gateway\n• ⬛ Scuro = offline o non scansionato",
+            "Vista Mappa|Clicca 🗺 Mappa per la vista grafica hub-and-spoke con animazioni pulse sui device online.",
+            "Live Ping|Seleziona un device nella tabella per avviare automaticamente il live ping graph nel pannello inferiore."
+        ]),
+        ["certs"] = ("Certificati EAP-TLS", "🔐", [
+            "Cos'è EAP-TLS|EAP-TLS è un metodo di autenticazione WiFi enterprise che usa certificati digitali invece di password. Ogni device ha un certificato unico firmato dalla CA dell'organizzazione.",
+            "Prerequisiti|• FreeRADIUS configurato con la tua CA (es. CT 105: 192.168.20.105)\n• SSID WPA2-Enterprise sul controller WiFi\n• Certportal in esecuzione (CT 103: 192.168.20.110:9090)",
+            "Generare un certificato|1. Esegui una scansione di rete\n2. Seleziona il device\n3. Clicca 🔐 Genera Cert\n4. Il certificato viene generato dal Certportal e salvato nel database",
+            "Enrollment automatico|Su Windows, esegui da PowerShell admin:\n\n  iwr http://192.168.20.110:9090/agent/install.ps1 | iex\n\nIl device si registrerà automaticamente ad ogni avvio."
+        ]),
+        ["deploy"] = ("Deploy Windows", "💿", [
+            "Zero-touch deployment|NovaSCM genera automaticamente i file necessari per installare Windows senza alcun intervento manuale:\n• autounattend.xml — risponde a tutte le domande di setup\n• postinstall.ps1 — installa software e agenti dopo il riavvio",
+            "Configurazione|Nel tab 💿 Deploy:\n1. Scegli edizione Windows (Pro/Home/Enterprise)\n2. Imposta template nome PC (es. PC-{MAC6})\n3. Imposta password Administrator\n4. Seleziona software winget da installare\n5. Clicca ⚙️ Genera file",
+            "Distribuzione USB|1. Scarica ISO Windows 11 da microsoft.com\n2. Estrai l'ISO su chiavetta FAT32\n3. Copia autounattend.xml + postinstall.ps1 nella RADICE della USB\n4. Avvia il PC dalla USB — installazione completamente automatica",
+            "Distribuzione PXE|Se hai un server PXE configurato (CT 110), usa il pulsante 🌐 Deploy PXE per copiare i file via SCP automaticamente.",
+            "Template nome PC|{MAC6} = ultimi 6 caratteri del MAC address (es. PC-B3CEEB)\n{nn} = contatore incrementale (es. PC-001)"
+        ]),
+        ["workflow"] = ("Workflow", "⚙️", [
+            "Cos'è un Workflow|Un workflow è una sequenza di step automatizzati che vengono eseguiti su un PC. Simile alle Task Sequence di SCCM, ma più semplice e configurabile via GUI.",
+            "Creare un workflow|1. Vai nel tab ⚙️ Workflow\n2. Clicca + Nuovo Workflow\n3. Inserisci nome e descrizione\n4. Aggiungi step con + Aggiungi Step",
+            "Tipi di step|• cmd — esegui un comando\n• powershell — esegui script PS\n• winget — installa/aggiorna pacchetto\n• robocopy — copia file\n• reboot — riavvia il PC\n• wait — attendi X secondi",
+            "Assegnare a un PC|Usa il pulsante Assegna Workflow per collegare un workflow a un nome PC specifico. Il PC eseguirà il workflow al prossimo check-in.",
+            "Monitoraggio|La colonna Progresso mostra l'avanzamento in tempo reale. I colori indicano: Blu = in esecuzione, Verde = completato, Rosso = errore."
+        ]),
+        ["pc"] = ("Fleet PC", "🖥️", [
+            "Gestione PC|Il tab 🖥️ PC mostra tutti i PC registrati con il loro stato agente, OS, CPU e RAM.",
+            "Agent NovaSCM|L'agent è un servizio Windows che:\n• Fa check-in sul server ogni 30s\n• Esegue i workflow assegnati\n• Riporta inventario hardware/software\n• Mantiene il certificato WiFi aggiornato",
+            "Inventario|Clicca 📊 Inventario su un PC selezionato per raccogliere:\n• Hardware (CPU, RAM, disco, schede di rete)\n• OS e versione\n• Software installato (da registro Windows)\n• Patch mancanti",
+            "RDP|Clicca 🖥️ RDP per aprire una connessione Remote Desktop al PC selezionato (richiede porta 3389 aperta).",
+            "Gauge risorse|I 4 gauge animati mostrano le risorse del PC locale in tempo reale: CPU%, RAM, Disco% e stato rete."
+        ]),
+        ["opsi"] = ("OPSI Software", "📦", [
+            "Cos'è OPSI|OPSI è un sistema open source per la distribuzione automatica di software su PC Windows. NovaSCM si integra con il server OPSI per gestire i pacchetti.",
+            "Configurare OPSI|In ⚙️ Impostazioni, imposta l'URL del server OPSI. Assicurati che il server OPSI sia raggiungibile dalla rete.",
+            "Gestire pacchetti|Nel tab 📦 OPSI puoi:\n• Vedere tutti i pacchetti disponibili\n• Installare/aggiornare pacchetti su PC specifici\n• Verificare lo stato di deployment",
+            "Integrazione con Workflow|Puoi usare step di tipo 'winget' nei workflow come alternativa a OPSI per distribuzione software senza server dedicato."
+        ]),
+        ["sccm"] = ("SCCM / OSD", "🏢", [
+            "Integrazione SCCM|NovaSCM include un visualizzatore di Task Sequence compatibile con SCCM (Microsoft Endpoint Configuration Manager).",
+            "Task Sequence Debugger|Nel tab 🏢 SCCM puoi:\n• Visualizzare le Task Sequence attive\n• Monitorare lo stato di esecuzione\n• Visualizzare variabili e log",
+            "OSD (OS Deployment)|Per ambienti con SCCM esistente, NovaSCM può lavorare in parallelo per:\n• Registrare device nel database locale\n• Monitorare il progresso del deployment\n• Gestire certificati post-deploy",
+            "Infrastruttura suggerita|• VM Windows Server 2025 con AD + SQL + SCCM 2403\n• Dominio: corp.nomeazienda.it\n• Task Sequence per Windows 11 Pro con scelta dominio/workgroup"
+        ]),
+        ["cr"] = ("Change Requests", "📋", [
+            "Cos'è una CR|Una Change Request (CR) è una richiesta di provisioning di un nuovo PC. Permette di tracciare il ciclo di vita completo: dalla richiesta alla consegna.",
+            "Creare una CR|1. Vai nel tab 📋 Richieste\n2. Clicca + Nuova Richiesta\n3. Compila: nome PC, dominio, OU, utente assegnato\n4. Seleziona software da installare\n5. Clicca Crea\nLa CR viene salvata localmente se offline.",
+            "Stati CR|• ⏳ Pending — in attesa di approvazione\n• 🔄 In Progress — deployment in corso\n• ✅ Completata — PC consegnato e configurato\n• ❌ Rifiutata — richiesta respinta",
+            "Modalità offline|NovaSCM salva le CR nel database locale quando il server non è raggiungibile. Vengono sincronizzate automaticamente al prossimo collegamento."
+        ]),
+        ["faq"] = ("FAQ", "❓", [
+            "Come faccio a scansionare più subnet?|Vai in ⚙️ Impostazioni → campo 'Subnet multiple' → inserisci una subnet per riga in formato CIDR (es. 192.168.10.0/24). Poi usa il pulsante 🌐 Tutte le VLAN nel tab Rete.",
+            "Il MAC non viene trovato|Il MAC viene letto dall'ARP table Windows. Se il device è su una subnet diversa (router in mezzo), il MAC potrebbe non essere visibile. Usa uno switch managed con VLAN access.",
+            "Il certificato non viene generato|Verifica che:\n1. Il Certportal sia raggiungibile all'URL configurato\n2. La CA sia presente in /ca/ca.crt sul server\n3. Il MAC del device sia noto al Certportal",
+            "La scansione è lenta|Aumenta la parallelizzazione in ⚙️ Impostazioni. Su subnet /24 sono normali 15-30 secondi. Reti con firewall aggressivo possono richiedere più tempo.",
+            "Come aggiorno NovaSCM?|Clicca 🔄 Controlla aggiornamenti nel tab ℹ️ About, oppure scarica l'ultima versione da GitHub.",
+            "Il Matrix Rain si attiva?|Sì! Apri il tab ℹ️ About per vederlo. Esiste anche un Easter Egg nascosto... cerca il codice Konami. 😏"
+        ])
+    };
+
+    private void WikiNavList_SelectionChanged(object s, SelectionChangedEventArgs e)
+    {
+        if (WikiNavList.SelectedItem is not ListBoxItem item) return;
+        string key = item.Tag?.ToString() ?? "overview";
+        RenderWikiPage(key);
+    }
+
+    private void RenderWikiPage(string key)
+    {
+        WikiContent.Children.Clear();
+        if (!WikiData.TryGetValue(key, out var page)) return;
+
+        // Titolo pagina
+        WikiContent.Children.Add(new TextBlock
+        {
+            Text = $"{page.Icon}  {page.Title}",
+            FontSize = 24, FontWeight = FontWeights.Bold,
+            Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(30, 58, 138)),
+            Margin = new Thickness(0, 0, 0, 4)
+        });
+
+        // Linea separatore
+        WikiContent.Children.Add(new Border
+        {
+            Height = 2, Background = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(219, 234, 254)),
+            Margin = new Thickness(0, 0, 0, 20)
+        });
+
+        foreach (var sec in page.Sections)
+        {
+            var parts   = sec.Split('|', 2);
+            var secTitle = parts[0];
+            var secBody  = parts.Length > 1 ? parts[1] : "";
+
+            // Titolo sezione
+            WikiContent.Children.Add(new TextBlock
+            {
+                Text = secTitle,
+                FontSize = 15, FontWeight = FontWeights.SemiBold,
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(30, 64, 175)),
+                Margin = new Thickness(0, 16, 0, 6)
+            });
+
+            // Contenuto — separa blocchi codice (linee che iniziano con 2+ spazi)
+            var lines = secBody.Split('\n');
+            var normalLines = new List<string>();
+
+            foreach (var line in lines)
+            {
+                bool isCode = line.StartsWith("  ") || line.StartsWith("\t");
+                if (isCode)
+                {
+                    // Svuota buffer normale
+                    if (normalLines.Count > 0)
+                    {
+                        AddWikiParagraph(string.Join("\n", normalLines));
+                        normalLines.Clear();
+                    }
+                    AddWikiCodeLine(line.TrimStart());
+                }
+                else
+                {
+                    normalLines.Add(line);
+                }
+            }
+            if (normalLines.Count > 0)
+                AddWikiParagraph(string.Join("\n", normalLines));
+        }
+    }
+
+    private void AddWikiParagraph(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        WikiContent.Children.Add(new Border
+        {
+            Background = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(248, 250, 252)),
+            BorderBrush = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(226, 232, 240)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(14, 10, 14, 10),
+            Margin = new Thickness(0, 0, 0, 8),
+            Child = new TextBlock
+            {
+                Text = text, TextWrapping = TextWrapping.Wrap,
+                FontSize = 12.5, LineHeight = 22,
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(51, 65, 85))
+            }
+        });
+    }
+
+    private void AddWikiCodeLine(string code)
+    {
+        WikiContent.Children.Add(new Border
+        {
+            Background = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(15, 23, 42)),
+            CornerRadius = new CornerRadius(4),
+            Padding = new Thickness(14, 8, 14, 8),
+            Margin = new Thickness(0, 0, 0, 4),
+            Child = new TextBlock
+            {
+                Text = code, TextWrapping = TextWrapping.Wrap,
+                FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+                FontSize = 12,
+                Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(74, 222, 128))
+            }
+        });
+    }
 }

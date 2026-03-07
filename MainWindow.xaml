@@ -7,7 +7,8 @@
         Height="780" Width="1300"
         MinHeight="560" MinWidth="900"
         FontSize="14"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        PreviewKeyDown="Window_PreviewKeyDown">
 
     <Window.Resources>
         <!-- Colori base -->
@@ -37,6 +38,31 @@
             <Setter Property="FontWeight"      Value="SemiBold"/>
             <Setter Property="Cursor"          Value="Hand"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.82"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.65"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.38"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="BtnGreen" TargetType="Button" BasedOn="{StaticResource BtnBase}">
             <Setter Property="Background"   Value="#16a34a"/>
@@ -143,64 +169,182 @@
             <Setter Property="Margin"       Value="0,16,0,6"/>
         </Style>
 
-        <!-- Sidebar nav button -->
-        <Style x:Key="NavSideBtn" TargetType="Button">
-            <Setter Property="Background"              Value="Transparent"/>
-            <Setter Property="Foreground"              Value="#4A6A9A"/>
-            <Setter Property="BorderThickness"         Value="0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Left"/>
-            <Setter Property="Padding"                 Value="16,9"/>
-            <Setter Property="FontSize"                Value="13"/>
-            <Setter Property="Cursor"                  Value="Hand"/>
+        <!-- Sidebar nav button (hidden, kept for code compatibility) -->
+        <Style x:Key="NavSideBtn"       TargetType="Button"/>
+        <Style x:Key="NavSideBtnActive" TargetType="Button"/>
+
+        <!-- ── Ribbon / SCCM Console styles ── -->
+        <Style x:Key="RibbonTab" TargetType="Button">
+            <Setter Property="Background"    Value="Transparent"/>
+            <Setter Property="Foreground"    Value="#9AAFC8"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"       Value="16,0"/>
+            <Setter Property="FontSize"      Value="12"/>
+            <Setter Property="Cursor"        Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
                         <Border Background="{TemplateBinding Background}"
-                                Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                                Padding="{TemplateBinding Padding}" Height="32">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
         </Style>
-        <Style x:Key="NavSideBtnActive" TargetType="Button" BasedOn="{StaticResource NavSideBtn}">
-            <Setter Property="Background"  Value="#0A78C9"/>
+        <Style x:Key="RibbonTabActive" TargetType="Button" BasedOn="{StaticResource RibbonTab}">
             <Setter Property="Foreground"  Value="White"/>
             <Setter Property="FontWeight"  Value="SemiBold"/>
+            <Setter Property="Background"  Value="#2B579A"/>
+        </Style>
+        <Style x:Key="RibbonBtn" TargetType="Button">
+            <Setter Property="Background"    Value="Transparent"/>
+            <Setter Property="Foreground"    Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Width"         Value="64"/>
+            <Setter Property="Cursor"        Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="4,6">
+                            <ContentPresenter HorizontalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#3A6AAF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#1A4A8F"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WsBtn" TargetType="Button">
+            <Setter Property="Background"    Value="Transparent"/>
+            <Setter Property="Foreground"    Value="#6688AA"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor"        Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" Padding="6,8">
+                            <StackPanel>
+                                <TextBlock Text="{TemplateBinding Tag}" FontSize="17"
+                                           HorizontalAlignment="Center"
+                                           Foreground="{TemplateBinding Foreground}"/>
+                                <TextBlock Text="{TemplateBinding Content}" FontSize="9"
+                                           HorizontalAlignment="Center" Margin="0,2,0,0"
+                                           Foreground="{TemplateBinding Foreground}"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2A4A7A"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#163060"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="WsBtnActive" TargetType="Button" BasedOn="{StaticResource WsBtn}">
+            <Setter Property="Background" Value="#2B579A"/>
+            <Setter Property="Foreground" Value="White"/>
         </Style>
     </Window.Resources>
 
+    <Grid>
     <DockPanel Background="#F4F6FA">
 
-        <!-- ═══ BANNER AGGIORNAMENTO ═══ -->
-        <!-- ═══ HEADER ═══ -->
-        <Border DockPanel.Dock="Top" Background="#073682" Height="52">
-            <Grid Margin="18,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Border Background="#0A78C9" Width="32" Height="32" CornerRadius="7" Margin="0,0,10,0">
+        <!-- ═══ RIBBON (SCCM Console style) ═══ -->
+        <Grid DockPanel.Dock="Top">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="32"/>
+                <RowDefinition Height="68"/>
+            </Grid.RowDefinitions>
+
+            <!-- Tab bar -->
+            <Grid Grid.Row="0" Background="#1F3864">
+                <StackPanel Orientation="Horizontal">
+                    <Border Background="#0F2848" Width="50">
                         <TextBlock Text="N" Foreground="White" FontSize="18" FontWeight="Bold"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
-                    <TextBlock Text="NovaSCM" Foreground="White" FontSize="17" FontWeight="Bold"
-                               VerticalAlignment="Center"/>
-                    <TextBlock Text="   Console" Foreground="#5588CC" FontSize="13" VerticalAlignment="Center"/>
+                    <Button x:Name="RibbonTabHome" Content="Home"       Style="{StaticResource RibbonTabActive}" Tag="home"  Click="RibbonTab_Click"/>
+                    <Button                         Content="Visualizza" Style="{StaticResource RibbonTab}"       Tag="view"  Click="RibbonTab_Click"/>
+                    <Button                         Content="Strumenti"  Style="{StaticResource RibbonTab}"       Tag="tools" Click="RibbonTab_Click"/>
                 </StackPanel>
-                <TextBlock Grid.Column="1" x:Name="TxtNavSection"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                           Foreground="#7AAAD8" FontSize="13" FontWeight="SemiBold"/>
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="© 2026 Claudio Becchis" Foreground="#3A5A88" FontSize="11"
-                               VerticalAlignment="Center" Margin="0,0,14,0"/>
+                <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"
+                            VerticalAlignment="Center" Margin="0,0,14,0">
+                    <TextBlock x:Name="TxtNavSection" Foreground="#7AAAD8" FontSize="12"
+                               FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,20,0"/>
                     <TextBlock x:Name="TxtHeaderStatus" Text="● Pronto"
                                Foreground="#10b981" FontSize="12" VerticalAlignment="Center"/>
                 </StackPanel>
             </Grid>
-        </Border>
+
+            <!-- Action bar -->
+            <Border Grid.Row="1" Background="#2B579A">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Right" HorizontalAlignment="Right" VerticalAlignment="Center"
+                               Margin="0,0,20,0" Foreground="#4A6A9A" FontSize="11"
+                               Text="NovaSCM Console  •  © 2026 Claudio Becchis"/>
+                    <StackPanel Orientation="Horizontal" Margin="8,0">
+                        <!-- Gestione -->
+                        <StackPanel Margin="4,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonBtn}" Click="RibbonBtnNuovo_Click">
+                                    <StackPanel><TextBlock Text="📋" FontSize="20" HorizontalAlignment="Center"/><TextBlock Text="Nuovo" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/></StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource RibbonBtn}" Click="RibbonBtnProprieta_Click">
+                                    <StackPanel><TextBlock Text="✏️" FontSize="20" HorizontalAlignment="Center"/><TextBlock Text="Proprietà" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/></StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource RibbonBtn}" Click="RibbonBtnElimina_Click">
+                                    <StackPanel><TextBlock Text="🗑" FontSize="20" HorizontalAlignment="Center"/><TextBlock Text="Elimina" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/></StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <TextBlock Text="Gestione" FontSize="10" Foreground="#7799CC" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <Border Width="1" Background="#1F4888" Margin="6,10"/>
+                        <!-- Distribuzione -->
+                        <StackPanel Margin="4,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonBtn}" Click="RibbonBtnDistribuisci_Click">
+                                    <StackPanel><TextBlock Text="🚀" FontSize="20" HorizontalAlignment="Center"/><TextBlock Text="Distribuisci" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/></StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource RibbonBtn}" Click="RibbonBtnStato_Click">
+                                    <StackPanel><TextBlock Text="📊" FontSize="20" HorizontalAlignment="Center"/><TextBlock Text="Stato" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/></StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource RibbonBtn}" Click="RibbonBtnAggiorna_Click">
+                                    <StackPanel><TextBlock Text="🔄" FontSize="20" HorizontalAlignment="Center"/><TextBlock Text="Aggiorna" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/></StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <TextBlock Text="Distribuzione" FontSize="10" Foreground="#7799CC" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                        </StackPanel>
+                        <Border Width="1" Background="#1F4888" Margin="6,10"/>
+                        <!-- Strumenti -->
+                        <StackPanel Margin="4,0">
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource RibbonBtn}" Click="RibbonBtnImporta_Click">
+                                    <StackPanel><TextBlock Text="📥" FontSize="20" HorizontalAlignment="Center"/><TextBlock Text="Importa" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/></StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource RibbonBtn}" Click="RibbonBtnEsporta_Click">
+                                    <StackPanel><TextBlock Text="📤" FontSize="20" HorizontalAlignment="Center"/><TextBlock Text="Esporta" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/></StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource RibbonBtn}" Click="RibbonBtnImpostazioni_Click">
+                                    <StackPanel><TextBlock Text="⚙️" FontSize="20" HorizontalAlignment="Center"/><TextBlock Text="Impostazioni" FontSize="10" HorizontalAlignment="Center" Foreground="#BBCCE8"/></StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <TextBlock Text="Strumenti" FontSize="10" Foreground="#7799CC" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+                </DockPanel>
+            </Border>
+        </Grid>
 
         <!-- ═══ STATUS BAR ═══ -->
         <Border DockPanel.Dock="Bottom" Background="#E8EDF5" Height="24"
@@ -243,31 +387,146 @@
             </Grid>
         </Border>
 
-        <!-- ═══ SIDEBAR ═══ -->
-        <Border DockPanel.Dock="Left" Background="#091428" Width="202"
-                BorderBrush="#1a2f50" BorderThickness="0,0,1,0">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,10">
-                    <Separator Background="#1a2f50" Margin="12,6"/>
-                    <Button x:Name="NavImpostazioni" Content="&#x2699;&#xFE0F;   Impostazioni"
-                            Style="{StaticResource NavSideBtn}" Click="Nav_Click" Tag="8"/>
-                    <Button x:Name="NavAbout"        Content="&#x2139;&#xFE0F;   About"
-                            Style="{StaticResource NavSideBtn}" Click="Nav_Click" Tag="9"/>
+        <!-- ═══ LEFT NAV (SCCM Console style) ═══ -->
+        <Grid DockPanel.Dock="Left" Width="236">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="28"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="64"/>
+            </Grid.RowDefinitions>
+
+            <!-- Workspace header -->
+            <Border Grid.Row="0" Background="#1F3864">
+                <TextBlock x:Name="TxtWsHeader" Text="Asset e Conformità"
+                           Foreground="White" FontSize="12" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="10,0"/>
+            </Border>
+
+            <!-- TreeView navigation -->
+            <TreeView Grid.Row="1" x:Name="MainNavTree"
+                      Background="White" BorderThickness="0,0,1,0"
+                      BorderBrush="#D0D4DC" FontSize="12">
+                <TreeView.Resources>
+                    <Style TargetType="TreeViewItem">
+                        <Setter Property="Padding"   Value="4,5"/>
+                        <Setter Property="Foreground" Value="#1a1a1a"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TreeViewItem">
+                                    <StackPanel>
+                                        <Border x:Name="Bd" Background="Transparent"
+                                                BorderBrush="Transparent" BorderThickness="1"
+                                                Padding="{TemplateBinding Padding}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="16"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ToggleButton x:Name="Expander" Grid.Column="0"
+                                                              IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                                              Background="Transparent" BorderThickness="0"
+                                                              Focusable="False" Width="16" Height="16"
+                                                              Padding="0" Cursor="Hand">
+                                                    <ToggleButton.Template>
+                                                        <ControlTemplate TargetType="ToggleButton">
+                                                            <TextBlock x:Name="Arrow" Text="▶" FontSize="9"
+                                                                       Foreground="#888888"
+                                                                       HorizontalAlignment="Center"
+                                                                       VerticalAlignment="Center"/>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsChecked" Value="True">
+                                                                    <Setter TargetName="Arrow" Property="Text" Value="▼"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </ToggleButton.Template>
+                                                </ToggleButton>
+                                                <ContentPresenter Grid.Column="1"
+                                                                  ContentSource="Header"
+                                                                  VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <ItemsPresenter x:Name="ItemsHost" Margin="16,0,0,0"/>
+                                    </StackPanel>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsExpanded" Value="False">
+                                            <Setter TargetName="ItemsHost" Property="Visibility" Value="Collapsed"/>
+                                        </Trigger>
+                                        <Trigger Property="HasItems" Value="False">
+                                            <Setter TargetName="Expander" Property="Visibility" Value="Hidden"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#CCE5FF"/>
+                                            <Setter TargetName="Bd" Property="BorderBrush" Value="#99C3E8"/>
+                                        </Trigger>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="#EFF6FF"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </TreeView.Resources>
+
+                <!-- Workspace: Asset e Conformità -->
+                <TreeViewItem x:Name="TvGroupAsset" IsExpanded="True" Padding="4,4"
+                              Header="🏠  Asset e Conformità">
+                    <TreeViewItem Header="📡  Rete e Device"  Tag="0" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="🖥️  PC Gestiti"     Tag="4" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="🔐  Certificati"    Tag="1" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                </TreeViewItem>
+
+                <!-- Workspace: Libreria Software -->
+                <TreeViewItem x:Name="TvGroupSoftware" IsExpanded="True" Padding="4,4"
+                              Header="📦  Libreria Software" Visibility="Collapsed">
+                    <TreeViewItem Header="📦  Applicazioni"   Tag="2" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="⚙️  OPSI"           Tag="3" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="💿  Deploy OS"      Tag="5" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="⚙️  Workflow"       Tag="6" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                </TreeViewItem>
+
+                <!-- Workspace: Monitoraggio -->
+                <TreeViewItem x:Name="TvGroupMonitor" IsExpanded="True" Padding="4,4"
+                              Header="📊  Monitoraggio" Visibility="Collapsed">
+                    <TreeViewItem Header="📋  Richieste CR"   Tag="7" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="🖥️  Console SCCM"   Tag="8" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                </TreeViewItem>
+
+                <!-- Workspace: Amministrazione -->
+                <TreeViewItem x:Name="TvGroupAdmin" IsExpanded="True" Padding="4,4"
+                              Header="⚙️  Amministrazione" Visibility="Collapsed">
+                    <TreeViewItem Header="⚙️  Impostazioni"   Tag="9"  Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="ℹ️  About"           Tag="10" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                </TreeViewItem>
+            </TreeView>
+
+            <!-- Workspace switcher -->
+            <Border Grid.Row="2" Background="#1F3864" BorderBrush="#0A1F40" BorderThickness="0,1,0,0">
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Button x:Name="WsBtnAsset"    Content="Asset"    Tag="🏠" Style="{StaticResource WsBtnActive}" Width="52" Click="WsBtn_Click"/>
+                    <Button x:Name="WsBtnSoftware" Content="Software" Tag="📦" Style="{StaticResource WsBtn}"       Width="52" Click="WsBtn_Click"/>
+                    <Button x:Name="WsBtnMonitor"  Content="Monitor"  Tag="📊" Style="{StaticResource WsBtn}"       Width="52" Click="WsBtn_Click"/>
+                    <Button x:Name="WsBtnAdmin"    Content="Admin"    Tag="⚙️" Style="{StaticResource WsBtn}"       Width="52" Click="WsBtn_Click"/>
                 </StackPanel>
-                <StackPanel>
-                    <TextBlock Text="NAVIGAZIONE" Foreground="#1E3A5F" FontSize="10"
-                               FontWeight="Bold" Margin="16,14,16,4"/>
-                    <Button x:Name="NavRete"      Content="&#x1F4E1;   Rete"          Style="{StaticResource NavSideBtnActive}" Click="Nav_Click" Tag="0"/>
-                    <Button x:Name="NavCert"      Content="&#x1F512;   Certificati"   Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="1"/>
-                    <Button x:Name="NavApp"       Content="&#x1F4E6;   Applicazioni"  Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="2"/>
-                    <Button x:Name="NavOpsi"      Content="&#x2699;&#xFE0F;   OPSI"           Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="3"/>
-                    <Button x:Name="NavPc"        Content="&#x1F5A5;&#xFE0F;   PC"             Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="4"/>
-                    <Button x:Name="NavDeploy"    Content="&#x1F4BF;   Deploy OS"     Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="5"/>
-                    <Button x:Name="NavWorkflow"  Content="&#x2699;&#xFE0F;   Workflow"      Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="6"/>
-                    <Button x:Name="NavRichieste" Content="&#x1F4CB;   Richieste"     Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="7"/>
-                </StackPanel>
-            </DockPanel>
-        </Border>
+            </Border>
+
+            <!-- Pulsanti nav nascosti (compatibilità codice) -->
+            <StackPanel Visibility="Collapsed">
+                <Button x:Name="NavRete"         Tag="0"  Click="Nav_Click"/>
+                <Button x:Name="NavCert"         Tag="1"  Click="Nav_Click"/>
+                <Button x:Name="NavApp"          Tag="2"  Click="Nav_Click"/>
+                <Button x:Name="NavOpsi"         Tag="3"  Click="Nav_Click"/>
+                <Button x:Name="NavPc"           Tag="4"  Click="Nav_Click"/>
+                <Button x:Name="NavDeploy"       Tag="5"  Click="Nav_Click"/>
+                <Button x:Name="NavWorkflow"     Tag="6"  Click="Nav_Click"/>
+                <Button x:Name="NavRichieste"    Tag="7"  Click="Nav_Click"/>
+                <Button x:Name="NavSccm"         Tag="8"  Click="Nav_Click"/>
+                <Button x:Name="NavImpostazioni" Tag="9"  Click="Nav_Click"/>
+                <Button x:Name="NavAbout"        Tag="10" Click="Nav_Click"/>
+            </StackPanel>
+        </Grid>
 
         <!-- ═══ TABS (headers nascosti, controllati dalla sidebar) ═══ -->
         <TabControl Background="#F4F6FA" BorderThickness="0"
@@ -286,6 +545,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
@@ -307,6 +567,12 @@
                                     ToolTip="Scansiona tutte le subnet configurate nelle Impostazioni"/>
                             <Button Content="⏹  Stop" Style="{StaticResource BtnRed}"
                                     x:Name="BtnStop" Click="BtnStop_Click" IsEnabled="False"/>
+                            <Button x:Name="BtnToggleMap" Content="🗺  Mappa" Style="{StaticResource BtnBlue}"
+                                    Click="BtnToggleMap_Click" Margin="16,0,0,0"
+                                    ToolTip="Vista mappa rete visuale"/>
+                            <Button x:Name="BtnToggleHeatmap" Content="⬛  Heatmap" Style="{StaticResource BtnBlue}"
+                                    Click="BtnToggleHeatmap_Click"
+                                    ToolTip="Vista heatmap — tutti i 254 IP della subnet colorati per stato"/>
                         </StackPanel>
                         <ProgressBar x:Name="ScanProgress" Height="4" Margin="0,8,0,0"
                                      Background="#DBEAFE" Foreground="#2563eb"
@@ -343,9 +609,68 @@
                         </Border>
                     </StackPanel>
 
+                    <!-- Tabella device / Mappa -->
+                    <Grid Grid.Row="2">
+
+                    <!-- RADAR SCAN -->
+                    <Border x:Name="RadarPanel" Visibility="Collapsed"
+                            Background="#040810" CornerRadius="6" ClipToBounds="True">
+                        <Grid>
+                            <Viewbox Stretch="Uniform">
+                                <Canvas x:Name="RadarCanvas" Width="700" Height="480" Background="Transparent"/>
+                            </Viewbox>
+                            <TextBlock x:Name="TxtRadarStatus" HorizontalAlignment="Center"
+                                       VerticalAlignment="Bottom" Margin="0,0,0,8"
+                                       FontFamily="Consolas" FontSize="11"
+                                       Foreground="#00dc50" Text="● SCANNING"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Mappa rete visuale -->
+                    <Border x:Name="MapPanel" Visibility="Collapsed"
+                            Background="#0a0f1e" CornerRadius="6" ClipToBounds="True">
+                        <Grid>
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                <Canvas x:Name="NetMapCanvas" Width="900" Height="600"
+                                        Background="Transparent" Margin="20"/>
+                            </ScrollViewer>
+                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12,8" Orientation="Horizontal">
+                                <Ellipse Width="10" Height="10" Fill="#10b981" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Online" Foreground="#64748b" FontSize="10" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                <Ellipse Width="10" Height="10" Fill="#ef4444" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Offline" Foreground="#64748b" FontSize="10" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                <Ellipse Width="10" Height="10" Fill="#f59e0b" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                                <TextBlock Text="Gateway" Foreground="#64748b" FontSize="10" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                    <!-- Heatmap subnet -->
+                    <Border x:Name="HeatmapPanel" Visibility="Collapsed"
+                            Background="#06080f" CornerRadius="6" ClipToBounds="True">
+                        <Grid>
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                                <Canvas x:Name="HeatmapCanvas" Width="900" Height="540"
+                                        Background="Transparent" Margin="16,12"/>
+                            </ScrollViewer>
+                            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top"
+                                        Margin="20,10" Orientation="Horizontal">
+                                <Rectangle Width="12" Height="12" Fill="#10b981" Margin="0,0,5,0"/>
+                                <TextBlock Text="Online" Foreground="#64748b" FontSize="10" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                <Rectangle Width="12" Height="12" Fill="#3b82f6" Margin="0,0,5,0"/>
+                                <TextBlock Text="Ha certificato" Foreground="#64748b" FontSize="10" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                <Rectangle Width="12" Height="12" Fill="#f59e0b" Margin="0,0,5,0"/>
+                                <TextBlock Text="Gateway" Foreground="#64748b" FontSize="10" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                                <Rectangle Width="12" Height="12" Fill="#1e2a40" Margin="0,0,5,0"/>
+                                <TextBlock Text="Offline / sconosciuto" Foreground="#64748b" FontSize="10" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
                     <!-- Tabella device -->
-                    <DataGrid Grid.Row="2" x:Name="NetGrid" SelectionMode="Extended"
+                    <DataGrid x:Name="NetGrid" SelectionMode="Extended"
                               MouseDoubleClick="NetGrid_DoubleClick"
+                              SelectionChanged="NetGrid_SelectionChanged"
                               ToolTip="Doppio click per dettagli e scansione porte">
                         <DataGrid.ContextMenu>
                             <ContextMenu>
@@ -368,9 +693,32 @@
                             <DataGridTextColumn Header="Stato"    Binding="{Binding Status}"         Width="80"/>
                         </DataGrid.Columns>
                     </DataGrid>
+                    </Grid>
+
+                    <!-- Live ping panel -->
+                    <Border x:Name="PingPanel" Grid.Row="3" Visibility="Collapsed"
+                            Background="#0a0f1e" CornerRadius="6" Margin="0,0,0,4" Height="130">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="120"/>
+                            </Grid.ColumnDefinitions>
+                            <Canvas x:Name="PingCanvas" Grid.Column="0" Margin="8,8,4,8"
+                                    ClipToBounds="True" Background="Transparent"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock x:Name="TxtPingHost" Text="—" Foreground="#60a5fa"
+                                           FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock x:Name="TxtPingLast" Text="— ms" Foreground="#10b981"
+                                           FontSize="22" FontWeight="Bold" Margin="0,4,0,0"/>
+                                <TextBlock x:Name="TxtPingAvg"  Text="avg: — ms" Foreground="#94a3b8" FontSize="10"/>
+                                <TextBlock x:Name="TxtPingMin"  Text="min: — ms" Foreground="#34d399" FontSize="10"/>
+                                <TextBlock x:Name="TxtPingMax"  Text="max: — ms" Foreground="#f87171" FontSize="10"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
 
                     <!-- Azioni -->
-                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,12">
+                    <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,10,0,12">
                         <Button Content="➕  Registra" Style="{StaticResource BtnGreen}"
                                 Click="BtnRegisterDevices_Click"
                                 ToolTip="Registra i device selezionati (via MAC) per App e OPSI"/>
@@ -478,7 +826,8 @@
                     </StackPanel>
 
                     <!-- Catalogo -->
-                    <ScrollViewer Grid.Row="2" Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
+                    <ScrollViewer Grid.Row="2" Margin="0,12,0,0" VerticalScrollBarVisibility="Auto"
+                                  PreviewMouseWheel="SvPanel_PreviewMouseWheel">
                         <StackPanel>
                             <TextBlock Text="Catalogo App" Foreground="#60a5fa" FontSize="12"
                                        FontWeight="SemiBold" Margin="0,0,0,8"/>
@@ -602,6 +951,24 @@
                         </Border>
                     </StackPanel>
 
+                    <!-- Gauge sistema locale -->
+                    <Border Grid.Row="1" Background="#06080f" CornerRadius="6"
+                            Margin="0,0,0,12" Padding="0,8" Height="110"
+                            VerticalAlignment="Bottom">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Canvas x:Name="GaugeCpu"  Grid.Column="0" ClipToBounds="True"/>
+                            <Canvas x:Name="GaugeRam"  Grid.Column="1" ClipToBounds="True"/>
+                            <Canvas x:Name="GaugeDisk" Grid.Column="2" ClipToBounds="True"/>
+                            <Canvas x:Name="GaugeNet"  Grid.Column="3" ClipToBounds="True"/>
+                        </Grid>
+                    </Border>
+
                     <DataGrid Grid.Row="2" x:Name="PcGrid">
                         <DataGrid.Columns>
                             <DataGridTextColumn Header=" "       Binding="{Binding Icon}"   Width="36"/>
@@ -640,7 +1007,8 @@
 
                     <!-- COLONNA SX: Form configurazione -->
                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"
-                                  Margin="16,12,12,12">
+                                  Margin="16,12,12,12"
+                                  PreviewMouseWheel="SvPanel_PreviewMouseWheel">
                         <StackPanel>
                             <TextBlock Text="💿  Crea installazione Windows automatica"
                                        Style="{StaticResource SectionLabel}"/>
@@ -917,14 +1285,15 @@
                     </Grid.RowDefinitions>
 
                     <!-- Toolbar -->
-                    <StackPanel Grid.Row="0" Orientation="Horizontal"
-                                Background="#EDF0F5" Margin="0">
-                        <Button Content="+ Nuovo Workflow"  Style="{StaticResource BtnGreen}"  Click="BtnWfNew_Click"/>
-                        <Button Content="✏️ Rinomina"        Style="{StaticResource BtnBlue}"   Click="BtnWfRename_Click"/>
-                        <Button Content="🗑 Elimina Workflow" Style="{StaticResource BtnRed}"    Click="BtnWfDelete_Click"/>
-                        <Separator Width="16" Background="Transparent"/>
-                        <Button Content="↻ Aggiorna"         Style="{StaticResource BtnBlue}"   Click="BtnWfRefresh_Click"/>
-                    </StackPanel>
+                    <Border Grid.Row="0" Background="#EDF0F5" Padding="8,6">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Content="+ Nuovo Workflow"   Style="{StaticResource BtnGreen}"  Click="BtnWfNew_Click"/>
+                            <Button Content="✏️ Rinomina"         Style="{StaticResource BtnBlue}"   Click="BtnWfRename_Click"/>
+                            <Button Content="🗑 Elimina"          Style="{StaticResource BtnRed}"    Click="BtnWfDelete_Click"/>
+                            <Separator Width="16" Background="Transparent"/>
+                            <Button Content="↻ Aggiorna"          Style="{StaticResource BtnBlue}"   Click="BtnWfRefresh_Click"/>
+                        </StackPanel>
+                    </Border>
 
                     <!-- Contenuto: lista workflow | step + assegnazioni -->
                     <Grid Grid.Row="1">
@@ -1085,7 +1454,7 @@
 
             <!-- ─── TAB RICHIESTE (CR) ─── -->
             <TabItem Header="📋  Richieste">
-                <Grid Margin="0">
+                <Grid Margin="0" Background="White">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="380"/>
                         <ColumnDefinition Width="*"/>
@@ -1093,37 +1462,38 @@
 
                     <!-- COLONNA SINISTRA: Form nuovo CR -->
                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"
-                                  Background="#F8F9FC" Padding="16,12,16,12">
+                                  Background="White" Padding="16,12,16,12"
+                                  PreviewMouseWheel="SvPanel_PreviewMouseWheel">
                         <StackPanel>
                             <TextBlock Text="📋  Nuova Richiesta (CR)" FontSize="14" FontWeight="Bold"
                                        Foreground="#1D4ED8" Margin="0,0,0,12"/>
 
                             <!-- PC -->
                             <TextBlock Text="🖥️  Nome PC" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox x:Name="TxtCrPcName" Margin="0,0,0,10"
+                            <TextBox x:Name="TxtCrPcName" Style="{StaticResource SettingsBox}"
                                      ToolTip="Es: PC-LAB-001 (maiuscolo automatico)"
                                      CharacterCasing="Upper"/>
 
                             <!-- Dominio -->
                             <TextBlock Text="🏢  Dominio" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox x:Name="TxtCrDomain" Margin="0,0,0,10" Text="test.local"/>
+                            <TextBox x:Name="TxtCrDomain" Style="{StaticResource SettingsBox}" Text="test.local"/>
 
                             <!-- OU -->
                             <TextBlock Text="📁  OU (Organizational Unit)" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox x:Name="TxtCrOu" Margin="0,0,0,10"
+                            <TextBox x:Name="TxtCrOu" Style="{StaticResource SettingsBox}"
                                      Text="CN=Computers,DC=test,DC=local"
                                      ToolTip="Es: OU=Lab,DC=test,DC=local"/>
 
                             <!-- IP DC -->
                             <TextBlock Text="🌐  IP Domain Controller" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox x:Name="TxtCrDcIp" Margin="0,0,0,10" Text="192.168.10.185"/>
+                            <TextBox x:Name="TxtCrDcIp" Style="{StaticResource SettingsBox}" Text="192.168.10.185"/>
 
                             <!-- Join credentials -->
                             <TextBlock Text="👤  Utente join AD" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox x:Name="TxtCrJoinUser" Margin="0,0,0,10" Text="join-account"/>
+                            <TextBox x:Name="TxtCrJoinUser" Style="{StaticResource SettingsBox}" Text="join-account"/>
 
                             <TextBlock Text="🔑  Password join AD" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <PasswordBox x:Name="TxtCrJoinPass" Margin="0,0,0,10"/>
+                            <PasswordBox x:Name="TxtCrJoinPass" Style="{StaticResource SettingsPass}"/>
 
                             <!-- ODJ Blob (djoin.exe) -->
                             <Border Background="#D0D5DC" Height="1" Margin="0,4,0,8"/>
@@ -1131,23 +1501,24 @@
                                        Foreground="#475569" FontSize="10"
                                        HorizontalAlignment="Center" Margin="0,0,0,6"/>
                             <TextBlock Text="🔑  ODJ Blob" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox x:Name="TxtCrOdjBlob" Margin="0,0,0,4" Height="65"
+                            <TextBox x:Name="TxtCrOdjBlob" Style="{StaticResource SettingsBox}" Height="65"
                                      AcceptsReturn="True" TextWrapping="Wrap"
                                      VerticalScrollBarVisibility="Auto"
                                      ToolTip="Incolla qui il base64 del file .djoin generato sul DC"
                                      FontFamily="Consolas" FontSize="10"/>
-                            <Button Content="📋  Copia comando djoin (da eseguire sul DC)"
+                            <Button Content="📋  Copia comando djoin"
                                     Style="{StaticResource BtnBlue}" FontSize="11"
+                                    HorizontalAlignment="Left"
                                     Margin="0,0,0,12"
                                     Click="BtnCrCopyDjoin_Click"/>
 
                             <!-- Password admin -->
                             <TextBlock Text="🔑  Password Administrator" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <PasswordBox x:Name="TxtCrAdminPass" Margin="0,0,0,10"/>
+                            <PasswordBox x:Name="TxtCrAdminPass" Style="{StaticResource SettingsPass}"/>
 
                             <!-- Utente assegnato -->
                             <TextBlock Text="👤  Utente assegnato (opzionale)" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox x:Name="TxtCrAssignedUser" Margin="0,0,0,10"/>
+                            <TextBox x:Name="TxtCrAssignedUser" Style="{StaticResource SettingsBox}"/>
 
                             <!-- Software -->
                             <TextBlock Text="📦  Software winget" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
@@ -1157,6 +1528,7 @@
                                     <ColumnDefinition Width="36"/>
                                 </Grid.ColumnDefinitions>
                                 <TextBox x:Name="TxtCrNewPackage" Grid.Column="0"
+                                         Style="{StaticResource SettingsBox}"
                                          ToolTip="Es: Mozilla.Firefox"
                                          KeyDown="TxtCrNewPackage_KeyDown"/>
                                 <Button Content="➕" Grid.Column="1" Margin="4,0,0,0"
@@ -1185,16 +1557,18 @@
 
                             <!-- Note -->
                             <TextBlock Text="📝  Note" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
-                            <TextBox x:Name="TxtCrNotes" Margin="0,0,0,16" Height="54"
+                            <TextBox x:Name="TxtCrNotes" Style="{StaticResource SettingsBox}" Height="54"
                                      AcceptsReturn="True" TextWrapping="Wrap"
                                      VerticalScrollBarVisibility="Auto"/>
 
                             <!-- Pulsanti -->
                             <Button x:Name="BtnCrCreate" Content="✅  Crea Richiesta"
                                     Style="{StaticResource BtnGreen}" Margin="0,0,0,6"
+                                    HorizontalAlignment="Left"
                                     Click="BtnCrCreate_Click"/>
                             <Button x:Name="BtnCrRefresh" Content="🔄  Aggiorna lista"
                                     Style="{StaticResource BtnBlue}" Margin="0,0,0,6"
+                                    HorizontalAlignment="Left"
                                     Click="BtnCrRefresh_Click"/>
                             <TextBlock x:Name="TxtCrStatus" Text="" Foreground="#1D4ED8"
                                        FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
@@ -1261,9 +1635,303 @@
                 </Grid>
             </TabItem>
 
+            <!-- ─── TAB SCCM ─── -->
+            <TabItem Header="🖥️  SCCM">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Barra connessione -->
+                    <Border Grid.Row="0" Background="#EDF0F5" BorderBrush="#C8D0DC"
+                            BorderThickness="0,0,0,1" Padding="12,8">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="Server:" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="#555555"/>
+                            <TextBox x:Name="TxtSccmServer" Width="180" Style="{StaticResource SettingsBox}" Text="192.168.10.199"/>
+                            <TextBlock Text="Utente:" VerticalAlignment="Center" Margin="10,0,6,0" Foreground="#555555"/>
+                            <TextBox x:Name="TxtSccmUser" Width="160" Style="{StaticResource SettingsBox}" Text="CORP\Administrator"/>
+                            <TextBlock Text="Password:" VerticalAlignment="Center" Margin="10,0,6,0" Foreground="#555555"/>
+                            <PasswordBox x:Name="TxtSccmPass" Width="130" Style="{StaticResource SettingsPass}"/>
+                            <Button Content="🔌  Connetti" Style="{StaticResource BtnBlue}" Margin="10,0,0,0"
+                                    Click="BtnSccmConnect_Click"/>
+                            <Button x:Name="BtnSccmRefresh" Content="🔄  Aggiorna" Style="{StaticResource BtnBlue}"
+                                    Margin="6,0,0,0" IsEnabled="False" Click="BtnSccmRefresh_Click"/>
+                            <TextBlock x:Name="TxtSccmConnStatus" VerticalAlignment="Center"
+                                       Margin="14,0,0,0" FontSize="11" Foreground="#555555"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Contenuto principale -->
+                    <Grid Grid.Row="1">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="210"/>
+                            <ColumnDefinition Width="5"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Navigazione sinistra -->
+                        <Border Grid.Column="0" Background="#F8F9FB"
+                                BorderBrush="#D0D5DC" BorderThickness="0,0,1,0">
+                            <TreeView x:Name="SccmNavTree" Background="Transparent"
+                                      BorderThickness="0" Padding="4,8"
+                                      SelectedItemChanged="SccmNavTree_SelectedItemChanged">
+                                <TreeViewItem Header="🖥️  Dispositivi"     Tag="devices"      IsSelected="True"/>
+                                <TreeViewItem Header="📋  Collezioni"      Tag="collections"/>
+                                <TreeViewItem Header="🚀  Task Sequences"  Tag="tasksequences"/>
+                                <TreeViewItem Header="📦  Applicazioni"    Tag="applications"/>
+                                <TreeViewItem Header="📡  Deployments"     Tag="deployments"/>
+                            </TreeView>
+                        </Border>
+
+                        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
+                                      Background="#D0D5DC" ShowsPreview="False"/>
+
+                        <!-- Area destra -->
+                        <Grid Grid.Column="2">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <!-- Toolbar azioni -->
+                            <Border Grid.Row="0" Background="#EDF0F5" Padding="8,6"
+                                    BorderBrush="#D0D5DC" BorderThickness="0,0,0,1">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="TxtSccmSection" VerticalAlignment="Center"
+                                               Foreground="#1D4ED8" FontWeight="SemiBold" FontSize="13"
+                                               Margin="0,0,16,0" Text="Dispositivi"/>
+                                    <Button x:Name="BtnSccmClientAction" Content="⚡  Azione client"
+                                            Style="{StaticResource BtnBlue}" IsEnabled="False"
+                                            Click="BtnSccmClientAction_Click"/>
+                                    <Button x:Name="BtnSccmDeploy" Content="🚀  Deploy"
+                                            Style="{StaticResource BtnGreen}" Margin="6,0,0,0"
+                                            IsEnabled="False" Click="BtnSccmDeploy_Click"/>
+                                    <Button x:Name="BtnSccmRunTs" Content="▶  Avvia TS"
+                                            Style="{StaticResource BtnAmber}" Margin="6,0,0,0"
+                                            IsEnabled="False" Click="BtnSccmRunTs_Click"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- DataGrid risultati -->
+                            <DataGrid x:Name="SccmGrid" Grid.Row="1"
+                                      AutoGenerateColumns="False" IsReadOnly="True"
+                                      CanUserResizeRows="False" RowHeight="32"
+                                      BorderThickness="0" GridLinesVisibility="Horizontal"
+                                      FontSize="12" SelectionChanged="SccmGrid_SelectionChanged">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Nome"           Binding="{Binding Name}"        Width="200"/>
+                                    <DataGridTextColumn Header="Tipo / Versione" Binding="{Binding Type}"       Width="140"/>
+                                    <DataGridTextColumn Header="Stato"          Binding="{Binding Status}"      Width="100"/>
+                                    <DataGridTextColumn Header="Ultimo contatto" Binding="{Binding LastContact}" Width="160"/>
+                                    <DataGridTextColumn Header="Info"           Binding="{Binding Info}"        Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+
+                            <!-- Barra stato -->
+                            <Border Grid.Row="2" Background="#EDF0F5" BorderBrush="#D0D5DC"
+                                    BorderThickness="0,1,0,0" Padding="8,4">
+                                <TextBlock x:Name="TxtSccmStatus" FontSize="11" Foreground="#555555"
+                                           Text="Non connesso — inserisci le credenziali e premi Connetti"/>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB IMPOSTAZIONI ─── -->
+            <!-- ─── TAB WIKI ─── -->
+            <TabItem Header="📖  Wiki">
+                <Grid Margin="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="200"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Nav sinistra -->
+                    <Border Grid.Column="0" Background="#0a0f1e" BorderBrush="#1e3a5f"
+                            BorderThickness="0,0,1,0">
+                        <StackPanel>
+                            <TextBlock Text="📖  Documentazione" Foreground="#60a5fa"
+                                       FontWeight="SemiBold" FontSize="11"
+                                       Margin="12,14,12,10" TextWrapping="Wrap"/>
+                            <ListBox x:Name="WikiNavList"
+                                     Background="Transparent" BorderThickness="0"
+                                     SelectionChanged="WikiNavList_SelectionChanged"
+                                     Foreground="#94a3b8" FontSize="12">
+                                <ListBoxItem Tag="overview"     Content="🏠  Panoramica"/>
+                                <ListBoxItem Tag="scan"         Content="📡  Scansione Rete"/>
+                                <ListBoxItem Tag="certs"        Content="🔐  Certificati EAP-TLS"/>
+                                <ListBoxItem Tag="deploy"       Content="💿  Deploy Windows"/>
+                                <ListBoxItem Tag="workflow"     Content="⚙️  Workflow"/>
+                                <ListBoxItem Tag="pc"           Content="🖥️  Fleet PC"/>
+                                <ListBoxItem Tag="opsi"         Content="📦  OPSI Software"/>
+                                <ListBoxItem Tag="sccm"         Content="🏢  SCCM / OSD"/>
+                                <ListBoxItem Tag="cr"           Content="📋  Change Requests"/>
+                                <ListBoxItem Tag="faq"          Content="❓  FAQ"/>
+                            </ListBox>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Contenuto destra -->
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                                  PreviewMouseWheel="SvPanel_PreviewMouseWheel"
+                                  Background="#F8FAFC">
+                        <StackPanel x:Name="WikiContent" Margin="32,24,32,24"/>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
+            <!-- ─── TAB ABOUT ─── -->
+            <TabItem Header="ℹ️  About">
+                <Grid>
+                    <!-- Matrix rain canvas (sfondo) -->
+                    <Canvas x:Name="MatrixCanvas" Background="#06080f" ClipToBounds="True"/>
+
+                    <!-- Contenuto About (sopra il matrix) -->
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
+                                  Background="Transparent"
+                                  PreviewMouseWheel="SvPanel_PreviewMouseWheel">
+                    <StackPanel Margin="40,24,40,24">
+
+                        <!-- Titolo -->
+                        <TextBlock Text="NovaSCM" FontSize="36" FontWeight="Bold" Foreground="#60a5fa"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="Open Source Fleet &amp; Network Manager"
+                                   FontSize="14" Foreground="#94a3b8" Margin="0,4,0,20"
+                                   TextWrapping="Wrap"/>
+
+                        <!-- Autore -->
+                        <TextBlock Text="Developed by" Foreground="#64748b" FontSize="12" TextWrapping="Wrap"/>
+                        <TextBlock Text="Claudio Becchis" FontSize="22" FontWeight="SemiBold"
+                                   Foreground="#e2e8f0" Margin="0,2,0,6" TextWrapping="Wrap"/>
+                        <TextBlock Text="Powered by" Foreground="#64748b" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
+                        <TextBlock Text="PolarisCore.it" FontSize="16" FontWeight="SemiBold"
+                                   Foreground="#60a5fa" Margin="0,2,0,20" TextWrapping="Wrap"/>
+
+                        <!-- Funzionalità -->
+                        <TextBlock Text="📋  Funzionalità" Foreground="#60a5fa"
+                                   FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <Border Background="#0d1b3e90" BorderBrush="#1e3a5f" BorderThickness="1"
+                                CornerRadius="6" Padding="16,12" Margin="0,0,0,16">
+                            <TextBlock Foreground="#94a3b8" FontSize="12" LineHeight="22"
+                                       TextWrapping="Wrap">
+                                <TextBlock.Text>•  Scansione rete — IP, MAC, Vendor, Tipo device
+•  Scansione porte aperte per ogni device
+•  Connessione RDP e SSH one-click
+•  Gestione certificati WiFi EAP-TLS
+•  Registrazione device via MAC
+•  Deploy Windows unattended con autounattend.xml
+•  Task Sequence Debugger (stile SCCM)
+•  Completamente configurabile da GUI</TextBlock.Text>
+                            </TextBlock>
+                        </Border>
+
+                        <!-- Licenza -->
+                        <TextBlock Text="📄  Licenza" Foreground="#60a5fa"
+                                   FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <Border Background="#0d1b3e90" BorderBrush="#1e3a5f" BorderThickness="1"
+                                CornerRadius="6" Padding="16,12" Margin="0,0,0,20">
+                            <StackPanel>
+                                <TextBlock Foreground="#94a3b8" FontSize="12" LineHeight="22"
+                                           TextWrapping="Wrap">
+                                    <TextBlock.Text>MIT License — Software libero e open source
+Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autore originale.</TextBlock.Text>
+                                </TextBlock>
+                                <TextBlock Margin="0,10,0,0" Foreground="#64748b" FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Text="© 2026 Claudio Becchis — PolarisCore.it"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Supporta il progetto -->
+                        <TextBlock Text="☕  Supporta il progetto" Foreground="#f59e0b"
+                                   FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
+                        <Border Background="#0d1b3e90" BorderBrush="#f59e0b40" BorderThickness="1"
+                                CornerRadius="6" Padding="16,14" Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Foreground="#fbbf24" FontSize="14" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" Margin="0,0,0,6"
+                                           Text="NovaSCM è e resterà sempre gratuito."/>
+                                <TextBlock Foreground="#94a3b8" FontSize="12" LineHeight="20"
+                                           TextWrapping="Wrap"
+                                           Text="Ho sviluppato questo strumento nel tempo libero per automatizzare la gestione della mia rete di casa — e ho deciso di condividerlo con tutti.&#10;Se ti fa risparmiare tempo, se ti ha risolto un problema o semplicemente ti piace il progetto, considera di offrirmi un caffè: mi aiuta a continuare a migliorarlo!"/>
+                                <TextBlock Foreground="#64748b" FontSize="11" Margin="0,8,0,0"
+                                           TextWrapping="Wrap"
+                                           Text="Anche 1€ fa la differenza. Grazie davvero. 🙏"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                    <Button Content="☕  Offrimi un caffè — Ko-fi" Padding="14,8" Margin="0,0,10,0"
+                                            Background="#FF5E5B" BorderBrush="#E04040" Foreground="White"
+                                            FontWeight="SemiBold" Cursor="Hand"
+                                            Click="BtnKofi_Click"/>
+                                    <Button Content="💛  Sponsor su GitHub" Padding="14,8" Margin="0,0,10,0"
+                                            Background="#db61a2" BorderBrush="#c0498e" Foreground="White"
+                                            FontWeight="SemiBold" Cursor="Hand"
+                                            Click="BtnGitHubSponsor_Click"/>
+                                    <Button Content="🅿  PayPal" Padding="14,8"
+                                            Background="#003087" BorderBrush="#0070ba" Foreground="White"
+                                            FontWeight="SemiBold" Cursor="Hand"
+                                            Click="BtnPayPal_Click"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Pulsanti -->
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="🌐  PolarisCore.it" Padding="14,7" Margin="0,0,10,0"
+                                    Style="{StaticResource BtnBlue}"
+                                    Click="BtnOpenWebsite_Click"/>
+                            <Button Content="📁  GitHub" Padding="14,7" Margin="0,0,10,0"
+                                    Style="{StaticResource BtnBlue}"
+                                    Click="BtnOpenGitHub_Click"/>
+                            <Button Content="🔄  Controlla aggiornamenti" Padding="14,7"
+                                    Style="{StaticResource BtnGreen}"
+                                    Click="BtnCheckUpdate_Click"/>
+                        </StackPanel>
+
+                        <!-- Demo stili GUI -->
+                        <TextBlock Text="🎨  Demo Stili GUI" Foreground="#60a5fa"
+                                   FontWeight="SemiBold" FontSize="13" Margin="0,16,0,8" TextWrapping="Wrap"/>
+                        <TextBlock Text="Confronta i tre stili visivi per scegliere il design finale di NovaSCM."
+                                   Foreground="#94a3b8" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <Button Content="🏢  SCCM Console Style" Padding="14,8" Margin="0,0,10,0"
+                                    Background="#1F3864" BorderBrush="#2B579A" Foreground="White"
+                                    Click="BtnDemoSCCM_Click"/>
+                            <Button Content="🔵  Advanced Installer Style" Padding="14,8" Margin="0,0,10,0"
+                                    Background="#073682" BorderBrush="#0A78C9" Foreground="White"
+                                    Click="BtnDemoAI_Click"/>
+                            <Button Content="📦  MSIX Packaging Tool Style" Padding="14,8" Margin="0,0,10,0"
+                                    Background="#0078D4" BorderBrush="#005A9E" Foreground="White"
+                                    Click="BtnDemoMSIX_Click"/>
+                            <Button Content="✨  Ibrido (SCCM + Advanced Installer)" Padding="14,8"
+                                    Background="#073682" BorderBrush="#0A78C9" Foreground="#A8D0F0"
+                                    Click="BtnDemoHybrid_Click"/>
+                        </StackPanel>
+                        <TextBlock x:Name="TxtUpdateStatus" FontSize="12" Margin="0,0,0,16"
+                                   TextWrapping="Wrap" Foreground="#475569"/>
+
+                        <!-- Versione -->
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock x:Name="TxtAboutVersion" Foreground="#94a3b8" FontSize="12"
+                                       VerticalAlignment="Center"/>
+                            <Border Background="#052e16" CornerRadius="4" Padding="8,3">
+                                <TextBlock Text="STABLE" Foreground="#4ade80"
+                                           FontSize="10" FontWeight="Bold"/>
+                            </Border>
+                        </StackPanel>
+
+                    </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabItem>
+
             <!-- ─── TAB IMPOSTAZIONI ─── -->
             <TabItem Header="⚙️  Impostazioni">
-                <ScrollViewer Margin="20,12,20,12" VerticalScrollBarVisibility="Auto">
+                <ScrollViewer Margin="20,12,20,12" VerticalScrollBarVisibility="Auto"
+                              PreviewMouseWheel="SvPanel_PreviewMouseWheel">
                     <StackPanel MaxWidth="560" HorizontalAlignment="Left">
 
                         <TextBlock Text="⚙️  Configurazione server" Style="{StaticResource SectionLabel}"/>
@@ -1361,112 +2029,36 @@
                 </ScrollViewer>
             </TabItem>
 
-            <!-- ─── TAB ABOUT ─── -->
-            <TabItem Header="ℹ️  About">
-                <ScrollViewer VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled">
-                    <StackPanel Margin="40,24,40,24">
-
-                        <!-- Titolo -->
-                        <TextBlock Text="NovaSCM" FontSize="36" FontWeight="Bold" Foreground="#60a5fa"
-                                   TextWrapping="Wrap"/>
-                        <TextBlock Text="Open Source Fleet &amp; Network Manager"
-                                   FontSize="14" Foreground="#64748b" Margin="0,4,0,20"
-                                   TextWrapping="Wrap"/>
-
-                        <!-- Autore -->
-                        <TextBlock Text="Developed by" Foreground="#475569" FontSize="12" TextWrapping="Wrap"/>
-                        <TextBlock Text="Claudio Becchis" FontSize="22" FontWeight="SemiBold"
-                                   Foreground="#1a1a1a" Margin="0,2,0,6" TextWrapping="Wrap"/>
-                        <TextBlock Text="Powered by" Foreground="#475569" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
-                        <TextBlock Text="PolarisCore.it" FontSize="16" FontWeight="SemiBold"
-                                   Foreground="#60a5fa" Margin="0,2,0,20" TextWrapping="Wrap"/>
-
-                        <!-- Funzionalità -->
-                        <TextBlock Text="📋  Funzionalità" Foreground="#60a5fa"
-                                   FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
-                        <Border Background="#F0F4FF" BorderBrush="#C5D0E8" BorderThickness="1"
-                                CornerRadius="6" Padding="16,12" Margin="0,0,0,16">
-                            <TextBlock Foreground="#334155" FontSize="12" LineHeight="22"
-                                       TextWrapping="Wrap">
-                                <TextBlock.Text>•  Scansione rete — IP, MAC, Vendor, Tipo device
-•  Scansione porte aperte per ogni device
-•  Connessione RDP e SSH one-click
-•  Gestione certificati WiFi EAP-TLS
-•  Registrazione device via MAC
-•  Deploy Windows unattended con autounattend.xml
-•  Task Sequence Debugger (stile SCCM)
-•  Completamente configurabile da GUI</TextBlock.Text>
-                            </TextBlock>
-                        </Border>
-
-                        <!-- Licenza -->
-                        <TextBlock Text="📄  Licenza" Foreground="#60a5fa"
-                                   FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
-                        <Border Background="#F0F4FF" BorderBrush="#C5D0E8" BorderThickness="1"
-                                CornerRadius="6" Padding="16,12" Margin="0,0,0,20">
-                            <StackPanel>
-                                <TextBlock Foreground="#334155" FontSize="12" LineHeight="22"
-                                           TextWrapping="Wrap">
-                                    <TextBlock.Text>MIT License — Software libero e open source
-Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autore originale.</TextBlock.Text>
-                                </TextBlock>
-                                <TextBlock Margin="0,10,0,0" Foreground="#475569" FontSize="11"
-                                           TextWrapping="Wrap"
-                                           Text="© 2026 Claudio Becchis — PolarisCore.it"/>
-                            </StackPanel>
-                        </Border>
-
-                        <!-- Pulsanti -->
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Button Content="🌐  PolarisCore.it" Padding="14,7" Margin="0,0,10,0"
-                                    Style="{StaticResource BtnBlue}"
-                                    Click="BtnOpenWebsite_Click"/>
-                            <Button Content="📁  GitHub" Padding="14,7" Margin="0,0,10,0"
-                                    Style="{StaticResource BtnBlue}"
-                                    Click="BtnOpenGitHub_Click"/>
-                            <Button Content="🔄  Controlla aggiornamenti" Padding="14,7"
-                                    Style="{StaticResource BtnGreen}"
-                                    Click="BtnCheckUpdate_Click"/>
-                        </StackPanel>
-
-                        <!-- Demo stili GUI -->
-                        <TextBlock Text="🎨  Demo Stili GUI" Foreground="#60a5fa"
-                                   FontWeight="SemiBold" FontSize="13" Margin="0,16,0,8" TextWrapping="Wrap"/>
-                        <TextBlock Text="Confronta i tre stili visivi per scegliere il design finale di NovaSCM."
-                                   Foreground="#475569" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Button Content="🏢  SCCM Console Style" Padding="14,8" Margin="0,0,10,0"
-                                    Background="#1F3864" BorderBrush="#2B579A" Foreground="White"
-                                    Click="BtnDemoSCCM_Click"/>
-                            <Button Content="🔵  Advanced Installer Style" Padding="14,8" Margin="0,0,10,0"
-                                    Background="#073682" BorderBrush="#0A78C9" Foreground="White"
-                                    Click="BtnDemoAI_Click"/>
-                            <Button Content="📦  MSIX Packaging Tool Style" Padding="14,8" Margin="0,0,10,0"
-                                    Background="#0078D4" BorderBrush="#005A9E" Foreground="White"
-                                    Click="BtnDemoMSIX_Click"/>
-                            <Button Content="✨  Ibrido (SCCM + Advanced Installer)" Padding="14,8"
-                                    Background="#073682" BorderBrush="#0A78C9" Foreground="#A8D0F0"
-                                    Click="BtnDemoHybrid_Click"/>
-                        </StackPanel>
-                        <TextBlock x:Name="TxtUpdateStatus" FontSize="12" Margin="0,0,0,16"
-                                   TextWrapping="Wrap" Foreground="#475569"/>
-
-                        <!-- Versione -->
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock x:Name="TxtAboutVersion" Foreground="#334155" FontSize="12"
-                                       VerticalAlignment="Center"/>
-                            <Border Background="#D1FAE5" CornerRadius="4" Padding="8,3">
-                                <TextBlock Text="STABLE" Foreground="#065F46"
-                                           FontSize="10" FontWeight="Bold"/>
-                            </Border>
-                        </StackPanel>
-
-                    </StackPanel>
-                </ScrollViewer>
-            </TabItem>
-
         </TabControl>
 
     </DockPanel>
+
+    <!-- ═══ KONAMI CODE OVERLAY ═══ -->
+    <Grid x:Name="KonamiOverlay" Visibility="Collapsed" Panel.ZIndex="9999"
+          Background="#E0000000">
+        <Canvas x:Name="KonamiCanvas" ClipToBounds="True"/>
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+            <TextBlock x:Name="TxtKonamiGlitch"
+                       Text="↑↑↓↓←→←→BA"
+                       FontFamily="Consolas" FontSize="13" Foreground="#1a5c1a"
+                       HorizontalAlignment="Center" Margin="0,0,0,12" Opacity="0.7"/>
+            <Border Background="#041a04" BorderBrush="#00ff41" BorderThickness="2"
+                    CornerRadius="4" Padding="40,20">
+                <StackPanel>
+                    <TextBlock Text="🔓  CHEAT CODE ATTIVATO"
+                               FontFamily="Consolas" FontSize="28" FontWeight="Bold"
+                               Foreground="#00ff41" HorizontalAlignment="Center">
+                        <TextBlock.Effect>
+                            <DropShadowEffect Color="#00ff41" BlurRadius="20" ShadowDepth="0" Opacity="0.9"/>
+                        </TextBlock.Effect>
+                    </TextBlock>
+                    <TextBlock x:Name="TxtKonamiSub" Margin="0,10,0,0"
+                               FontFamily="Consolas" FontSize="14"
+                               Foreground="#4ade80" HorizontalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Grid>
+
+    </Grid>
 </Window>

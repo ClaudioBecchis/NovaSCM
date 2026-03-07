@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="NovaSCM — Gestisci la tua rete come un professionista. Scansione rete, certificati WiFi EAP-TLS, deploy Windows zero-touch, workflow e fleet management. Gratuito e open source.">
+    <meta name="keywords" content="NovaSCM, network manager, fleet management, Windows deploy, EAP-TLS, SCCM, open source, homelab">
+    <meta property="og:title" content="NovaSCM — Open Source Fleet & Network Manager">
+    <meta property="og:description" content="Gestisci la tua rete come un professionista. Gratuito, open source, per Windows.">
+    <meta property="og:url" content="https://polariscore.it/novascm">
+    <title>NovaSCM — Open Source Fleet & Network Manager</title>
+    <style>
+        :root {
+            --navy: #0d1b3e;
+            --blue: #3b82f6;
+            --green: #10b981;
+            --amber: #f59e0b;
+            --text: #1e293b;
+            --muted: #64748b;
+            --bg: #f8fafc;
+            --card: #ffffff;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+        /* HERO */
+        .hero {
+            background: linear-gradient(135deg, #0a0f1e 0%, #0d1b3e 50%, #1e3a5f 100%);
+            color: white; text-align: center; padding: 80px 20px 60px;
+        }
+        .hero .badge {
+            display: inline-block; background: #10b98133; border: 1px solid #10b981;
+            color: #4ade80; padding: 4px 14px; border-radius: 20px; font-size: 13px;
+            margin-bottom: 20px; font-weight: 600;
+        }
+        .hero h1 { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 800; margin-bottom: 16px; }
+        .hero h1 span { color: #60a5fa; }
+        .hero p { font-size: 1.2rem; color: #94a3b8; max-width: 600px; margin: 0 auto 36px; }
+        .hero-btns { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+        .btn { padding: 14px 28px; border-radius: 6px; font-weight: 700; font-size: 15px; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; transition: transform .15s, box-shadow .15s; }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.3); }
+        .btn-green { background: #052e16; border: 2px solid #16a34a; color: #4ade80; }
+        .btn-blue  { background: #1e3a5f; border: 2px solid #3b82f6; color: #93c5fd; }
+        .btn-ghost { background: transparent; border: 2px solid #334155; color: #94a3b8; }
+
+        /* FEATURES */
+        .section { padding: 60px 20px; max-width: 1100px; margin: 0 auto; }
+        .section-title { text-align: center; font-size: 2rem; font-weight: 800; margin-bottom: 8px; }
+        .section-sub { text-align: center; color: var(--muted); margin-bottom: 40px; }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+        .feature-card {
+            background: var(--card); border: 1px solid #e2e8f0; border-radius: 10px;
+            padding: 24px; transition: box-shadow .2s, border-color .2s;
+        }
+        .feature-card:hover { box-shadow: 0 8px 32px rgba(59,130,246,.1); border-color: #93c5fd; }
+        .feature-icon { font-size: 2rem; margin-bottom: 12px; }
+        .feature-card h3 { font-size: 1.1rem; font-weight: 700; margin-bottom: 8px; }
+        .feature-card p { color: var(--muted); font-size: 14px; }
+
+        /* STATS BAR */
+        .stats-bar {
+            background: var(--navy); color: white;
+            display: flex; justify-content: center; gap: 60px; flex-wrap: wrap;
+            padding: 32px 20px;
+        }
+        .stat { text-align: center; }
+        .stat-num { font-size: 2.5rem; font-weight: 800; color: #60a5fa; }
+        .stat-lbl { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+
+        /* SCREENSHOT PLACEHOLDER */
+        .screenshot {
+            background: linear-gradient(135deg, #0a0f1e, #0d1b3e);
+            border-radius: 12px; padding: 60px 20px;
+            text-align: center; color: #475569;
+            border: 1px solid #1e3a5f; margin: 40px 0;
+            font-family: 'Courier New', monospace; font-size: 14px;
+        }
+
+        /* INSTALL */
+        .install-section { background: #f1f5f9; padding: 60px 20px; }
+        .install-box { max-width: 700px; margin: 0 auto; }
+        .code-block {
+            background: #0f172a; border-radius: 8px; padding: 20px 24px;
+            font-family: 'Courier New', monospace; font-size: 14px;
+            color: #4ade80; margin: 16px 0; overflow-x: auto;
+        }
+        .code-block .comment { color: #475569; }
+
+        /* DONATE */
+        .donate-section { background: var(--navy); color: white; text-align: center; padding: 60px 20px; }
+        .donate-section h2 { font-size: 2rem; margin-bottom: 12px; }
+        .donate-section p { color: #94a3b8; max-width: 500px; margin: 0 auto 32px; }
+        .donate-btns { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+        .btn-kofi  { background: #FF5E5B; border: none; color: white; }
+        .btn-gh    { background: #db61a2; border: none; color: white; }
+        .btn-pp    { background: #003087; border: 2px solid #0070ba; color: white; }
+
+        /* FOOTER */
+        footer { background: #020617; color: #475569; text-align: center; padding: 24px; font-size: 13px; }
+        footer a { color: #3b82f6; text-decoration: none; }
+    </style>
+</head>
+<body>
+
+<!-- HERO -->
+<section class="hero">
+    <div class="badge">✨ Open Source · Gratuito · MIT License</div>
+    <h1>Nova<span>SCM</span></h1>
+    <p>Gestisci la tua rete come un professionista.<br>Scansione, certificati WiFi, deploy Windows, workflow e molto altro.</p>
+    <div class="hero-btns">
+        <a href="https://github.com/claudiobecchis/NovaSCM/releases" class="btn btn-green">⬇️ Download</a>
+        <a href="https://github.com/claudiobecchis/NovaSCM" class="btn btn-blue">📁 GitHub</a>
+        <a href="https://github.com/claudiobecchis/NovaSCM/wiki" class="btn btn-ghost">📖 Documentazione</a>
+    </div>
+</section>
+
+<!-- STATS -->
+<div class="stats-bar">
+    <div class="stat"><div class="stat-num">12+</div><div class="stat-lbl">Funzionalità</div></div>
+    <div class="stat"><div class="stat-num">100%</div><div class="stat-lbl">Gratuito</div></div>
+    <div class="stat"><div class="stat-num">0</div><div class="stat-lbl">Account richiesti</div></div>
+    <div class="stat"><div class="stat-num">MIT</div><div class="stat-lbl">Licenza</div></div>
+</div>
+
+<!-- FEATURES -->
+<section class="section">
+    <h2 class="section-title">Tutto quello che ti serve</h2>
+    <p class="section-sub">Da homelab a infrastruttura aziendale — NovaSCM si adatta alle tue esigenze.</p>
+    <div class="features-grid">
+        <div class="feature-card">
+            <div class="feature-icon">📡</div>
+            <h3>Scansione rete avanzata</h3>
+            <p>Scopre automaticamente tutti i device — IP, MAC, vendor, tipo, porte. Vista tabella, mappa hub-and-spoke e heatmap subnet.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🔐</div>
+            <h3>WiFi EAP-TLS enterprise</h3>
+            <p>Genera e distribuisce certificati per autenticazione WiFi WPA2-Enterprise. Enrollment automatico su PC Windows con un comando.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">💿</div>
+            <h3>Deploy Windows zero-touch</h3>
+            <p>Genera autounattend.xml + postinstall.ps1. Installa Windows 11 senza premere un tasto — USB o PXE.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">⚙️</div>
+            <h3>Workflow automation</h3>
+            <p>Sequenze di step automatizzati eseguiti sui PC remoti. Simile alle Task Sequence SCCM ma senza l'infrastruttura SCCM.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🖥️</div>
+            <h3>Fleet PC management</h3>
+            <p>Inventario hardware/software via WMI, RDP one-click, gauge risorse in tempo reale (CPU/RAM/disco/rete).</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📋</div>
+            <h3>Change Requests</h3>
+            <p>Traccia il ciclo di vita dei PC dal provisioning alla consegna. Funziona offline con sync automatica.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">📖</div>
+            <h3>Wiki integrata</h3>
+            <p>Documentazione completa direttamente nell'app — nessun browser necessario per trovare le istruzioni.</p>
+        </div>
+        <div class="feature-card">
+            <div class="feature-icon">🏢</div>
+            <h3>Integrazione SCCM</h3>
+            <p>Visualizzatore Task Sequence, monitoraggio OSD, compatibile con Microsoft Endpoint Configuration Manager.</p>
+        </div>
+    </div>
+</section>
+
+<!-- INSTALL -->
+<section class="install-section">
+    <div class="install-box">
+        <h2 style="text-align:center; font-size:1.8rem; margin-bottom:8px;">Inizia subito</h2>
+        <p style="text-align:center; color:#64748b; margin-bottom:24px;">Pronto in 60 secondi. Nessuna configurazione obbligatoria.</p>
+        <div class="code-block">
+            <span class="comment"># Scarica e avvia — richiede .NET 9.0</span><br>
+            git clone https://github.com/claudiobecchis/NovaSCM<br>
+            cd NovaSCM &amp;&amp; dotnet run
+        </div>
+        <p style="text-align:center; color:#64748b; font-size:14px; margin-top:12px;">
+            Oppure scarica direttamente l'<a href="https://github.com/claudiobecchis/NovaSCM/releases" style="color:#3b82f6">eseguibile precompilato →</a>
+        </p>
+    </div>
+</section>
+
+<!-- DONATE -->
+<section class="donate-section">
+    <h2>☕ Supporta il progetto</h2>
+    <p>NovaSCM è gratuito e lo resterà sempre. Se ti fa risparmiare tempo, considera una donazione — anche 1€ fa la differenza!</p>
+    <div class="donate-btns">
+        <a href="https://ko-fi.com/polariscore" class="btn btn-kofi">☕ Ko-fi</a>
+        <a href="https://github.com/sponsors/claudiobecchis" class="btn btn-gh">💛 GitHub Sponsors</a>
+        <a href="https://paypal.me/CBECCHIS" class="btn btn-pp">🅿 PayPal</a>
+    </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+    <p>© 2026 <a href="https://polariscore.it">Claudio Becchis</a> — PolarisCore.it &nbsp;·&nbsp;
+    <a href="https://github.com/claudiobecchis/NovaSCM">GitHub</a> &nbsp;·&nbsp;
+    MIT License</p>
+</footer>
+
+</body>
+</html>
