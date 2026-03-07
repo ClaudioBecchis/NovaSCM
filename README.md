@@ -106,10 +106,16 @@ Creates 3 workflows, 6 demo machines and 4 assignments in different states (comp
 
 ### 3. Run the console
 
-Download `NovaSCM.exe` from [Releases](../../releases) and run it.
+Download **`NovaSCM.exe`** from [Releases](../../releases) and run it on your **Windows admin PC**.
 Go to **Settings → NovaSCM API URL** and enter `http://<server-ip>:9091`.
 
-### 4. (Optional) Deploy the agent
+> This is the management console — you run it once on your PC to control everything.
+
+### 4. Deploy the agent on target machines
+
+Download **`NovaSCMAgent.exe`** from [Releases](../../releases) and install it on each **PC you want to manage**.
+
+Or install it automatically via script:
 
 On a Windows target machine (admin PowerShell):
 ```powershell
@@ -120,6 +126,8 @@ On Linux:
 ```bash
 curl -s http://<server-ip>:9091/agent/install-linux.sh | bash
 ```
+
+> The agent runs silently in the background, polls the server for tasks and executes workflows.
 
 ---
 
