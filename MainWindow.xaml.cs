@@ -2537,7 +2537,7 @@ public partial class MainWindow : Window
 
     private void RibbonBtnImpostazioni_Click(object s, RoutedEventArgs e)
     {
-        MainTabs.SelectedIndex = 9;
+        MainTabs.SelectedIndex = MainTabs.Items.Count - 1; // sempre l'ultimo tab
         SwitchWorkspace("admin");
     }
 
@@ -3117,6 +3117,11 @@ public partial class MainWindow : Window
             StopMatrixRain();
             if (WikiNavList.SelectedItem == null && WikiNavList.Items.Count > 0)
                 WikiNavList.SelectedIndex = 0;
+        }
+        else if (header.Contains("Script"))
+        {
+            StopMatrixRain();
+            if (ScriptList.Items.Count == 0) InitScriptLibrary();
         }
         else
         {
@@ -5459,6 +5464,480 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
     {
         _trayIcon?.Dispose();
         base.OnClosed(e);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // SCRIPT LIBRARY
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private static readonly string ScriptDir =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                     "PolarisManager", "scripts");
+
+    private record ScriptItem(string Icon, string Name, string Description, string Code, bool BuiltIn = true);
+
+    private readonly List<ScriptItem> _scripts = [];
+
+    private void InitScriptLibrary()
+    {
+        _scripts.Clear();
+        _scripts.AddRange(new[]
+        {
+            new ScriptItem("🔍", "Info sistema",
+                "Informazioni complete su OS, hardware e uptime",
+                """
+                $os   = Get-CimInstance Win32_OperatingSystem
+                $cpu  = Get-CimInstance Win32_Processor | Select -First 1
+                $ram  = [math]::Round($os.TotalVisibleMemorySize/1MB, 1)
+                $free = [math]::Round($os.FreePhysicalMemory/1MB, 1)
+                $up   = (Get-Date) - $os.LastBootUpTime
+                Write-Host "=== SISTEMA ===" -ForegroundColor Cyan
+                Write-Host "OS:      $($os.Caption) $($os.OSArchitecture)"
+                Write-Host "Build:   $($os.BuildNumber)"
+                Write-Host "CPU:     $($cpu.Name)"
+                Write-Host "RAM:     $ram GB totali, $free GB liberi"
+                Write-Host "Uptime:  $($up.Days)g $($up.Hours)h $($up.Minutes)m"
+                Write-Host "Host:    $env:COMPUTERNAME"
+                Write-Host "Utente:  $env:USERNAME"
+                """),
+
+            new ScriptItem("💿", "Spazio disco",
+                "Mostra spazio libero su tutti i dischi",
+                """
+                Get-PSDrive -PSProvider FileSystem | Where {$_.Used -gt 0} | ForEach {
+                    $tot  = [math]::Round(($_.Used + $_.Free)/1GB, 1)
+                    $free = [math]::Round($_.Free/1GB, 1)
+                    $pct  = [math]::Round($_.Used / ($_.Used + $_.Free) * 100)
+                    $bar  = '#' * ($pct/5) + '-' * (20 - $pct/5)
+                    Write-Host "$($_.Name):\ [$bar] $pct% — $free GB liberi / $tot GB totali"
+                }
+                """),
+
+            new ScriptItem("🧹", "Pulizia file temporanei",
+                "Cancella file temp, cache Windows Update, Prefetch",
+                """
+                $paths = @("$env:TEMP", "$env:WINDIR\Temp", "$env:WINDIR\Prefetch",
+                           "$env:WINDIR\SoftwareDistribution\Download")
+                $total = 0
+                foreach ($p in $paths) {
+                    if (Test-Path $p) {
+                        $size = (Get-ChildItem $p -Recurse -ErrorAction SilentlyContinue |
+                                 Measure-Object -Property Length -Sum).Sum
+                        Remove-Item "$p\*" -Recurse -Force -ErrorAction SilentlyContinue
+                        $total += $size
+                        Write-Host "Pulito: $p ($([math]::Round($size/1MB, 1)) MB)"
+                    }
+                }
+                Write-Host "`n✅ Totale liberato: $([math]::Round($total/1MB, 1)) MB" -ForegroundColor Green
+                """),
+
+            new ScriptItem("🌐", "Diagnostica rete",
+                "IP, gateway, DNS, ping, route",
+                """
+                Write-Host "=== INTERFACCE ===" -ForegroundColor Cyan
+                Get-NetIPAddress -AddressFamily IPv4 | Where {$_.PrefixOrigin -ne 'WellKnown'} |
+                    Select InterfaceAlias, IPAddress, PrefixLength | Format-Table -AutoSize
+                Write-Host "=== GATEWAY ===" -ForegroundColor Cyan
+                Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Select NextHop, InterfaceAlias | Format-Table
+                Write-Host "=== DNS ===" -ForegroundColor Cyan
+                Get-DnsClientServerAddress -AddressFamily IPv4 | Where {$_.ServerAddresses} |
+                    Select InterfaceAlias, ServerAddresses | Format-Table -AutoSize
+                Write-Host "=== PING GATEWAY ===" -ForegroundColor Cyan
+                $gw = (Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Select -First 1).NextHop
+                Test-Connection $gw -Count 3 | Select Address, Latency | Format-Table
+                """),
+
+            new ScriptItem("⚡", "Flush DNS",
+                "Svuota cache DNS e mostra statistiche",
+                """
+                Write-Host "Cache DNS prima:" -ForegroundColor Yellow
+                $count = (Get-DnsClientCache | Measure-Object).Count
+                Write-Host "  $count record in cache"
+                Clear-DnsClientCache
+                Write-Host "✅ Cache DNS svuotata" -ForegroundColor Green
+                ipconfig /registerdns 2>$null
+                Write-Host "  DNS registrato"
+                """),
+
+            new ScriptItem("🔄", "Windows Update",
+                "Controlla aggiornamenti disponibili",
+                """
+                Write-Host "Controllo aggiornamenti Windows..." -ForegroundColor Cyan
+                $updates = (New-Object -ComObject Microsoft.Update.Session).CreateUpdateSearcher()
+                try {
+                    $res = $updates.Search("IsInstalled=0 and Type='Software'")
+                    if ($res.Updates.Count -eq 0) {
+                        Write-Host "✅ Nessun aggiornamento disponibile" -ForegroundColor Green
+                    } else {
+                        Write-Host "$($res.Updates.Count) aggiornamenti disponibili:" -ForegroundColor Yellow
+                        $res.Updates | ForEach { Write-Host "  - $($_.Title)" }
+                    }
+                } catch {
+                    Write-Host "Apertura Windows Update..." -ForegroundColor Yellow
+                    Start-Process "ms-settings:windowsupdate"
+                }
+                """),
+
+            new ScriptItem("📋", "Software installato",
+                "Lista completa software (registry + store)",
+                """
+                Write-Host "=== SOFTWARE INSTALLATO ===" -ForegroundColor Cyan
+                $reg = @(
+                    'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                    'HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+                    'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*'
+                )
+                Get-ItemProperty $reg -ErrorAction SilentlyContinue |
+                    Where {$_.DisplayName} |
+                    Select DisplayName, DisplayVersion, Publisher |
+                    Sort DisplayName |
+                    Format-Table -AutoSize
+                """),
+
+            new ScriptItem("🔌", "Servizi in esecuzione",
+                "Mostra tutti i servizi attivi con PID",
+                """
+                Get-Service | Where {$_.Status -eq 'Running'} |
+                    Sort DisplayName |
+                    Select DisplayName, ServiceName, Status |
+                    Format-Table -AutoSize
+                Write-Host "`nTotale servizi attivi: $((Get-Service | Where {$_.Status -eq 'Running'}).Count)"
+                """),
+
+            new ScriptItem("📊", "Processi pesanti",
+                "Top 15 processi per uso CPU e RAM",
+                """
+                Write-Host "=== TOP PROCESSI (RAM) ===" -ForegroundColor Cyan
+                Get-Process | Sort WorkingSet64 -Descending | Select -First 15 |
+                    Select Name, Id,
+                           @{N='RAM (MB)';E={[math]::Round($_.WorkingSet64/1MB,1)}},
+                           @{N='CPU (s)'; E={[math]::Round($_.TotalProcessorTime.TotalSeconds,1)}} |
+                    Format-Table -AutoSize
+                """),
+
+            new ScriptItem("⏱️", "Uptime & boot",
+                "Ultimo avvio e statistiche sessione",
+                """
+                $os   = Get-CimInstance Win32_OperatingSystem
+                $boot = $os.LastBootUpTime
+                $up   = (Get-Date) - $boot
+                Write-Host "Ultimo avvio: $($boot.ToString('dd/MM/yyyy HH:mm:ss'))"
+                Write-Host "Uptime:       $($up.Days)g $($up.Hours)h $($up.Minutes)m $($up.Seconds)s"
+                Write-Host "Sessione:     $env:USERNAME @ $env:COMPUTERNAME"
+                $logon = Get-WinEvent -LogName Security -FilterXPath "*[System[EventID=4624]]" -MaxEvents 1 -ErrorAction SilentlyContinue
+                if ($logon) { Write-Host "Ultimo logon: $($logon.TimeCreated)" }
+                """),
+
+            new ScriptItem("🛡️", "Antivirus status",
+                "Stato Windows Defender e aggiornamento firme",
+                """
+                try {
+                    $av = Get-MpComputerStatus
+                    Write-Host "=== WINDOWS DEFENDER ===" -ForegroundColor Cyan
+                    Write-Host "Abilitato:         $($av.AntivirusEnabled)"
+                    Write-Host "Real-time:         $($av.RealTimeProtectionEnabled)"
+                    Write-Host "Firme AV:          $($av.AntivirusSignatureVersion) ($($av.AntivirusSignatureLastUpdated.ToString('dd/MM/yyyy')))"
+                    Write-Host "Ultima scansione:  $($av.QuickScanEndTime)"
+                    Write-Host "Minacce trovate:   $($av.QuarantineCount) in quarantena"
+                } catch {
+                    Write-Host "Windows Defender non disponibile o non configurato" -ForegroundColor Yellow
+                    Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct |
+                        Select displayName, productState | Format-Table
+                }
+                """),
+
+            new ScriptItem("🔐", "Abilita WinRM",
+                "Abilita Windows Remote Management per gestione remota",
+                """
+                Write-Host "Abilitazione WinRM..." -ForegroundColor Yellow
+                Enable-PSRemoting -Force -SkipNetworkProfileCheck
+                Set-Item WSMan:\localhost\Client\TrustedHosts -Value "*" -Force
+                Set-Service WinRM -StartupType Automatic
+                Start-Service WinRM
+                netsh advfirewall firewall add rule name="WinRM-HTTP" protocol=TCP dir=in localport=5985 action=allow 2>$null
+                Write-Host "✅ WinRM abilitato — porta 5985" -ForegroundColor Green
+                Write-Host "   Test: Test-WSMan -ComputerName <IP>"
+                """),
+
+            new ScriptItem("🌡️", "Temperatura CPU",
+                "Legge temperatura processore via WMI",
+                """
+                $temp = Get-CimInstance MSAcpi_ThermalZoneTemperature -Namespace "root/wmi" -ErrorAction SilentlyContinue
+                if ($temp) {
+                    $temp | ForEach {
+                        $c = [math]::Round($_.CurrentTemperature / 10 - 273.15, 1)
+                        Write-Host "Zona: $($_.InstanceName) → $c °C"
+                    }
+                } else {
+                    Write-Host "Temperatura non disponibile via WMI standard" -ForegroundColor Yellow
+                    Write-Host "Installa HWiNFO o usa sensori BIOS per lettura precisa"
+                }
+                """),
+
+            new ScriptItem("📁", "Cartelle pesanti",
+                "Trova le 10 cartelle più grandi nel profilo utente",
+                """
+                Write-Host "Analisi cartelle in $env:USERPROFILE..." -ForegroundColor Cyan
+                Get-ChildItem $env:USERPROFILE -Directory -ErrorAction SilentlyContinue |
+                    ForEach {
+                        $size = (Get-ChildItem $_.FullName -Recurse -ErrorAction SilentlyContinue |
+                                 Measure-Object -Property Length -Sum).Sum
+                        [PSCustomObject]@{Cartella=$_.Name; 'Dim (GB)'=[math]::Round($size/1GB,2)}
+                    } |
+                    Sort 'Dim (GB)' -Descending | Select -First 10 |
+                    Format-Table -AutoSize
+                """),
+        });
+
+        // Aggiungi script personalizzati salvati su disco
+        if (Directory.Exists(ScriptDir))
+        {
+            foreach (var f in Directory.GetFiles(ScriptDir, "*.ps1"))
+            {
+                var name = Path.GetFileNameWithoutExtension(f);
+                var code = File.ReadAllText(f);
+                _scripts.Add(new ScriptItem("📝", name, "Script personalizzato", code, BuiltIn: false));
+            }
+        }
+
+        ScriptList.Items.Clear();
+        foreach (var sc in _scripts)
+            ScriptList.Items.Add($"{sc.Icon}  {sc.Name}");
+
+        if (ScriptList.Items.Count > 0) ScriptList.SelectedIndex = 0;
+    }
+
+    private void ScriptList_SelectionChanged(object s, SelectionChangedEventArgs e)
+    {
+        if (ScriptList.SelectedIndex < 0 || ScriptList.SelectedIndex >= _scripts.Count) return;
+        var sc = _scripts[ScriptList.SelectedIndex];
+        TxtScriptName.Text   = $"{sc.Icon}  {sc.Name}";
+        TxtScriptDesc.Text   = sc.Description;
+        TxtScriptEditor.Text = sc.Code.Trim();
+    }
+
+    private async void BtnRunScriptOnPc_Click(object s, RoutedEventArgs e)
+    {
+        var ip = TxtScriptTarget.Text.Trim();
+        if (string.IsNullOrEmpty(ip) && NetGrid.SelectedItem is DeviceRow dev)
+            ip = dev.Ip;
+        if (string.IsNullOrEmpty(ip))
+        { TxtScriptRunStatus.Text = "⚠️ Nessun IP target — seleziona un device in Rete o inserisci IP"; return; }
+
+        var code = TxtScriptEditor.Text;
+        if (string.IsNullOrWhiteSpace(code)) return;
+
+        TxtScriptRunStatus.Text = $"⏳ Esecuzione su {ip}...";
+        TxtScriptOutput.Text    = "";
+
+        var result = await Task.Run(() =>
+        {
+            try
+            {
+                // Crea script temporaneo
+                var tmp = Path.GetTempFileName() + ".ps1";
+                var wrapped =
+                    "$ErrorActionPreference = 'Continue'\n" +
+                    $"Invoke-Command -ComputerName '{ip}' -ScriptBlock {{\n" +
+                    code + "\n} -ErrorAction Stop";
+                File.WriteAllText(tmp, wrapped);
+                var psi = new ProcessStartInfo("powershell.exe",
+                    $"-NonInteractive -NoProfile -ExecutionPolicy Bypass -File \"{tmp}\"")
+                {
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                    UseShellExecute = false, CreateNoWindow = true
+                };
+                using var proc = Process.Start(psi)!;
+                var stdout = proc.StandardOutput.ReadToEnd();
+                var stderr = proc.StandardError.ReadToEnd();
+                proc.WaitForExit(30000);
+                File.Delete(tmp);
+                return string.IsNullOrEmpty(stderr) ? stdout : $"{stdout}\n[ERRORE]\n{stderr}";
+            }
+            catch (Exception ex) { return $"❌ {ex.Message}"; }
+        });
+
+        TxtScriptOutput.Text    = result;
+        TxtScriptRunStatus.Text = "✅ Completato";
+    }
+
+    private async void BtnRunScriptLocal_Click(object s, RoutedEventArgs e)
+    {
+        var code = TxtScriptEditor.Text;
+        if (string.IsNullOrWhiteSpace(code)) return;
+
+        TxtScriptRunStatus.Text = "⏳ Esecuzione locale...";
+        TxtScriptOutput.Text    = "";
+
+        var result = await Task.Run(() =>
+        {
+            try
+            {
+                var tmp = Path.GetTempFileName() + ".ps1";
+                File.WriteAllText(tmp, code);
+                var psi = new ProcessStartInfo("powershell.exe",
+                    $"-NonInteractive -NoProfile -ExecutionPolicy Bypass -File \"{tmp}\"")
+                {
+                    RedirectStandardOutput = true, RedirectStandardError = true,
+                    UseShellExecute = false, CreateNoWindow = true
+                };
+                using var proc = Process.Start(psi)!;
+                var stdout = proc.StandardOutput.ReadToEnd();
+                var stderr = proc.StandardError.ReadToEnd();
+                proc.WaitForExit(30000);
+                File.Delete(tmp);
+                return string.IsNullOrEmpty(stderr) ? stdout : $"{stdout}\n[ERRORE]\n{stderr}";
+            }
+            catch (Exception ex) { return $"❌ {ex.Message}"; }
+        });
+
+        TxtScriptOutput.Text    = result;
+        TxtScriptRunStatus.Text = "✅ Completato";
+    }
+
+    private void BtnSaveScript_Click(object s, RoutedEventArgs e)
+    {
+        if (ScriptList.SelectedIndex < 0) return;
+        var sc   = _scripts[ScriptList.SelectedIndex];
+        var code = TxtScriptEditor.Text;
+        Directory.CreateDirectory(ScriptDir);
+        var path = Path.Combine(ScriptDir, $"{sc.Name}.ps1");
+        File.WriteAllText(path, code);
+        SetStatus($"💾 Script salvato: {Path.GetFileName(path)}");
+        TxtScriptRunStatus.Text = "Salvato ✓";
+    }
+
+    private void BtnExportScript_Click(object s, RoutedEventArgs e)
+    {
+        var name = ScriptList.SelectedIndex >= 0 ? _scripts[ScriptList.SelectedIndex].Name : "script";
+        var dlg  = new Microsoft.Win32.SaveFileDialog
+        {
+            Title = "Esporta script PowerShell", FileName = $"{name}.ps1",
+            Filter = "PowerShell (*.ps1)|*.ps1|Tutti i file|*.*"
+        };
+        if (dlg.ShowDialog() != true) return;
+        File.WriteAllText(dlg.FileName, TxtScriptEditor.Text);
+        Process.Start(new ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+    }
+
+    private void BtnNewScript_Click(object s, RoutedEventArgs e)
+    {
+        var name = Microsoft.VisualBasic.Interaction.InputBox(
+            "Nome del nuovo script:", "Nuovo script", "MioScript");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        _scripts.Add(new ScriptItem("📝", name, "Script personalizzato",
+            "# Il tuo script PowerShell\nWrite-Host 'Hello from NovaSCM!'", BuiltIn: false));
+        ScriptList.Items.Add($"📝  {name}");
+        ScriptList.SelectedIndex = ScriptList.Items.Count - 1;
+    }
+
+    private void BtnDeleteScript_Click(object s, RoutedEventArgs e)
+    {
+        if (ScriptList.SelectedIndex < 0) return;
+        var sc = _scripts[ScriptList.SelectedIndex];
+        if (sc.BuiltIn) { SetStatus("⚠️ Gli script built-in non possono essere eliminati"); return; }
+        _scripts.RemoveAt(ScriptList.SelectedIndex);
+        ScriptList.Items.RemoveAt(ScriptList.SelectedIndex);
+        var path = Path.Combine(ScriptDir, $"{sc.Name}.ps1");
+        if (File.Exists(path)) File.Delete(path);
+    }
+
+    private void BtnClearScriptOutput_Click(object s, RoutedEventArgs e) =>
+        TxtScriptOutput.Text = "";
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // AUTO-SCAN PROGRAMMATO
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private System.Windows.Threading.DispatcherTimer? _autoScanTimer;
+    private bool _autoScanActive = false;
+
+    private void BtnAutoScan_Click(object s, RoutedEventArgs e)
+    {
+        if (_autoScanActive)
+        {
+            _autoScanTimer?.Stop();
+            _autoScanTimer = null;
+            _autoScanActive = false;
+            BtnAutoScan.Content    = "⏰  Auto";
+            BtnAutoScan.Background = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(217, 119, 6)); // amber
+            SetStatus("⏹ Auto-scan disattivato");
+        }
+        else
+        {
+            var minutes = (CboAutoScanInterval.SelectedIndex) switch
+            {
+                0 => 5, 1 => 15, 2 => 30, _ => 60
+            };
+            _autoScanTimer = new System.Windows.Threading.DispatcherTimer
+            {
+                Interval = TimeSpan.FromMinutes(minutes)
+            };
+            _autoScanTimer.Tick += async (_, _) => await TriggerAutoScanAsync();
+            _autoScanTimer.Start();
+            _autoScanActive = true;
+            BtnAutoScan.Content    = $"⏰  Auto ({minutes}m)";
+            BtnAutoScan.Background = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(21, 128, 61)); // green
+            SetStatus($"✅ Auto-scan attivo ogni {minutes} minuti");
+        }
+    }
+
+    private async Task TriggerAutoScanAsync()
+    {
+        if (_scanCts != null) return; // scansione già in corso
+        SetStatus("⏰ Auto-scan avviato...");
+        if (!IPAddress.TryParse(TxtScanIp.Text.Trim(), out var baseIp)) return;
+        if (!int.TryParse(TxtScanSubnet.Text.Trim(), out int cidr)) return;
+        try
+        {
+            var ips = GetHostsInSubnet(baseIp, cidr);
+            await RunScanAsync(ips);
+        }
+        catch { }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // NOTE & TAG DEVICE
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private readonly Dictionary<string, string> _deviceNotes = [];
+    private readonly Dictionary<string, string> _deviceTags  = [];
+
+    private void MenuAddNote_Click(object s, RoutedEventArgs e)
+    {
+        if (NetGrid.SelectedItem is not DeviceRow dev) return;
+        var current = _deviceNotes.TryGetValue(dev.Ip, out var n) ? n : "";
+        var note = Microsoft.VisualBasic.Interaction.InputBox(
+            $"Nota per {dev.Ip} ({dev.Name}):", "Aggiungi nota", current);
+        if (note == null) return;
+        if (string.IsNullOrWhiteSpace(note))
+            _deviceNotes.Remove(dev.Ip);
+        else
+            _deviceNotes[dev.Ip] = note;
+        Database.SaveDeviceNote(dev.Ip, note);
+        SetStatus(string.IsNullOrWhiteSpace(note)
+            ? $"🗑 Nota rimossa per {dev.Ip}"
+            : $"📝 Nota salvata per {dev.Ip}");
+    }
+
+    private void MenuTagDevice_Click(object s, RoutedEventArgs e)
+    {
+        if (NetGrid.SelectedItem is not DeviceRow dev) return;
+        var current = _deviceTags.TryGetValue(dev.Ip, out var t) ? t : "";
+        var tag = Microsoft.VisualBasic.Interaction.InputBox(
+            $"Tag per {dev.Ip} (es: server, stampante, iot, critico):",
+            "Tag device", current);
+        if (tag == null) return;
+        if (string.IsNullOrWhiteSpace(tag))
+            _deviceTags.Remove(dev.Ip);
+        else
+            _deviceTags[dev.Ip] = tag;
+        Database.SaveDeviceTag(dev.Ip, tag);
+        SetStatus(string.IsNullOrWhiteSpace(tag)
+            ? $"🏷️ Tag rimosso per {dev.Ip}"
+            : $"🏷️ Tag '{tag}' assegnato a {dev.Ip}");
     }
 
     // ══════════════════════════════════════════════════════════════════════════
