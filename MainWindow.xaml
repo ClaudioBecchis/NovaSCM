@@ -21,11 +21,12 @@
 
         <!-- Stat card style -->
         <Style x:Key="StatCard" TargetType="Border">
-            <Setter Property="Background"      Value="#0d1b3e"/>
-            <Setter Property="BorderThickness" Value="0,0,0,0"/>
-            <Setter Property="CornerRadius"    Value="6"/>
-            <Setter Property="Padding"         Value="16,10"/>
-            <Setter Property="Margin"          Value="0,0,10,0"/>
+            <Setter Property="Background"      Value="White"/>
+            <Setter Property="BorderBrush"     Value="#E0E6F0"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius"    Value="7"/>
+            <Setter Property="Padding"         Value="18,12"/>
+            <Setter Property="Margin"          Value="0,0,12,0"/>
         </Style>
 
         <!-- Pulsante base -->
@@ -66,71 +67,72 @@
             <Setter Property="Margin"       Value="0,0,0,10"/>
         </Style>
 
-        <!-- DataGrid dark -->
+        <!-- DataGrid light -->
         <Style TargetType="DataGrid">
-            <Setter Property="Background"           Value="#0a0f1e"/>
-            <Setter Property="RowBackground"        Value="#0a0f1e"/>
-            <Setter Property="AlternatingRowBackground" Value="#0d1422"/>
-            <Setter Property="BorderThickness"      Value="1"/>
-            <Setter Property="BorderBrush"          Value="#1e3a5f"/>
-            <Setter Property="GridLinesVisibility"  Value="Horizontal"/>
-            <Setter Property="HorizontalGridLinesBrush" Value="#1e2a40"/>
-            <Setter Property="HeadersVisibility"    Value="Column"/>
-            <Setter Property="SelectionMode"        Value="Single"/>
-            <Setter Property="AutoGenerateColumns"  Value="False"/>
-            <Setter Property="CanUserAddRows"       Value="False"/>
-            <Setter Property="CanUserDeleteRows"    Value="False"/>
-            <Setter Property="IsReadOnly"           Value="True"/>
-            <Setter Property="FontSize"             Value="13"/>
-            <Setter Property="RowHeight"            Value="36"/>
+            <Setter Property="Background"               Value="White"/>
+            <Setter Property="RowBackground"            Value="White"/>
+            <Setter Property="AlternatingRowBackground" Value="#F7F9FC"/>
+            <Setter Property="BorderThickness"          Value="1"/>
+            <Setter Property="BorderBrush"              Value="#D0D5DC"/>
+            <Setter Property="GridLinesVisibility"      Value="Horizontal"/>
+            <Setter Property="HorizontalGridLinesBrush" Value="#E4E8F0"/>
+            <Setter Property="HeadersVisibility"        Value="Column"/>
+            <Setter Property="SelectionMode"            Value="Single"/>
+            <Setter Property="AutoGenerateColumns"      Value="False"/>
+            <Setter Property="CanUserAddRows"           Value="False"/>
+            <Setter Property="CanUserDeleteRows"        Value="False"/>
+            <Setter Property="IsReadOnly"               Value="True"/>
+            <Setter Property="FontSize"                 Value="13"/>
+            <Setter Property="RowHeight"                Value="36"/>
         </Style>
         <Style TargetType="DataGridColumnHeader">
-            <Setter Property="Background"   Value="#0d1b3e"/>
-            <Setter Property="Foreground"   Value="#60a5fa"/>
-            <Setter Property="FontWeight"   Value="SemiBold"/>
-            <Setter Property="FontSize"     Value="13"/>
-            <Setter Property="Padding"      Value="10,7"/>
-            <Setter Property="BorderBrush"  Value="#1e3a5f"/>
+            <Setter Property="Background"      Value="#ECEEF3"/>
+            <Setter Property="Foreground"      Value="#444444"/>
+            <Setter Property="FontWeight"      Value="SemiBold"/>
+            <Setter Property="FontSize"        Value="12"/>
+            <Setter Property="Padding"         Value="10,7"/>
+            <Setter Property="BorderBrush"     Value="#CDD1D8"/>
             <Setter Property="BorderThickness" Value="0,0,1,1"/>
         </Style>
         <Style TargetType="DataGridRow">
-            <Setter Property="Foreground"   Value="#cbd5e1"/>
+            <Setter Property="Foreground" Value="#222222"/>
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="#1e3a6e"/>
+                    <Setter Property="Background" Value="#DBEAFE"/>
+                    <Setter Property="Foreground" Value="#1E3A8A"/>
                 </Trigger>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#1e2a4a"/>
+                    <Setter Property="Background" Value="#EFF6FF"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
         <Style TargetType="DataGridCell">
-            <Setter Property="Padding"       Value="10,4"/>
-            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding"          Value="10,4"/>
+            <Setter Property="BorderThickness"  Value="0"/>
             <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         </Style>
 
         <!-- TextBox settings -->
         <Style x:Key="SettingsBox" TargetType="TextBox">
-            <Setter Property="Background"   Value="#0d1b3e"/>
-            <Setter Property="Foreground"   Value="#e2e8f0"/>
-            <Setter Property="BorderBrush"  Value="#1e3a5f"/>
+            <Setter Property="Background"   Value="White"/>
+            <Setter Property="Foreground"   Value="#1a1a1a"/>
+            <Setter Property="BorderBrush"  Value="#C8CDD5"/>
             <Setter Property="Padding"      Value="8,4"/>
             <Setter Property="FontSize"     Value="13"/>
             <Setter Property="Width"        Value="320"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
         </Style>
         <Style x:Key="SettingsPass" TargetType="PasswordBox">
-            <Setter Property="Background"   Value="#0d1b3e"/>
-            <Setter Property="Foreground"   Value="#e2e8f0"/>
-            <Setter Property="BorderBrush"  Value="#1e3a5f"/>
+            <Setter Property="Background"   Value="White"/>
+            <Setter Property="Foreground"   Value="#1a1a1a"/>
+            <Setter Property="BorderBrush"  Value="#C8CDD5"/>
             <Setter Property="Padding"      Value="8,4"/>
             <Setter Property="FontSize"     Value="13"/>
             <Setter Property="Width"        Value="320"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
         </Style>
         <Style x:Key="SettingsLabel" TargetType="TextBlock">
-            <Setter Property="Foreground"   Value="#94a3b8"/>
+            <Setter Property="Foreground"   Value="#555555"/>
             <Setter Property="FontSize"     Value="12"/>
             <Setter Property="Margin"       Value="0,10,0,3"/>
         </Style>
@@ -168,7 +170,7 @@
         </Style>
     </Window.Resources>
 
-    <DockPanel Background="#0a0f1e">
+    <DockPanel Background="#F4F6FA">
 
         <!-- ═══ BANNER AGGIORNAMENTO ═══ -->
         <!-- ═══ HEADER ═══ -->
@@ -268,7 +270,7 @@
         </Border>
 
         <!-- ═══ TABS (headers nascosti, controllati dalla sidebar) ═══ -->
-        <TabControl Background="#0a0f1e" BorderThickness="0"
+        <TabControl Background="#F4F6FA" BorderThickness="0"
                     x:Name="MainTabs"
                     SelectionChanged="MainTabs_SelectionChanged">
             <TabControl.Template>
@@ -317,7 +319,7 @@
                     <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,12">
                         <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
                             <StackPanel>
-                                <TextBlock Text="10" FontSize="22" FontWeight="Bold" Foreground="#f8fafc"/>
+                                <TextBlock Text="10" FontSize="22" FontWeight="Bold" Foreground="#1D4ED8"/>
                                 <TextBlock Text="Device totali" Foreground="#64748b" FontSize="11"/>
                             </StackPanel>
                         </Border>
@@ -417,7 +419,7 @@
                         </Border>
                         <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
                             <StackPanel>
-                                <TextBlock Text="5" FontSize="22" FontWeight="Bold" Foreground="#f8fafc"/>
+                                <TextBlock Text="5" FontSize="22" FontWeight="Bold" Foreground="#1D4ED8"/>
                                 <TextBlock Text="Totali" Foreground="#64748b" FontSize="11"/>
                             </StackPanel>
                         </Border>
@@ -531,7 +533,7 @@
                         </Border>
                         <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
                             <StackPanel>
-                                <TextBlock Text="5" FontSize="22" FontWeight="Bold" Foreground="#f8fafc"/>
+                                <TextBlock Text="5" FontSize="22" FontWeight="Bold" Foreground="#1D4ED8"/>
                                 <TextBlock Text="Totali" Foreground="#64748b" FontSize="11"/>
                             </StackPanel>
                         </Border>
@@ -588,7 +590,7 @@
                         </Border>
                         <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6">
                             <StackPanel>
-                                <TextBlock Text="4" FontSize="22" FontWeight="Bold" Foreground="#f8fafc"/>
+                                <TextBlock Text="4" FontSize="22" FontWeight="Bold" Foreground="#1D4ED8"/>
                                 <TextBlock Text="Totali" Foreground="#64748b" FontSize="11"/>
                             </StackPanel>
                         </Border>
@@ -634,7 +636,7 @@
 
                     <!-- Splitter ridimensionabile -->
                     <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"
-                                  Background="#1e2d45" ShowsPreview="False"/>
+                                  Background="#D0D5DC" ShowsPreview="False"/>
 
                     <!-- COLONNA SX: Form configurazione -->
                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"
@@ -648,7 +650,7 @@
 
                             <TextBlock Text="Edizione" Style="{StaticResource SettingsLabel}"/>
                             <ComboBox x:Name="CboWinEdition" Width="330" HorizontalAlignment="Left"
-                                      Background="#0d1b3e" Foreground="#e2e8f0" BorderBrush="#1e3a5f"
+                                      Background="White" Foreground="#1a1a1a" BorderBrush="#C8CDD5"
                                       FontSize="13" Padding="8,5">
                                 <!-- Client -->
                                 <ComboBoxItem Content="── Client ──"            IsEnabled="False" Foreground="#475569"/>
@@ -675,7 +677,7 @@
 
                             <TextBlock Text="Lingua sistema" Style="{StaticResource SettingsLabel}"/>
                             <ComboBox x:Name="CboWinLocale" Width="330" HorizontalAlignment="Left"
-                                      Background="#0d1b3e" Foreground="#e2e8f0" BorderBrush="#1e3a5f"
+                                      Background="White" Foreground="#1a1a1a" BorderBrush="#C8CDD5"
                                       FontSize="13" Padding="8,5">
                                 <ComboBoxItem Content="it-IT — Italiano (Italia)"       Tag="it-IT" IsSelected="True"/>
                                 <ComboBoxItem Content="en-US — English (United States)" Tag="en-US"/>
@@ -699,12 +701,12 @@
                             <TextBlock Text="Tipo account principale" Style="{StaticResource SettingsLabel}"/>
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                                 <RadioButton x:Name="RbLocalAccount" Content="👤  Account locale (automatico)"
-                                             Foreground="#cbd5e1" IsChecked="True" Margin="0,0,16,0"
+                                             Foreground="#333333" IsChecked="True" Margin="0,0,16,0"
                                              GroupName="AccountType"
                                              Checked="RbAccount_Checked"
                                              ToolTip="Installazione 100% automatica, nessuna interazione"/>
                                 <RadioButton x:Name="RbMsAccount"   Content="☁️  Account Microsoft"
-                                             Foreground="#cbd5e1" GroupName="AccountType"
+                                             Foreground="#333333" GroupName="AccountType"
                                              Checked="RbAccount_Checked"
                                              ToolTip="Il setup si fermerà alla schermata Microsoft account — l'utente fa login manualmente"/>
                             </StackPanel>
@@ -731,13 +733,13 @@
 
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,8">
                                 <RadioButton x:Name="RbWorkgroup" Content="Workgroup"
-                                             Foreground="#cbd5e1" IsChecked="True" Margin="0,0,16,0"
+                                             Foreground="#333333" IsChecked="True" Margin="0,0,16,0"
                                              GroupName="DomainType" Checked="RbDomain_Checked"/>
                                 <RadioButton x:Name="RbAdLocale" Content="AD locale"
-                                             Foreground="#cbd5e1" Margin="0,0,16,0"
+                                             Foreground="#333333" Margin="0,0,16,0"
                                              GroupName="DomainType" Checked="RbDomain_Checked"/>
                                 <RadioButton x:Name="RbAzureAd" Content="Azure AD"
-                                             Foreground="#cbd5e1"
+                                             Foreground="#333333"
                                              GroupName="DomainType" Checked="RbDomain_Checked"/>
                             </StackPanel>
 
@@ -779,13 +781,13 @@
 
                             <!-- Lista dinamica pacchetti -->
                             <ListBox x:Name="LstPackages"
-                                     Background="#0a0f1e" BorderBrush="#1e3a5f" BorderThickness="1"
+                                     Background="White" BorderBrush="#C8CDD5" BorderThickness="1"
                                      Width="330" Height="160" HorizontalAlignment="Left"
                                      Margin="0,0,0,6" Padding="0">
                                 <ListBox.ItemContainerStyle>
                                     <Style TargetType="ListBoxItem">
                                         <Setter Property="Padding"    Value="6,3"/>
-                                        <Setter Property="Foreground" Value="#cbd5e1"/>
+                                        <Setter Property="Foreground" Value="#222222"/>
                                         <Setter Property="Background" Value="Transparent"/>
                                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                     </Style>
@@ -814,7 +816,7 @@
                             <!-- Aggiungi pacchetto -->
                             <StackPanel Orientation="Horizontal" Margin="0,0,0,0">
                                 <TextBox x:Name="TxtNewPackage"
-                                         Background="#0d1b3e" Foreground="#e2e8f0" BorderBrush="#1e3a5f"
+                                         Background="White" Foreground="#1a1a1a" BorderBrush="#C8CDD5"
                                          Padding="8,5" FontFamily="Consolas" FontSize="12"
                                          Width="272"
                                          ToolTip="Winget ID esatto — es: Git.Git, Valve.Steam, Python.Python.3"
@@ -831,7 +833,7 @@
 
                             <CheckBox x:Name="ChkIncludeAgent"
                                       Content="Includi agente enrollment WiFi EAP-TLS"
-                                      Foreground="#cbd5e1" IsChecked="True" Margin="0,4,0,8"/>
+                                      Foreground="#333333" IsChecked="True" Margin="0,4,0,8"/>
 
                             <TextBlock Text="URL server NovaSCM (per l'agente)"
                                        Style="{StaticResource SettingsLabel}"/>
@@ -916,7 +918,7 @@
 
                     <!-- Toolbar -->
                     <StackPanel Grid.Row="0" Orientation="Horizontal"
-                                Background="#0d1b3e" Margin="0">
+                                Background="#EDF0F5" Margin="0">
                         <Button Content="+ Nuovo Workflow"  Style="{StaticResource BtnGreen}"  Click="BtnWfNew_Click"/>
                         <Button Content="✏️ Rinomina"        Style="{StaticResource BtnBlue}"   Click="BtnWfRename_Click"/>
                         <Button Content="🗑 Elimina Workflow" Style="{StaticResource BtnRed}"    Click="BtnWfDelete_Click"/>
@@ -933,7 +935,7 @@
                         </Grid.ColumnDefinitions>
 
                         <!-- ─ COLONNA SINISTRA: lista workflow ─ -->
-                        <Grid Grid.Column="0" Background="#0d1520">
+                        <Grid Grid.Column="0" Background="#F0F2F7">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
@@ -943,13 +945,13 @@
                                        Padding="10,8,10,6" FontSize="12"/>
                             <ListBox x:Name="LstWorkflows" Grid.Row="1"
                                      Background="Transparent" BorderThickness="0"
-                                     Foreground="#cbd5e1" FontSize="13"
+                                     Foreground="#222222" FontSize="13"
                                      SelectionChanged="LstWorkflows_SelectionChanged">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <StackPanel Margin="4,4,4,4">
                                             <TextBlock Text="{Binding Nome}" FontWeight="SemiBold"/>
-                                            <TextBlock FontSize="11" Foreground="#475569">
+                                            <TextBlock FontSize="11" Foreground="#64748b">
                                                 <Run Text="v"/><Run Text="{Binding Versione}"/>
                                                 <Run Text=" — "/><Run Text="{Binding StepCount}"/>
                                                 <Run Text=" step"/>
@@ -961,13 +963,14 @@
                                     <Style TargetType="ListBoxItem">
                                         <Setter Property="Padding" Value="8,4"/>
                                         <Setter Property="Background" Value="Transparent"/>
-                                        <Setter Property="Foreground" Value="#cbd5e1"/>
+                                        <Setter Property="Foreground" Value="#222222"/>
                                         <Style.Triggers>
                                             <Trigger Property="IsSelected" Value="True">
-                                                <Setter Property="Background" Value="#1e3a6e"/>
+                                                <Setter Property="Background" Value="#DBEAFE"/>
+                                                <Setter Property="Foreground" Value="#1E3A8A"/>
                                             </Trigger>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter Property="Background" Value="#1e2a4a"/>
+                                                <Setter Property="Background" Value="#EFF6FF"/>
                                             </Trigger>
                                         </Style.Triggers>
                                     </Style>
@@ -978,7 +981,7 @@
                         <!-- Splitter verticale -->
                         <GridSplitter Grid.Column="1" Width="4"
                                       HorizontalAlignment="Stretch"
-                                      Background="#1e3a5f"/>
+                                      Background="#D0D5DC"/>
 
                         <!-- ─ COLONNA DESTRA ─ -->
                         <Grid Grid.Column="2">
@@ -994,7 +997,7 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
-                                <Border Grid.Row="0" Background="#0d1b3e" Padding="10,5">
+                                <Border Grid.Row="0" Background="#EDF0F5" Padding="10,5">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Step del workflow selezionato"
                                                    Foreground="#60a5fa" FontWeight="SemiBold"
@@ -1024,7 +1027,7 @@
                             <!-- Splitter orizzontale -->
                             <GridSplitter Grid.Row="1" Height="4"
                                           HorizontalAlignment="Stretch"
-                                          Background="#1e3a5f"/>
+                                          Background="#D0D5DC"/>
 
                             <!-- Assegnazioni section -->
                             <Grid Grid.Row="2">
@@ -1032,7 +1035,7 @@
                                     <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
-                                <Border Grid.Row="0" Background="#0d1b3e" Padding="10,5">
+                                <Border Grid.Row="0" Background="#EDF0F5" Padding="10,5">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="Assegnazioni (Deployment)"
                                                    Foreground="#60a5fa" FontWeight="SemiBold"
@@ -1056,7 +1059,7 @@
                                                 <DataTemplate>
                                                     <StackPanel Margin="4,2">
                                                         <ProgressBar Value="{Binding Progress}" Maximum="100"
-                                                                     Height="7" Background="#1e3a5f"
+                                                                     Height="7" Background="#E0E7F0"
                                                                      Foreground="{Binding ProgressColor}"/>
                                                         <TextBlock Text="{Binding ProgressText}"
                                                                    FontSize="10" Foreground="#64748b"/>
@@ -1074,7 +1077,7 @@
 
                     <!-- Status bar -->
                     <TextBlock x:Name="TxtWfStatus" Grid.Row="2"
-                               Padding="10,4" Background="#0d1520"
+                               Padding="10,4" Background="#EDF0F5"
                                Foreground="#475569" FontSize="11"
                                Text="Seleziona un workflow per vedere gli step"/>
                 </Grid>
@@ -1090,44 +1093,44 @@
 
                     <!-- COLONNA SINISTRA: Form nuovo CR -->
                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"
-                                  Background="#1a2235" Padding="16,12,16,12">
+                                  Background="#F8F9FC" Padding="16,12,16,12">
                         <StackPanel>
                             <TextBlock Text="📋  Nuova Richiesta (CR)" FontSize="14" FontWeight="Bold"
-                                       Foreground="#5ba3f5" Margin="0,0,0,12"/>
+                                       Foreground="#1D4ED8" Margin="0,0,0,12"/>
 
                             <!-- PC -->
-                            <TextBlock Text="🖥️  Nome PC" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="🖥️  Nome PC" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox x:Name="TxtCrPcName" Margin="0,0,0,10"
                                      ToolTip="Es: PC-LAB-001 (maiuscolo automatico)"
                                      CharacterCasing="Upper"/>
 
                             <!-- Dominio -->
-                            <TextBlock Text="🏢  Dominio" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="🏢  Dominio" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox x:Name="TxtCrDomain" Margin="0,0,0,10" Text="test.local"/>
 
                             <!-- OU -->
-                            <TextBlock Text="📁  OU (Organizational Unit)" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="📁  OU (Organizational Unit)" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox x:Name="TxtCrOu" Margin="0,0,0,10"
                                      Text="CN=Computers,DC=test,DC=local"
                                      ToolTip="Es: OU=Lab,DC=test,DC=local"/>
 
                             <!-- IP DC -->
-                            <TextBlock Text="🌐  IP Domain Controller" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="🌐  IP Domain Controller" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox x:Name="TxtCrDcIp" Margin="0,0,0,10" Text="192.168.10.185"/>
 
                             <!-- Join credentials -->
-                            <TextBlock Text="👤  Utente join AD" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="👤  Utente join AD" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox x:Name="TxtCrJoinUser" Margin="0,0,0,10" Text="join-account"/>
 
-                            <TextBlock Text="🔑  Password join AD" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="🔑  Password join AD" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <PasswordBox x:Name="TxtCrJoinPass" Margin="0,0,0,10"/>
 
                             <!-- ODJ Blob (djoin.exe) -->
-                            <Border Background="#1e3a5f" Height="1" Margin="0,4,0,8"/>
+                            <Border Background="#D0D5DC" Height="1" Margin="0,4,0,8"/>
                             <TextBlock Text="— oppure: ODJ blob da djoin.exe (nessuna password nel XML) —"
                                        Foreground="#475569" FontSize="10"
                                        HorizontalAlignment="Center" Margin="0,0,0,6"/>
-                            <TextBlock Text="🔑  ODJ Blob" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="🔑  ODJ Blob" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox x:Name="TxtCrOdjBlob" Margin="0,0,0,4" Height="65"
                                      AcceptsReturn="True" TextWrapping="Wrap"
                                      VerticalScrollBarVisibility="Auto"
@@ -1139,15 +1142,15 @@
                                     Click="BtnCrCopyDjoin_Click"/>
 
                             <!-- Password admin -->
-                            <TextBlock Text="🔑  Password Administrator" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="🔑  Password Administrator" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <PasswordBox x:Name="TxtCrAdminPass" Margin="0,0,0,10"/>
 
                             <!-- Utente assegnato -->
-                            <TextBlock Text="👤  Utente assegnato (opzionale)" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="👤  Utente assegnato (opzionale)" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox x:Name="TxtCrAssignedUser" Margin="0,0,0,10"/>
 
                             <!-- Software -->
-                            <TextBlock Text="📦  Software winget" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="📦  Software winget" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <Grid Margin="0,0,0,4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -1161,7 +1164,7 @@
                                         Style="{StaticResource BtnBlue}" Padding="0"/>
                             </Grid>
                             <ListBox x:Name="LstCrPackages" Height="90" Margin="0,0,0,10"
-                                     Background="#111827" BorderBrush="#2d3f5a"
+                                     Background="White" BorderBrush="#C8CDD5"
                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
@@ -1170,7 +1173,7 @@
                                                 <ColumnDefinition Width="*"/>
                                                 <ColumnDefinition Width="24"/>
                                             </Grid.ColumnDefinitions>
-                                            <TextBlock Text="{Binding}" Foreground="#ccd6f6" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding}" Foreground="#222222" VerticalAlignment="Center"/>
                                             <Button Content="✕" Grid.Column="1" Padding="0"
                                                     Background="Transparent" BorderThickness="0"
                                                     Foreground="#ff6b6b" FontSize="11"
@@ -1181,7 +1184,7 @@
                             </ListBox>
 
                             <!-- Note -->
-                            <TextBlock Text="📝  Note" Foreground="#8899aa" FontSize="11" Margin="0,0,0,3"/>
+                            <TextBlock Text="📝  Note" Foreground="#555555" FontSize="11" Margin="0,0,0,3"/>
                             <TextBox x:Name="TxtCrNotes" Margin="0,0,0,16" Height="54"
                                      AcceptsReturn="True" TextWrapping="Wrap"
                                      VerticalScrollBarVisibility="Auto"/>
@@ -1193,7 +1196,7 @@
                             <Button x:Name="BtnCrRefresh" Content="🔄  Aggiorna lista"
                                     Style="{StaticResource BtnBlue}" Margin="0,0,0,6"
                                     Click="BtnCrRefresh_Click"/>
-                            <TextBlock x:Name="TxtCrStatus" Text="" Foreground="#5ba3f5"
+                            <TextBlock x:Name="TxtCrStatus" Text="" Foreground="#1D4ED8"
                                        FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
                         </StackPanel>
                     </ScrollViewer>
@@ -1207,28 +1210,25 @@
 
                         <TextBlock Grid.Row="0" Text="📋  Richieste attive"
                                    FontSize="13" FontWeight="Bold"
-                                   Foreground="#5ba3f5" Margin="16,12,0,8"/>
+                                   Foreground="#1D4ED8" Margin="16,12,0,8"/>
 
                         <DataGrid x:Name="CrGrid" Grid.Row="1"
                                   AutoGenerateColumns="False" IsReadOnly="True"
                                   CanUserResizeRows="False" RowHeight="34"
-                                  Background="#111827" RowBackground="#111827"
-                                  AlternatingRowBackground="#151f2e"
-                                  BorderThickness="0" GridLinesVisibility="Horizontal"
-                                  HorizontalGridLinesBrush="#1e2d45"
-                                  Foreground="#ccd6f6" FontSize="12"
+                                  BorderThickness="1" GridLinesVisibility="Horizontal"
+                                  FontSize="12"
                                   SelectionChanged="CrGrid_SelectionChanged">
                             <DataGrid.RowStyle>
                                 <Style TargetType="DataGridRow">
-                                    <Setter Property="Foreground" Value="#ccd6f6"/>
+                                    <Setter Property="Foreground" Value="#222222"/>
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding Status}" Value="completed">
-                                            <Setter Property="Background" Value="#0a2e1f"/>
-                                            <Setter Property="Foreground" Value="#10b981"/>
+                                            <Setter Property="Background" Value="#F0FDF4"/>
+                                            <Setter Property="Foreground" Value="#15803D"/>
                                         </DataTrigger>
                                         <DataTrigger Binding="{Binding Status}" Value="in_progress">
-                                            <Setter Property="Background" Value="#2e1f00"/>
-                                            <Setter Property="Foreground" Value="#fbbf24"/>
+                                            <Setter Property="Background" Value="#FFFBEB"/>
+                                            <Setter Property="Foreground" Value="#B45309"/>
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -1309,8 +1309,8 @@
                         <TextBlock Text="Reti (una per riga, formato 192.168.x.0/24)"
                                    Style="{StaticResource SettingsLabel}"/>
                         <TextBox x:Name="TxtScanNetworks"
-                                 Background="#0d1b3e" Foreground="#e2e8f0"
-                                 BorderBrush="#1e3a5f" Padding="8,4" FontSize="13"
+                                 Background="White" Foreground="#1a1a1a"
+                                 BorderBrush="#C8CDD5" Padding="8,4" FontSize="13"
                                  Width="320" HorizontalAlignment="Left"
                                  AcceptsReturn="True" TextWrapping="Wrap" Height="110"
                                  VerticalScrollBarVisibility="Auto"
@@ -1377,7 +1377,7 @@
                         <!-- Autore -->
                         <TextBlock Text="Developed by" Foreground="#475569" FontSize="12" TextWrapping="Wrap"/>
                         <TextBlock Text="Claudio Becchis" FontSize="22" FontWeight="SemiBold"
-                                   Foreground="#e2e8f0" Margin="0,2,0,6" TextWrapping="Wrap"/>
+                                   Foreground="#1a1a1a" Margin="0,2,0,6" TextWrapping="Wrap"/>
                         <TextBlock Text="Powered by" Foreground="#475569" FontSize="12" Margin="0,6,0,0" TextWrapping="Wrap"/>
                         <TextBlock Text="PolarisCore.it" FontSize="16" FontWeight="SemiBold"
                                    Foreground="#60a5fa" Margin="0,2,0,20" TextWrapping="Wrap"/>
@@ -1385,9 +1385,9 @@
                         <!-- Funzionalità -->
                         <TextBlock Text="📋  Funzionalità" Foreground="#60a5fa"
                                    FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
-                        <Border Background="#0d1b3e" BorderBrush="#1e3a5f" BorderThickness="1"
+                        <Border Background="#F0F4FF" BorderBrush="#C5D0E8" BorderThickness="1"
                                 CornerRadius="6" Padding="16,12" Margin="0,0,0,16">
-                            <TextBlock Foreground="#94a3b8" FontSize="12" LineHeight="22"
+                            <TextBlock Foreground="#334155" FontSize="12" LineHeight="22"
                                        TextWrapping="Wrap">
                                 <TextBlock.Text>•  Scansione rete — IP, MAC, Vendor, Tipo device
 •  Scansione porte aperte per ogni device
@@ -1403,10 +1403,10 @@
                         <!-- Licenza -->
                         <TextBlock Text="📄  Licenza" Foreground="#60a5fa"
                                    FontWeight="SemiBold" FontSize="13" Margin="0,0,0,8" TextWrapping="Wrap"/>
-                        <Border Background="#0d1b3e" BorderBrush="#1e3a5f" BorderThickness="1"
+                        <Border Background="#F0F4FF" BorderBrush="#C5D0E8" BorderThickness="1"
                                 CornerRadius="6" Padding="16,12" Margin="0,0,0,20">
                             <StackPanel>
-                                <TextBlock Foreground="#94a3b8" FontSize="12" LineHeight="22"
+                                <TextBlock Foreground="#334155" FontSize="12" LineHeight="22"
                                            TextWrapping="Wrap">
                                     <TextBlock.Text>MIT License — Software libero e open source
 Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autore originale.</TextBlock.Text>
@@ -1456,8 +1456,8 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         <StackPanel Orientation="Horizontal">
                             <TextBlock x:Name="TxtAboutVersion" Foreground="#334155" FontSize="12"
                                        VerticalAlignment="Center"/>
-                            <Border Background="#1e3a5f" CornerRadius="4" Padding="8,3">
-                                <TextBlock Text="STABLE" Foreground="#10b981"
+                            <Border Background="#D1FAE5" CornerRadius="4" Padding="8,3">
+                                <TextBlock Text="STABLE" Foreground="#065F46"
                                            FontSize="10" FontWeight="Bold"/>
                             </Border>
                         </StackPanel>
