@@ -14,6 +14,8 @@ NovaSCM combines a **WPF desktop console** (Windows), a **REST API server** (Pyt
 [![Server: Docker](https://img.shields.io/badge/Server-Docker%20%7C%20Python-2496ED?logo=docker)](server/)
 [![GitHub release](https://img.shields.io/github/v/release/ClaudioBecchis/NovaSCM)](../../releases)
 
+📖 **Read the full article on dev.to:** [I built a free open-source alternative to Microsoft SCCM](https://dev.to/claudio_f5c23617499305b57/i-built-a-free-open-source-alternative-to-microsoft-sccm-3dkh)
+
 ---
 
 ## What it does
