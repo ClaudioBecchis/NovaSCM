@@ -1964,11 +1964,13 @@ public partial class MainWindow : Window
                                 _netRows.Add(new DeviceRow { Ip = ip, Status = "🟢 Online", Icon = "❓" });
                                 SetStatus($"🆕 Nuovo device: {ip}");
                                 App.Log($"[Monitor] Nuovo device: {ip}");
+                                ShowToast("🆕 Nuovo device", $"Rilevato nuovo device in rete: {ip}");
                             }
                             else
                             {
                                 existing.Status = "🟢 Online";
                                 SetStatus($"🟢 Tornato online: {ip}");
+                                ShowToast("🟢 Device Online", $"{existing.Name} ({ip}) è tornato online");
                             }
                         });
                     }
@@ -1983,6 +1985,7 @@ public partial class MainWindow : Window
                                 existing.Status = "🔴 Offline";
                                 SetStatus($"🔴 Offline: {ip}");
                                 App.Log($"[Monitor] Offline: {ip}");
+                                ShowToast("🔴 Device Offline", $"{existing.Name} ({ip}) non risponde");
                             }
                         });
                     }
@@ -2521,7 +2524,7 @@ public partial class MainWindow : Window
         SetStatus("Importa — funzione in sviluppo");
 
     private void RibbonBtnEsporta_Click(object s, RoutedEventArgs e) =>
-        SetStatus("Esporta — funzione in sviluppo");
+        ExportDevicesToCsv();
 
     private void RibbonBtnImpostazioni_Click(object s, RoutedEventArgs e)
     {
@@ -4802,5 +4805,643 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                     System.Windows.Media.Color.FromRgb(74, 222, 128))
             }
         });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // WAKE-ON-LAN
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private static void SendWakeOnLan(string macAddress)
+    {
+        // Normalizza MAC — rimuove separatori
+        var mac = macAddress.Replace(":", "").Replace("-", "").Replace(".", "");
+        if (mac.Length != 12) throw new ArgumentException("MAC non valido");
+        var macBytes = Enumerable.Range(0, 6)
+            .Select(i => Convert.ToByte(mac.Substring(i * 2, 2), 16))
+            .ToArray();
+        // Magic packet: 6 byte 0xFF + MAC ripetuto 16 volte
+        var packet = new byte[17 * 6];
+        for (int i = 0; i < 6; i++) packet[i] = 0xFF;
+        for (int i = 1; i <= 16; i++)
+            Buffer.BlockCopy(macBytes, 0, packet, i * 6, 6);
+        using var udp = new System.Net.Sockets.UdpClient();
+        udp.EnableBroadcast = true;
+        udp.Send(packet, packet.Length, new System.Net.IPEndPoint(System.Net.IPAddress.Broadcast, 9));
+        // Invia anche su porta 7 (alcuni device la richiedono)
+        udp.Send(packet, packet.Length, new System.Net.IPEndPoint(System.Net.IPAddress.Broadcast, 7));
+    }
+
+    private void MenuWoL_Click(object s, RoutedEventArgs e)
+    {
+        if (NetGrid.SelectedItem is not DeviceRow dev) return;
+        BtnWoL_Execute(dev);
+    }
+
+    private void BtnWoL_Click(object s, RoutedEventArgs e)
+    {
+        if (NetGrid.SelectedItem is not DeviceRow dev)
+        { SetStatus("⚠️ Seleziona un device dalla lista"); return; }
+        BtnWoL_Execute(dev);
+    }
+
+    private void BtnWoL_Execute(DeviceRow dev)
+    {
+        if (dev.Mac == "—" || string.IsNullOrEmpty(dev.Mac))
+        {
+            var mac = Microsoft.VisualBasic.Interaction.InputBox(
+                $"MAC non disponibile per {dev.Ip}.\nInserisci il MAC address (es: 00:11:22:33:44:55):",
+                "Wake-on-LAN", "");
+            if (string.IsNullOrWhiteSpace(mac)) return;
+            dev = new DeviceRow { Ip = dev.Ip, Mac = mac };
+        }
+        try
+        {
+            SendWakeOnLan(dev.Mac);
+            SetStatus($"💡 Magic packet inviato a {dev.Mac} ({dev.Ip})");
+            ShowToast("Wake-on-LAN", $"Magic packet inviato a {dev.Name} ({dev.Ip})");
+        }
+        catch (Exception ex) { SetStatus($"❌ WoL fallito: {ex.Message}"); }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // SSH TERMINAL
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private void MenuSsh_Click(object s, RoutedEventArgs e)
+    {
+        if (NetGrid.SelectedItem is not DeviceRow dev) return;
+        OpenSshTerminal(dev);
+    }
+
+    private void OpenSshTerminal(DeviceRow dev)
+    {
+        var user = _config.AdminUser;
+        if (string.IsNullOrWhiteSpace(user)) user = "root";
+        var target = $"{user}@{dev.Ip}";
+
+        // Prova Windows Terminal, poi PowerShell, poi cmd
+        var wtPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            @"Microsoft\WindowsApps\wt.exe");
+
+        if (File.Exists(wtPath))
+        {
+            Process.Start(new ProcessStartInfo("wt.exe", $"ssh {target}") { UseShellExecute = true });
+        }
+        else
+        {
+            Process.Start(new ProcessStartInfo("cmd.exe", $"/k ssh {target}")
+            { UseShellExecute = true, CreateNoWindow = false });
+        }
+        SetStatus($"🖥️ Apertura SSH verso {target}");
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TRACEROUTE GRAFICO
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private void MenuTraceroute_Click(object s, RoutedEventArgs e)
+    {
+        if (NetGrid.SelectedItem is not DeviceRow dev) return;
+        _ = RunTracerouteAsync(dev.Ip, dev.Name != "—" ? dev.Name : dev.Ip);
+    }
+
+    private void BtnCloseTraceroute_Click(object s, RoutedEventArgs e)
+    {
+        TraceroutePanel.Visibility = Visibility.Collapsed;
+        NetGrid.Visibility         = Visibility.Visible;
+    }
+
+    private async Task RunTracerouteAsync(string ip, string label)
+    {
+        NetGrid.Visibility         = Visibility.Collapsed;
+        TraceroutePanel.Visibility = Visibility.Visible;
+        TxtTracerouteTitle.Text    = $"🔀  Traceroute → {label} ({ip})";
+        TracerouteStack.Children.Clear();
+
+        AddTracerouteRow("—", "Avvio...", 0, true);
+        SetStatus($"🔀 Traceroute verso {ip}...");
+
+        var hops = new List<(int ttl, string hopIp, long ms, string name)>();
+
+        await Task.Run(() =>
+        {
+            for (int ttl = 1; ttl <= 30; ttl++)
+            {
+                using var ping   = new Ping();
+                var opts         = new PingOptions(ttl, true);
+                long bestMs      = -1;
+                string hopIp     = "*";
+                string hopName   = "";
+
+                // 3 tentativi per TTL
+                for (int t = 0; t < 3; t++)
+                {
+                    try
+                    {
+                        var reply = ping.Send(ip, 1500, new byte[32], opts);
+                        if (reply.Status == IPStatus.TtlExpired ||
+                            reply.Status == IPStatus.Success)
+                        {
+                            hopIp  = reply.Address?.ToString() ?? "*";
+                            bestMs = reply.RoundtripTime;
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (hopIp != "*")
+                {
+                    try
+                    {
+                        var entry  = Dns.GetHostEntry(hopIp);
+                        hopName    = entry.HostName;
+                    }
+                    catch { hopName = hopIp; }
+                }
+
+                var finalHop = hopIp == ip;
+                hops.Add((ttl, hopIp, bestMs, hopName));
+
+                Dispatcher.Invoke(() =>
+                {
+                    TracerouteStack.Children.Clear();
+                    foreach (var h in hops)
+                        AddTracerouteRow(h.hopIp, h.name, h.ms, false, h.hopIp == ip);
+                });
+
+                if (finalHop) break;
+            }
+        });
+
+        SetStatus($"✅ Traceroute completato — {hops.Count} hop");
+    }
+
+    private void AddTracerouteRow(string hopIp, string hopName, long ms, bool loading, bool isDestination = false)
+    {
+        var hopNum = TracerouteStack.Children.Count + 1;
+        var msColor = ms < 0    ? "#475569"
+                    : ms < 20   ? "#10b981"
+                    : ms < 80   ? "#f59e0b"
+                    : "#ef4444";
+        var msText  = ms < 0 ? "* * *" : $"{ms} ms";
+
+        var border = new Border
+        {
+            Background      = isDestination
+                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(40, 16, 185, 129))
+                : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(20, 255, 255, 255)),
+            BorderBrush     = new System.Windows.Media.SolidColorBrush(
+                isDestination ? System.Windows.Media.Color.FromRgb(16, 185, 129)
+                              : System.Windows.Media.Color.FromRgb(30, 58, 95)),
+            BorderThickness = new Thickness(1),
+            CornerRadius    = new CornerRadius(4),
+            Margin          = new Thickness(0, 0, 0, 4),
+            Padding         = new Thickness(12, 8, 12, 8)
+        };
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(36) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(80) });
+
+        var colNum = MakeTb($"{hopNum}", "#64748b", 11);
+        var colIp  = MakeTb(hopIp, "#60a5fa", 12, true);
+        var colName= MakeTb(loading ? "..." : (hopName.Length > 40 ? hopName[..37] + "…" : hopName),
+                            "#94a3b8", 11);
+        var colMs  = MakeTb(msText, msColor, 13, true);
+
+        Grid.SetColumn(colNum,  0);
+        Grid.SetColumn(colIp,   1);
+        Grid.SetColumn(colName, 2);
+        Grid.SetColumn(colMs,   3);
+
+        grid.Children.Add(colNum);
+        grid.Children.Add(colIp);
+        grid.Children.Add(colName);
+        grid.Children.Add(colMs);
+
+        border.Child = grid;
+
+        // Linea connettore tra hop
+        if (TracerouteStack.Children.Count > 0)
+        {
+            TracerouteStack.Children.Add(new TextBlock
+            {
+                Text = "  │", Foreground = new System.Windows.Media.SolidColorBrush(
+                    System.Windows.Media.Color.FromRgb(30, 58, 95)),
+                FontSize = 10, Margin = new Thickness(0, 0, 0, 0)
+            });
+        }
+
+        TracerouteStack.Children.Add(border);
+    }
+
+    private static TextBlock MakeTb(string text, string hex, double size, bool bold = false)
+    {
+        var c = System.Windows.Media.ColorConverter.ConvertFromString(hex);
+        return new TextBlock
+        {
+            Text       = text,
+            Foreground = new System.Windows.Media.SolidColorBrush((System.Windows.Media.Color)c!),
+            FontSize   = size,
+            FontWeight = bold ? FontWeights.SemiBold : FontWeights.Normal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin     = new Thickness(0, 0, 8, 0)
+        };
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // SPEED TEST
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private bool _speedTestRunning = false;
+
+    private async void BtnSpeedTest_Click(object s, RoutedEventArgs e)
+    {
+        if (_speedTestRunning) return;
+        // Mostra pannello speed test
+        HideAllNetPanels();
+        SpeedTestPanel.Visibility = Visibility.Visible;
+        NetGrid.Visibility        = Visibility.Collapsed;
+        await RunSpeedTestAsync();
+    }
+
+    private void BtnCloseSpeedTest_Click(object s, RoutedEventArgs e)
+    {
+        SpeedTestPanel.Visibility = Visibility.Collapsed;
+        NetGrid.Visibility        = Visibility.Visible;
+    }
+
+    private async Task RunSpeedTestAsync()
+    {
+        _speedTestRunning = true;
+        TxtSpeedStatus.Text = "🔍 Misuro ping...";
+        TxtSpeedDown.Text   = "— Mbps";
+        TxtSpeedUp.Text     = "— Mbps";
+        TxtSpeedPing.Text   = "Ping: — ms";
+        DrawSpeedArc(SpeedGaugeDown, 0, "#10b981");
+        DrawSpeedArc(SpeedGaugeUp,   0, "#3b82f6");
+
+        using var http = new System.Net.Http.HttpClient();
+        http.Timeout = TimeSpan.FromSeconds(30);
+
+        // 1. Ping
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            await http.GetAsync("https://www.cloudflare.com/cdn-cgi/trace");
+            sw.Stop();
+            var pingMs = sw.ElapsedMilliseconds;
+            TxtSpeedPing.Text = $"Ping: {pingMs} ms";
+        }
+        catch { TxtSpeedPing.Text = "Ping: ❌"; }
+
+        // 2. Download test — scarica 25 MB da Cloudflare
+        TxtSpeedStatus.Text = "⬇ Test download...";
+        double downMbps = 0;
+        try
+        {
+            var url = "https://speed.cloudflare.com/__down?bytes=25000000";
+            var sw  = System.Diagnostics.Stopwatch.StartNew();
+            var data = await http.GetByteArrayAsync(url);
+            sw.Stop();
+            var seconds = sw.Elapsed.TotalSeconds;
+            downMbps    = (data.Length * 8.0) / (seconds * 1_000_000);
+            TxtSpeedDown.Text = $"{downMbps:F1} Mbps";
+            DrawSpeedArc(SpeedGaugeDown, Math.Min(downMbps / 1000.0, 1.0), "#10b981");
+        }
+        catch { TxtSpeedDown.Text = "❌ Errore"; }
+
+        // 3. Upload test — invia 5 MB a Cloudflare
+        TxtSpeedStatus.Text = "⬆ Test upload...";
+        double upMbps = 0;
+        try
+        {
+            var url     = "https://speed.cloudflare.com/__up";
+            var payload = new byte[5_000_000];
+            new Random().NextBytes(payload);
+            var content = new System.Net.Http.ByteArrayContent(payload);
+            var sw      = System.Diagnostics.Stopwatch.StartNew();
+            await http.PostAsync(url, content);
+            sw.Stop();
+            var seconds = sw.Elapsed.TotalSeconds;
+            upMbps      = (payload.Length * 8.0) / (seconds * 1_000_000);
+            TxtSpeedUp.Text = $"{upMbps:F1} Mbps";
+            DrawSpeedArc(SpeedGaugeUp, Math.Min(upMbps / 500.0, 1.0), "#3b82f6");
+        }
+        catch { TxtSpeedUp.Text = "❌ Errore"; }
+
+        TxtSpeedStatus.Text = downMbps > 0 && upMbps > 0
+            ? $"✅ Test completato\n{downMbps:F0}↓  {upMbps:F0}↑ Mbps"
+            : "⚠️ Test parzialmente fallito";
+        SetStatus($"⚡ Speed test: ↓{downMbps:F0} Mbps  ↑{upMbps:F0} Mbps");
+        _speedTestRunning = false;
+    }
+
+    private void DrawSpeedArc(System.Windows.Controls.Canvas canvas, double ratio, string colorHex)
+    {
+        canvas.Children.Clear();
+        double w = 140, h = 140, cx = 70, cy = 80, r = 54;
+        var gray  = System.Windows.Media.Color.FromRgb(30, 42, 60);
+        var color = (System.Windows.Media.Color)
+            System.Windows.Media.ColorConverter.ConvertFromString(colorHex)!;
+
+        // Sfondo arco
+        DrawSpeedArcSegment(canvas, cx, cy, r, -210, 240, gray, 10);
+        // Arco progresso
+        if (ratio > 0.001)
+            DrawSpeedArcSegment(canvas, cx, cy, r, -210, 240 * ratio, color, 10);
+
+        // Valore percentuale al centro
+        var pct = new TextBlock
+        {
+            Text       = $"{ratio * 100:F0}%",
+            Foreground = new System.Windows.Media.SolidColorBrush(color),
+            FontSize   = 14, FontWeight = FontWeights.Bold
+        };
+        pct.Measure(new System.Windows.Size(100, 30));
+        System.Windows.Controls.Canvas.SetLeft(pct, cx - pct.DesiredSize.Width / 2);
+        System.Windows.Controls.Canvas.SetTop(pct,  cy - 10);
+        canvas.Children.Add(pct);
+    }
+
+    private static void DrawSpeedArcSegment(System.Windows.Controls.Canvas canvas,
+        double cx, double cy, double r, double startDeg, double sweepDeg,
+        System.Windows.Media.Color color, double thickness)
+    {
+        if (Math.Abs(sweepDeg) < 0.5) return;
+        double startRad = startDeg * Math.PI / 180;
+        double endRad   = (startDeg + sweepDeg) * Math.PI / 180;
+        var p1 = new System.Windows.Point(cx + r * Math.Cos(startRad), cy + r * Math.Sin(startRad));
+        var p2 = new System.Windows.Point(cx + r * Math.Cos(endRad),   cy + r * Math.Sin(endRad));
+        var figure = new System.Windows.Media.PathFigure { StartPoint = p1 };
+        figure.Segments.Add(new System.Windows.Media.ArcSegment
+        {
+            Point          = p2,
+            Size           = new System.Windows.Size(r, r),
+            IsLargeArc     = Math.Abs(sweepDeg) > 180,
+            SweepDirection = System.Windows.Media.SweepDirection.Clockwise
+        });
+        var geo = new System.Windows.Media.PathGeometry();
+        geo.Figures.Add(figure);
+        var path = new System.Windows.Shapes.Path
+        {
+            Data            = geo,
+            Stroke          = new System.Windows.Media.SolidColorBrush(color),
+            StrokeThickness = thickness,
+            StrokeStartLineCap = System.Windows.Media.PenLineCap.Round,
+            StrokeEndLineCap   = System.Windows.Media.PenLineCap.Round
+        };
+        canvas.Children.Add(path);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // mDNS SCANNER
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private async void BtnMdns_Click(object s, RoutedEventArgs e)
+    {
+        SetStatus("🔍 Scansione mDNS/Bonjour in corso...");
+        var found = await ScanMdnsAsync();
+
+        if (found.Count == 0)
+        {
+            SetStatus("⚠️ Nessun device mDNS trovato sulla rete locale");
+            return;
+        }
+
+        int added = 0;
+        foreach (var (ip, name) in found)
+        {
+            if (!_netRows.Any(r => r.Ip == ip))
+            {
+                _netRows.Add(new DeviceRow
+                {
+                    Ip         = ip,
+                    Name       = name,
+                    Status     = "🟢 Online",
+                    Icon       = GuessIconFromMdns(name),
+                    DeviceType = GuessMdnsType(name)
+                });
+                added++;
+            }
+            else
+            {
+                var existing = _netRows.FirstOrDefault(r => r.Ip == ip);
+                if (existing != null && existing.Name == "—")
+                    existing.Name = name;
+            }
+        }
+
+        SetStatus($"✅ mDNS: {found.Count} device trovati, {added} nuovi aggiunti");
+        ShowToast("mDNS Scan", $"{found.Count} device Bonjour trovati sulla rete");
+    }
+
+    private static async Task<List<(string ip, string name)>> ScanMdnsAsync()
+    {
+        var results = new System.Collections.Concurrent.ConcurrentBag<(string, string)>();
+        // Servizi mDNS comuni da cercare
+        var services = new[]
+        {
+            "_http._tcp.local", "_https._tcp.local", "_smb._tcp.local",
+            "_afpovertcp._tcp.local", "_ipp._tcp.local", "_printer._tcp.local",
+            "_airplay._tcp.local", "_googlecast._tcp.local", "_raop._tcp.local",
+            "_ssh._tcp.local", "_rdp._tcp.local", "_workstation._tcp.local"
+        };
+
+        var mcastEp = new System.Net.IPEndPoint(System.Net.IPAddress.Parse("224.0.0.251"), 5353);
+
+        await Task.Run(() =>
+        {
+            foreach (var svc in services)
+            {
+                try
+                {
+                    using var udp = new System.Net.Sockets.UdpClient();
+                    udp.Client.SetSocketOption(
+                        System.Net.Sockets.SocketOptionLevel.Socket,
+                        System.Net.Sockets.SocketOptionName.ReuseAddress, true);
+                    udp.Client.Bind(new System.Net.IPEndPoint(System.Net.IPAddress.Any, 0));
+                    udp.JoinMulticastGroup(System.Net.IPAddress.Parse("224.0.0.251"));
+                    udp.Client.ReceiveTimeout = 800;
+
+                    // DNS query per il servizio
+                    var query = BuildMdnsQuery(svc);
+                    udp.Send(query, query.Length, mcastEp);
+
+                    try
+                    {
+                        for (int i = 0; i < 5; i++)
+                        {
+                            var remote = new System.Net.IPEndPoint(System.Net.IPAddress.Any, 0);
+                            var data   = udp.Receive(ref remote);
+                            var ip     = remote.Address.ToString();
+                            var name   = ParseMdnsName(data) ?? svc.Split('.')[0];
+                            results.Add((ip, name));
+                        }
+                    }
+                    catch (System.Net.Sockets.SocketException) { } // timeout normale
+                }
+                catch { }
+            }
+        });
+
+        return results.DistinctBy(r => r.Item1).ToList();
+    }
+
+    private static byte[] BuildMdnsQuery(string serviceName)
+    {
+        // DNS query minimale per PTR record
+        var name  = serviceName.TrimEnd('.');
+        var parts = name.Split('.');
+        var msg   = new System.Collections.Generic.List<byte>();
+        // Header: ID=0, flags=standard query, 1 question
+        msg.AddRange(new byte[] { 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 });
+        foreach (var p in parts)
+        {
+            msg.Add((byte)p.Length);
+            msg.AddRange(System.Text.Encoding.ASCII.GetBytes(p));
+        }
+        msg.Add(0x00); // fine nome
+        msg.AddRange(new byte[] { 0x00, 0x0C, 0x00, 0x01 }); // type PTR, class IN
+        return msg.ToArray();
+    }
+
+    private static string? ParseMdnsName(byte[] data)
+    {
+        try
+        {
+            // Salta header (12 byte) e cerca il primo label
+            int i = 12;
+            var sb = new System.Text.StringBuilder();
+            while (i < data.Length && data[i] != 0)
+            {
+                int len = data[i++];
+                if (len > 63 || i + len > data.Length) break;
+                if (sb.Length > 0) sb.Append('.');
+                sb.Append(System.Text.Encoding.UTF8.GetString(data, i, len));
+                i += len;
+            }
+            var n = sb.ToString();
+            return n.EndsWith(".local") ? n[..^6] : n;
+        }
+        catch { return null; }
+    }
+
+    private static string GuessIconFromMdns(string name)
+    {
+        var n = name.ToLowerInvariant();
+        if (n.Contains("apple") || n.Contains("mac") || n.Contains("iphone") || n.Contains("ipad"))  return "🍎";
+        if (n.Contains("print") || n.Contains("hp") || n.Contains("canon") || n.Contains("epson"))   return "🖨️";
+        if (n.Contains("cast") || n.Contains("chromecast") || n.Contains("tv"))                       return "📺";
+        if (n.Contains("airplay") || n.Contains("airport"))                                           return "📡";
+        if (n.Contains("smb") || n.Contains("server") || n.Contains("nas"))                          return "🗄️";
+        return "🔵";
+    }
+
+    private static string GuessMdnsType(string name)
+    {
+        var n = name.ToLowerInvariant();
+        if (n.Contains("print")) return "Stampante";
+        if (n.Contains("cast") || n.Contains("tv")) return "Smart TV / Cast";
+        if (n.Contains("nas") || n.Contains("server")) return "NAS / Server";
+        if (n.Contains("apple") || n.Contains("mac")) return "Apple";
+        return "mDNS Device";
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // EXPORT CSV
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private void MenuExportCsv_Click(object s, RoutedEventArgs e) => ExportDevicesToCsv();
+    private void BtnExportCsv_Click(object s, RoutedEventArgs e)  => ExportDevicesToCsv();
+
+    private void ExportDevicesToCsv()
+    {
+        if (_netRows.Count == 0) { SetStatus("⚠️ Nessun device da esportare — esegui prima una scansione"); return; }
+
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title      = "Esporta device in CSV",
+            FileName   = $"NovaSCM_network_{DateTime.Now:yyyyMMdd_HHmm}.csv",
+            Filter     = "CSV (*.csv)|*.csv|Tutti i file (*.*)|*.*",
+            DefaultExt = ".csv"
+        };
+        if (dlg.ShowDialog() != true) return;
+
+        try
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("IP,MAC,Hostname,Tipo,Connessione,Vendor,Certificato,Stato");
+            foreach (var d in _netRows)
+            {
+                sb.AppendLine(
+                    $"\"{d.Ip}\",\"{d.Mac}\",\"{d.Name}\",\"{d.DeviceType}\"," +
+                    $"\"{d.ConnectionType}\",\"{d.Vendor}\",\"{d.CertStatus}\",\"{d.Status}\"");
+            }
+            File.WriteAllText(dlg.FileName, sb.ToString(), System.Text.Encoding.UTF8);
+            SetStatus($"✅ Esportati {_netRows.Count} device in {Path.GetFileName(dlg.FileName)}");
+            // Apri il file
+            Process.Start(new ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+        }
+        catch (Exception ex) { SetStatus($"❌ Export fallito: {ex.Message}"); }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // WINDOWS TOAST NOTIFICATION
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private System.Windows.Forms.NotifyIcon? _trayIcon;
+
+    private void EnsureTrayIcon()
+    {
+        if (_trayIcon != null) return;
+        _trayIcon = new System.Windows.Forms.NotifyIcon
+        {
+            Icon    = System.Drawing.SystemIcons.Application,
+            Visible = true,
+            Text    = "NovaSCM"
+        };
+        _trayIcon.DoubleClick += (_, _) =>
+        {
+            Show(); WindowState = WindowState.Normal; Activate();
+        };
+    }
+
+    private void ShowToast(string title, string message)
+    {
+        try
+        {
+            EnsureTrayIcon();
+            _trayIcon!.BalloonTipTitle   = title;
+            _trayIcon!.BalloonTipText    = message;
+            _trayIcon!.BalloonTipIcon    = System.Windows.Forms.ToolTipIcon.Info;
+            _trayIcon!.ShowBalloonTip(4000);
+        }
+        catch { /* notifiche non critiche */ }
+    }
+
+    // Override della chiusura: rimuove tray icon
+    protected override void OnClosed(EventArgs e)
+    {
+        _trayIcon?.Dispose();
+        base.OnClosed(e);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // HELPER: nascondi tutti i pannelli extra del tab Rete
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private void HideAllNetPanels()
+    {
+        RadarPanel.Visibility      = Visibility.Collapsed;
+        MapPanel.Visibility        = Visibility.Collapsed;
+        HeatmapPanel.Visibility    = Visibility.Collapsed;
+        TraceroutePanel.Visibility = Visibility.Collapsed;
+        SpeedTestPanel.Visibility  = Visibility.Collapsed;
+        NetGrid.Visibility         = Visibility.Visible;
     }
 }
