@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text.Json;
@@ -466,6 +467,10 @@ public partial class MainWindow : Window
         // Salva risultati scansione nel DB
         foreach (var d in _netRows)
             Database.UpsertDevice(d);
+
+        // Change log: confronta con scan precedente
+        if (!token.IsCancellationRequested)
+            ShowChangeLog(_netRows.ToList());
 
         // Arricchisce con tipo connessione da UniFi (anche MAC mancanti per altre VLAN)
         if (!token.IsCancellationRequested && !string.IsNullOrEmpty(_config.UnifiUrl))
@@ -5952,5 +5957,370 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         TraceroutePanel.Visibility = Visibility.Collapsed;
         SpeedTestPanel.Visibility  = Visibility.Collapsed;
         NetGrid.Visibility         = Visibility.Visible;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // NETWORK CHANGE LOG
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private List<string> _prevScanIps = new();
+
+    private void ShowChangeLog(List<DeviceRow> current)
+    {
+        var currentIps = current.Select(d => d.Ip).ToHashSet();
+        if (_prevScanIps.Count == 0)
+        {
+            _prevScanIps = currentIps.ToList();
+            return;
+        }
+        var prev    = _prevScanIps.ToHashSet();
+        var added   = currentIps.Except(prev).OrderBy(x => x).ToList();
+        var removed = prev.Except(currentIps).OrderBy(x => x).ToList();
+
+        if (added.Count == 0 && removed.Count == 0)
+        {
+            _prevScanIps = currentIps.ToList();
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        if (added.Count > 0)
+        {
+            sb.AppendLine($"🟢  NUOVI ({added.Count}):");
+            foreach (var ip in added)
+            {
+                var dev = current.FirstOrDefault(d => d.Ip == ip);
+                sb.AppendLine($"   + {ip,-16} {dev?.Name ?? "",-24} {dev?.Vendor ?? ""}");
+            }
+        }
+        if (removed.Count > 0)
+        {
+            if (sb.Length > 0) sb.AppendLine();
+            sb.AppendLine($"🔴  SPARITI ({removed.Count}):");
+            foreach (var ip in removed)
+                sb.AppendLine($"   - {ip}");
+        }
+
+        TxtChangeLog.Text         = sb.ToString();
+        TxtChangeLogTime.Text     = $"— Scan {DateTime.Now:HH:mm:ss}";
+        ChangeLogPanel.Visibility = Visibility.Visible;
+        _prevScanIps = currentIps.ToList();
+    }
+
+    private void BtnCloseChangeLog_Click(object s, RoutedEventArgs e)
+        => ChangeLogPanel.Visibility = Visibility.Collapsed;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // REPORT HTML
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private void BtnExportHtml_Click(object s, RoutedEventArgs e)
+    {
+        var devices = _netRows.ToList();
+        if (devices.Count == 0)
+        {
+            MessageBox.Show("Nessun dispositivo. Esegui prima una scansione.", "Report HTML",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        var dlg = new Microsoft.Win32.SaveFileDialog
+        {
+            Title    = "Salva Report HTML",
+            Filter   = "Pagina Web|*.html",
+            FileName = $"NovaSCM-Report-{DateTime.Now:yyyyMMdd-HHmm}.html"
+        };
+        if (dlg.ShowDialog() != true) return;
+        var html = BuildNetworkReportHtml(devices);
+        File.WriteAllText(dlg.FileName, html, System.Text.Encoding.UTF8);
+        Process.Start(new ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
+    }
+
+    private string BuildNetworkReportHtml(List<DeviceRow> devices)
+    {
+        var ts      = DateTime.Now.ToString("dd/MM/yyyy HH:mm");
+        var online  = devices.Count(d => d.Status?.Contains("Online") == true);
+        var offline = devices.Count - online;
+        var rows    = new System.Text.StringBuilder();
+        foreach (var d in devices.OrderBy(x =>
+        {
+            if (System.Net.IPAddress.TryParse(x.Ip, out var ip))
+            {
+                var b = ip.GetAddressBytes();
+                return (b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3];
+            }
+            return 0;
+        }))
+        {
+            var isOnline    = d.Status?.Contains("Online") == true;
+            var statusStyle = isOnline ? "color:#16a34a;font-weight:bold" : "color:#dc2626";
+            var statusText  = isOnline ? "🟢 Online" : "⬛ Offline";
+            rows.AppendLine(
+                $"<tr><td>{d.Ip}</td><td>{System.Net.WebUtility.HtmlEncode(d.Name)}</td>" +
+                $"<td style='font-family:monospace'>{d.Mac}</td>" +
+                $"<td>{System.Net.WebUtility.HtmlEncode(d.Vendor)}</td>" +
+                $"<td>{System.Net.WebUtility.HtmlEncode(d.DeviceType)}</td>" +
+                $"<td style='{statusStyle}'>{statusText}</td>" +
+                $"<td>{System.Net.WebUtility.HtmlEncode(d.ConnectionType)}</td></tr>");
+        }
+        const string css =
+            "*{box-sizing:border-box;margin:0;padding:0}" +
+            "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafc;color:#1e293b}" +
+            "header{background:linear-gradient(135deg,#0d1b3e,#1e3a5f);color:white;padding:24px 32px}" +
+            "header h1{font-size:22px;font-weight:700}" +
+            "header p{color:#94a3b8;margin-top:4px;font-size:13px}" +
+            ".stats{display:flex;gap:16px;padding:16px 32px;background:white;border-bottom:1px solid #e2e8f0}" +
+            ".stat{background:#f1f5f9;border-radius:8px;padding:12px 20px;min-width:110px}" +
+            ".stat .val{font-size:26px;font-weight:700;color:#0d1b3e}" +
+            ".stat .lbl{font-size:11px;color:#64748b;margin-top:2px}" +
+            "main{padding:20px 32px}" +
+            "input[type=search]{width:100%;padding:9px 14px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;margin-bottom:14px;outline:none}" +
+            "table{width:100%;border-collapse:collapse;background:white;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);font-size:13px}" +
+            "th{background:#1e293b;color:white;padding:9px 12px;text-align:left;font-weight:600;cursor:pointer;user-select:none}" +
+            "th:hover{background:#334155}" +
+            "td{padding:7px 12px;border-bottom:1px solid #f1f5f9}" +
+            "tr:hover td{background:#f8fafc}" +
+            "footer{text-align:center;padding:18px;color:#94a3b8;font-size:12px}" +
+            "footer a{color:#60a5fa}";
+        const string js =
+            "function filter(){var q=document.getElementById('q').value.toLowerCase();" +
+            "document.querySelectorAll('#t tbody tr').forEach(function(r){r.style.display=r.textContent.toLowerCase().indexOf(q)>=0?'':'none'})}" +
+            "var sd=1;function sort(c){var tb=document.querySelector('#t tbody');var rs=Array.from(tb.querySelectorAll('tr'));" +
+            "rs.sort(function(a,b){var x=a.cells[c].textContent,y=b.cells[c].textContent;return x.localeCompare(y,undefined,{numeric:true})*sd});" +
+            "sd*=-1;rs.forEach(function(r){tb.appendChild(r)})}";
+        return
+            "<!DOCTYPE html><html lang=\"it\"><head><meta charset=\"utf-8\">" +
+            $"<title>NovaSCM Report — {ts}</title>" +
+            "<style>" + css + "</style></head><body>" +
+            "<header><h1>🖥️ NovaSCM — Network Report</h1>" +
+            $"<p>Generato il {ts}</p></header>" +
+            "<div class=\"stats\">" +
+            $"<div class=\"stat\"><div class=\"val\">{devices.Count}</div><div class=\"lbl\">Totale</div></div>" +
+            $"<div class=\"stat\"><div class=\"val\" style=\"color:#16a34a\">{online}</div><div class=\"lbl\">Online</div></div>" +
+            $"<div class=\"stat\"><div class=\"val\" style=\"color:#dc2626\">{offline}</div><div class=\"lbl\">Offline</div></div>" +
+            "</div><main>" +
+            "<input type=\"search\" id=\"q\" placeholder=\"🔍  Cerca IP, hostname, MAC, vendor...\" oninput=\"filter()\">" +
+            "<table id=\"t\"><thead><tr>" +
+            "<th onclick=\"sort(0)\">IP ⇅</th><th onclick=\"sort(1)\">Hostname ⇅</th>" +
+            "<th onclick=\"sort(2)\">MAC</th><th onclick=\"sort(3)\">Vendor ⇅</th>" +
+            "<th onclick=\"sort(4)\">Tipo ⇅</th><th onclick=\"sort(5)\">Stato ⇅</th>" +
+            "<th onclick=\"sort(6)\">Connessione ⇅</th>" +
+            "</tr></thead><tbody>" + rows + "</tbody></table></main>" +
+            $"<footer>Generato da <b>NovaSCM v{CurrentVersion}</b> • " +
+            "<a href=\"https://github.com/ClaudioBecchis/NovaSCM\">github.com/ClaudioBecchis/NovaSCM</a></footer>" +
+            "<script>" + js + "</script></body></html>";
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TAB PROXMOX
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private record PveNode(string Id, string Name, string Status,
+                           double Cpu, long Memory, long MaxMem, int VmCount)
+    {
+        public string StatusIcon => Status == "online" ? "🟢" : "🔴";
+        public string CpuText    => $"CPU: {Cpu * 100:F1} %";
+        public string RamText    => $"RAM: {Memory / 1073741824.0:F1} / {MaxMem / 1073741824.0:F1} GB";
+        public string GuestText  => $"{VmCount} VM/CT";
+    }
+
+    private record PveGuest(int Vmid, string Name, string Type, string Status, string Node,
+                            double Cpu, long Mem, long MaxMem, long Disk, long MaxDisk, long Uptime)
+    {
+        public string TypeLabel   => Type == "qemu" ? "VM" : "CT";
+        public string StatusLabel => Status switch
+        {
+            "running" => "▶ running", "stopped" => "⏹ stopped",
+            "paused"  => "⏸ paused", _ => Status
+        };
+        public string CpuLabel    => Status == "running" ? $"{Cpu * 100:F1} %" : "—";
+        public string RamLabel    => MaxMem > 0 ? $"{Mem / 1048576:N0} / {MaxMem / 1048576:N0} MB" : "—";
+        public string DiskLabel   => MaxDisk > 0 ? $"{MaxDisk / 1073741824.0:F0} GB" : "—";
+        public string UptimeLabel => Uptime > 0 ? FormatUptime(Uptime) : "—";
+        static string FormatUptime(long s) =>
+            s < 3600   ? $"{s / 60}m" :
+            s < 86400  ? $"{s / 3600}h {s % 3600 / 60}m" :
+                         $"{s / 86400}d {s % 86400 / 3600}h";
+    }
+
+    private HttpClient? _pveHttp;
+    private string _pveCookie    = "";
+    private string _pveCsrfToken = "";
+    private string _pveHost      = "";
+    private readonly List<PveGuest> _pveAllGuests = new();
+
+    private void EnsurePveHttp()
+    {
+        if (_pveHttp != null) return;
+        var handler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback =
+                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        };
+        _pveHttp = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+    }
+
+    private async void BtnPveConnect_Click(object s, RoutedEventArgs e)
+    {
+        EnsurePveHttp();
+        _pveHost = TxtPveHost.Text.Trim();
+        var user = TxtPveUser.Text.Trim();
+        var pass = TxtPvePass.Password;
+        TxtPveStatus.Text       = "⏳ Connessione...";
+        TxtPveStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(251, 191, 36));
+        try
+        {
+            var form = new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["username"] = user, ["password"] = pass
+            });
+            var resp = await _pveHttp!.PostAsync(
+                $"https://{_pveHost}:8006/api2/json/access/ticket", form);
+            resp.EnsureSuccessStatusCode();
+            var doc  = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
+            var data = doc.RootElement.GetProperty("data");
+            _pveCookie    = data.GetProperty("ticket").GetString()              ?? "";
+            _pveCsrfToken = data.GetProperty("CSRFPreventionToken").GetString() ?? "";
+            _pveHttp.DefaultRequestHeaders.Remove("CSRFPreventionToken");
+            _pveHttp.DefaultRequestHeaders.Add("CSRFPreventionToken", _pveCsrfToken);
+            _pveHttp.DefaultRequestHeaders.Remove("Cookie");
+            _pveHttp.DefaultRequestHeaders.Add("Cookie", $"PVEAuthCookie={_pveCookie}");
+            TxtPveStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(74, 222, 128));
+            BtnPveRefresh.IsEnabled = true;
+            await PveRefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            TxtPveStatus.Text       = $"❌ {ex.Message}";
+            TxtPveStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68));
+        }
+    }
+
+    private async void BtnPveRefresh_Click(object s, RoutedEventArgs e)
+        => await PveRefreshAsync();
+
+    private async Task PveRefreshAsync()
+    {
+        if (_pveHttp == null || _pveHost == "") return;
+        try
+        {
+            var nodesJson = await _pveHttp.GetStringAsync(
+                $"https://{_pveHost}:8006/api2/json/nodes");
+            var nodesDoc = JsonDocument.Parse(nodesJson);
+            var nodeList = new List<PveNode>();
+            _pveAllGuests.Clear();
+
+            foreach (var n in nodesDoc.RootElement.GetProperty("data").EnumerateArray())
+            {
+                var nodeId = n.TryGetProperty("node",   out var nid)  ? nid.GetString()  ?? "" : "";
+                var status = n.TryGetProperty("status", out var nst)  ? nst.GetString()  ?? "" : "";
+                var cpu    = n.TryGetProperty("cpu",    out var nc)   ? nc.GetDouble()        : 0;
+                var mem    = n.TryGetProperty("mem",    out var nm)   ? nm.GetInt64()         : 0;
+                var maxMem = n.TryGetProperty("maxmem", out var nmm)  ? nmm.GetInt64()        : 0;
+                int guestCount = 0;
+                foreach (var typeStr in new[] { "qemu", "lxc" })
+                {
+                    try
+                    {
+                        var json = await _pveHttp.GetStringAsync(
+                            $"https://{_pveHost}:8006/api2/json/nodes/{nodeId}/{typeStr}");
+                        foreach (var el in JsonDocument.Parse(json).RootElement
+                                 .GetProperty("data").EnumerateArray())
+                        {
+                            _pveAllGuests.Add(ParsePveGuest(el, nodeId, typeStr));
+                            guestCount++;
+                        }
+                    }
+                    catch { }
+                }
+                nodeList.Add(new PveNode(nodeId, nodeId, status, cpu, mem, maxMem, guestCount));
+            }
+
+            LstPveNodes.ItemsSource = nodeList;
+            if (nodeList.Count > 0 && LstPveNodes.SelectedIndex < 0)
+                LstPveNodes.SelectedIndex = 0;
+            PveRefreshGrid();
+            TxtPveStatus.Text = $"✅ {nodeList.Count} nodi • {_pveAllGuests.Count} VM/CT";
+        }
+        catch (Exception ex)
+        {
+            TxtPveStatus.Text       = $"❌ {ex.Message}";
+            TxtPveStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68));
+        }
+    }
+
+    private static PveGuest ParsePveGuest(JsonElement el, string node, string type)
+    {
+        int    vmid    = el.TryGetProperty("vmid",    out var v)   ? v.GetInt32()   : 0;
+        string name    = el.TryGetProperty("name",    out var vn)  ? vn.GetString() ?? $"vm{vmid}" : $"vm{vmid}";
+        string status  = el.TryGetProperty("status",  out var vs)  ? vs.GetString() ?? ""          : "";
+        double cpu     = el.TryGetProperty("cpu",     out var vc)  ? vc.GetDouble()                : 0;
+        long   mem     = el.TryGetProperty("mem",     out var vm)  ? vm.GetInt64()                 : 0;
+        long   maxMem  = el.TryGetProperty("maxmem",  out var vmm) ? vmm.GetInt64()                : 0;
+        long   disk    = el.TryGetProperty("disk",    out var vd)  ? vd.GetInt64()                 : 0;
+        long   maxDisk = el.TryGetProperty("maxdisk", out var vmd) ? vmd.GetInt64()                : 0;
+        long   uptime  = el.TryGetProperty("uptime",  out var vu)  ? vu.GetInt64()                 : 0;
+        return new PveGuest(vmid, name, type, status, node, cpu, mem, maxMem, disk, maxDisk, uptime);
+    }
+
+    private void PveRefreshGrid()
+    {
+        var nodeId = (LstPveNodes.SelectedItem as PveNode)?.Id;
+        var filter = TxtPveFilter.Text.Trim().ToLower();
+        DgPveGuests.ItemsSource = _pveAllGuests
+            .Where(g => nodeId == null || g.Node == nodeId)
+            .Where(g => filter == "" ||
+                        g.Name.ToLower().Contains(filter) ||
+                        g.Vmid.ToString().Contains(filter))
+            .OrderBy(g => g.Vmid)
+            .ToList();
+    }
+
+    private void LstPveNodes_SelectionChanged(object s, SelectionChangedEventArgs e)
+        => PveRefreshGrid();
+
+    private void DgPveGuests_SelectionChanged(object s, SelectionChangedEventArgs e)
+    {
+        var g = DgPveGuests.SelectedItem as PveGuest;
+        BtnPveStart.IsEnabled   = g?.Status == "stopped";
+        BtnPveStop.IsEnabled    = g?.Status == "running";
+        BtnPveReboot.IsEnabled  = g?.Status == "running";
+        BtnPveSuspend.IsEnabled = g?.Status == "running" && g.Type == "qemu";
+        BtnPveConsole.IsEnabled = g?.Status == "running";
+    }
+
+    private void TxtPveFilter_TextChanged(object s, TextChangedEventArgs e)
+        => PveRefreshGrid();
+
+    private async void BtnPveStart_Click(object s, RoutedEventArgs e)
+        => await PveGuestActionAsync("start");
+    private async void BtnPveStop_Click(object s, RoutedEventArgs e)
+        => await PveGuestActionAsync("stop");
+    private async void BtnPveReboot_Click(object s, RoutedEventArgs e)
+        => await PveGuestActionAsync("reboot");
+    private async void BtnPveSuspend_Click(object s, RoutedEventArgs e)
+        => await PveGuestActionAsync("suspend");
+
+    private async Task PveGuestActionAsync(string action)
+    {
+        var g = DgPveGuests.SelectedItem as PveGuest;
+        if (g == null || _pveHttp == null) return;
+        try
+        {
+            var url = $"https://{_pveHost}:8006/api2/json/nodes/{g.Node}/{g.Type}/{g.Vmid}/status/{action}";
+            (await _pveHttp.PostAsync(url, new StringContent(""))).EnsureSuccessStatusCode();
+            TxtPveStatus.Text = $"✅ {action} → {g.Name}";
+            await Task.Delay(2000);
+            await PveRefreshAsync();
+        }
+        catch (Exception ex) { TxtPveStatus.Text = $"❌ {ex.Message}"; }
+    }
+
+    private void BtnPveConsole_Click(object s, RoutedEventArgs e)
+    {
+        var g = DgPveGuests.SelectedItem as PveGuest;
+        if (g == null) return;
+        var url = $"https://{_pveHost}:8006/?console=kvm&novnc=1&vmid={g.Vmid}" +
+                  $"&vmname={Uri.EscapeDataString(g.Name)}&node={g.Node}&resize=off&cmd=";
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
 }
