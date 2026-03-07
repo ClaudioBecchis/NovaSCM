@@ -20,12 +20,13 @@ class WfNameWindow : Window
     {
         Owner = Application.Current.MainWindow;
         Title = title;
-        Width = 420; Height = 220;
+        Width = 420; Height = 270;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         ResizeMode = ResizeMode.NoResize;
         Background = new WpfBrush(WpfColor.FromRgb(0x0a, 0x0f, 0x1e));
 
         var root = new Grid { Margin = new Thickness(20) };
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -53,10 +54,13 @@ class WfNameWindow : Window
         _desc = MakeTextBox(desc);
         Grid.SetRow(_desc, 4);
 
+        var spacer = new Border { Height = 8 };
+        Grid.SetRow(spacer, 5);
+
         var btns = new StackPanel
         {
             Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 12, 0, 0)
+            Margin = new Thickness(0, 4, 0, 0)
         };
         var btnCancel = MakeButton("Annulla", false);
         btnCancel.Click += (_, _) => { DialogResult = false; };
@@ -64,13 +68,14 @@ class WfNameWindow : Window
         btnOk.Click += BtnOk_Click;
         btns.Children.Add(btnCancel);
         btns.Children.Add(btnOk);
-        Grid.SetRow(btns, 5);
+        Grid.SetRow(btns, 6);
 
         root.Children.Add(header);
         root.Children.Add(lblNome);
         root.Children.Add(_nome);
         root.Children.Add(lblDesc);
         root.Children.Add(_desc);
+        root.Children.Add(spacer);
         root.Children.Add(btns);
         Content = root;
 
