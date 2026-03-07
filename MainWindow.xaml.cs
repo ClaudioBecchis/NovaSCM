@@ -1220,9 +1220,42 @@ public partial class MainWindow : Window
     private void BtnOpenGitHub_Click(object s, RoutedEventArgs e) =>
         Process.Start(new ProcessStartInfo("https://github.com/novascm/novascm") { UseShellExecute = true });
 
-    private void BtnDemoSCCM_Click(object s, RoutedEventArgs e)  => new DemoSCCM().Show();
-    private void BtnDemoAI_Click(object s, RoutedEventArgs e)    => new DemoAI().Show();
-    private void BtnDemoMSIX_Click(object s, RoutedEventArgs e)  => new DemoMSIX().Show();
+    private void BtnDemoSCCM_Click(object s, RoutedEventArgs e)   => new DemoSCCM().Show();
+    private void BtnDemoAI_Click(object s, RoutedEventArgs e)     => new DemoAI().Show();
+    private void BtnDemoMSIX_Click(object s, RoutedEventArgs e)   => new DemoMSIX().Show();
+    private void BtnDemoHybrid_Click(object s, RoutedEventArgs e) => new DemoHybrid().Show();
+
+    // ── Sidebar navigation ────────────────────────────────────────────────────
+    private static readonly string[] _navSections =
+    [
+        "Rete", "Certificati", "Applicazioni", "OPSI",
+        "PC", "Deploy OS", "Workflow", "Richieste",
+        "Impostazioni", "About"
+    ];
+
+    private readonly Button[] _navBtns = [];
+
+    private void Nav_Click(object s, RoutedEventArgs e)
+    {
+        if (s is Button btn && int.TryParse(btn.Tag?.ToString(), out int idx))
+            MainTabs.SelectedIndex = idx;
+    }
+
+    private void UpdateNavState(int idx)
+    {
+        var btns = new[]
+        {
+            NavRete, NavCert, NavApp, NavOpsi, NavPc,
+            NavDeploy, NavWorkflow, NavRichieste, NavImpostazioni, NavAbout
+        };
+        var active   = FindResource("NavSideBtnActive") as System.Windows.Style;
+        var inactive = FindResource("NavSideBtn")       as System.Windows.Style;
+        for (int i = 0; i < btns.Length; i++)
+            btns[i].Style = i == idx ? active : inactive;
+
+        TxtNavSection.Text = idx >= 0 && idx < _navSections.Length
+            ? _navSections[idx] : "";
+    }
 
     private const string CurrentVersion = "1.0.6";
     private string? _updateDownloadUrl;
@@ -1699,6 +1732,7 @@ public partial class MainWindow : Window
     private async void MainTabs_SelectionChanged(object s, SelectionChangedEventArgs e)
     {
         if (e.Source != MainTabs) return;
+        UpdateNavState(MainTabs.SelectedIndex);
         if (MainTabs.SelectedItem is not TabItem tab) return;
         var header = tab.Header?.ToString() ?? "";
         if (header.Contains("Richieste"))

@@ -140,17 +140,86 @@
             <Setter Property="FontWeight"   Value="SemiBold"/>
             <Setter Property="Margin"       Value="0,16,0,6"/>
         </Style>
+
+        <!-- Sidebar nav button -->
+        <Style x:Key="NavSideBtn" TargetType="Button">
+            <Setter Property="Background"              Value="Transparent"/>
+            <Setter Property="Foreground"              Value="#4A6A9A"/>
+            <Setter Property="BorderThickness"         Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding"                 Value="16,9"/>
+            <Setter Property="FontSize"                Value="13"/>
+            <Setter Property="Cursor"                  Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="NavSideBtnActive" TargetType="Button" BasedOn="{StaticResource NavSideBtn}">
+            <Setter Property="Background"  Value="#0A78C9"/>
+            <Setter Property="Foreground"  Value="White"/>
+            <Setter Property="FontWeight"  Value="SemiBold"/>
+        </Style>
     </Window.Resources>
 
-    <Grid Background="#0a0f1e">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>  <!-- banner aggiornamento -->
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="26"/>
-        </Grid.RowDefinitions>
+    <DockPanel Background="#0a0f1e">
 
         <!-- ═══ BANNER AGGIORNAMENTO ═══ -->
-        <Border x:Name="UpdateBanner" Grid.Row="0"
+        <!-- ═══ HEADER ═══ -->
+        <Border DockPanel.Dock="Top" Background="#073682" Height="52">
+            <Grid Margin="18,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#0A78C9" Width="32" Height="32" CornerRadius="7" Margin="0,0,10,0">
+                        <TextBlock Text="N" Foreground="White" FontSize="18" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="NovaSCM" Foreground="White" FontSize="17" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="   Console" Foreground="#5588CC" FontSize="13" VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Grid.Column="1" x:Name="TxtNavSection"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="#7AAAD8" FontSize="13" FontWeight="SemiBold"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="© 2026 Claudio Becchis" Foreground="#3A5A88" FontSize="11"
+                               VerticalAlignment="Center" Margin="0,0,14,0"/>
+                    <TextBlock x:Name="TxtHeaderStatus" Text="● Pronto"
+                               Foreground="#10b981" FontSize="12" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ═══ STATUS BAR ═══ -->
+        <Border DockPanel.Dock="Bottom" Background="#060e1e" Height="24"
+                BorderBrush="#1e3a5f" BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0">
+                <TextBlock Text="NovaSCM" Foreground="#60a5fa" FontSize="11" FontWeight="SemiBold"/>
+                <TextBlock Text="  ·  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock Text="© 2026 Claudio Becchis — PolarisCore.it" Foreground="#334155" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock Text="8/10 online" Foreground="#10b981" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock Text="4 cert" Foreground="#60a5fa" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock Text="3/4 PC" Foreground="#a78bfa" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
+                <TextBlock x:Name="StatusBarMsg" Text="Pronto" Foreground="#475569" FontSize="11"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ═══ UPDATE BANNER ═══ -->
+        <Border x:Name="UpdateBanner" DockPanel.Dock="Top"
                 Background="#1a1200" BorderBrush="#f59e0b" BorderThickness="0,0,0,2"
                 Visibility="Collapsed" Padding="14,7">
             <Grid>
@@ -172,10 +241,41 @@
             </Grid>
         </Border>
 
-        <!-- ═══ TABS ═══ -->
-        <TabControl Grid.Row="1" Background="#0a0f1e" BorderThickness="0"
+        <!-- ═══ SIDEBAR ═══ -->
+        <Border DockPanel.Dock="Left" Background="#091428" Width="202"
+                BorderBrush="#1a2f50" BorderThickness="0,0,1,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Bottom" Margin="0,0,0,10">
+                    <Separator Background="#1a2f50" Margin="12,6"/>
+                    <Button x:Name="NavImpostazioni" Content="&#x2699;&#xFE0F;   Impostazioni"
+                            Style="{StaticResource NavSideBtn}" Click="Nav_Click" Tag="8"/>
+                    <Button x:Name="NavAbout"        Content="&#x2139;&#xFE0F;   About"
+                            Style="{StaticResource NavSideBtn}" Click="Nav_Click" Tag="9"/>
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Text="NAVIGAZIONE" Foreground="#1E3A5F" FontSize="10"
+                               FontWeight="Bold" Margin="16,14,16,4"/>
+                    <Button x:Name="NavRete"      Content="&#x1F4E1;   Rete"          Style="{StaticResource NavSideBtnActive}" Click="Nav_Click" Tag="0"/>
+                    <Button x:Name="NavCert"      Content="&#x1F512;   Certificati"   Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="1"/>
+                    <Button x:Name="NavApp"       Content="&#x1F4E6;   Applicazioni"  Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="2"/>
+                    <Button x:Name="NavOpsi"      Content="&#x2699;&#xFE0F;   OPSI"           Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="3"/>
+                    <Button x:Name="NavPc"        Content="&#x1F5A5;&#xFE0F;   PC"             Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="4"/>
+                    <Button x:Name="NavDeploy"    Content="&#x1F4BF;   Deploy OS"     Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="5"/>
+                    <Button x:Name="NavWorkflow"  Content="&#x2699;&#xFE0F;   Workflow"      Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="6"/>
+                    <Button x:Name="NavRichieste" Content="&#x1F4CB;   Richieste"     Style="{StaticResource NavSideBtn}"       Click="Nav_Click" Tag="7"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ═══ TABS (headers nascosti, controllati dalla sidebar) ═══ -->
+        <TabControl Background="#0a0f1e" BorderThickness="0"
                     x:Name="MainTabs"
                     SelectionChanged="MainTabs_SelectionChanged">
+            <TabControl.Template>
+                <ControlTemplate TargetType="TabControl">
+                    <ContentPresenter ContentSource="SelectedContent"/>
+                </ControlTemplate>
+            </TabControl.Template>
 
             <!-- ─── TAB RETE ─── -->
             <TabItem Header="📡  Rete">
@@ -1342,9 +1442,12 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                             <Button Content="🔵  Advanced Installer Style" Padding="14,8" Margin="0,0,10,0"
                                     Background="#073682" BorderBrush="#0A78C9" Foreground="White"
                                     Click="BtnDemoAI_Click"/>
-                            <Button Content="📦  MSIX Packaging Tool Style" Padding="14,8"
+                            <Button Content="📦  MSIX Packaging Tool Style" Padding="14,8" Margin="0,0,10,0"
                                     Background="#0078D4" BorderBrush="#005A9E" Foreground="White"
                                     Click="BtnDemoMSIX_Click"/>
+                            <Button Content="✨  Ibrido (SCCM + Advanced Installer)" Padding="14,8"
+                                    Background="#073682" BorderBrush="#0A78C9" Foreground="#A8D0F0"
+                                    Click="BtnDemoHybrid_Click"/>
                         </StackPanel>
                         <TextBlock x:Name="TxtUpdateStatus" FontSize="12" Margin="0,0,0,16"
                                    TextWrapping="Wrap" Foreground="#475569"/>
@@ -1365,21 +1468,5 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
 
         </TabControl>
 
-        <!-- ═══ STATUS BAR ═══ -->
-        <Border Grid.Row="2" Background="#0d1b3e" BorderThickness="0,1,0,0" BorderBrush="#1e3a5f">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0">
-                <TextBlock Text="NovaSCM" Foreground="#60a5fa" FontSize="11" FontWeight="SemiBold"/>
-                <TextBlock Text="  ·  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock Text="© 2026 Claudio Becchis — PolarisCore.it" Foreground="#334155" FontSize="11"/>
-                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock Text="8/10 online" Foreground="#10b981" FontSize="11"/>
-                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock Text="4 cert" Foreground="#60a5fa" FontSize="11"/>
-                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock Text="3/4 PC" Foreground="#a78bfa" FontSize="11"/>
-                <TextBlock Text="  │  " Foreground="#1e3a5f" FontSize="11"/>
-                <TextBlock x:Name="StatusBarMsg" Text="Pronto" Foreground="#475569" FontSize="11"/>
-            </StackPanel>
-        </Border>
-    </Grid>
+    </DockPanel>
 </Window>
