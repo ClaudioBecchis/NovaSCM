@@ -1,0 +1,336 @@
+<Window x:Class="PolarisManager.DemoHybrid"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="NovaSCM — Console"
+        Height="740" Width="1180" WindowStartupLocation="CenterScreen"
+        Background="#F4F6FA">
+    <Window.Resources>
+
+        <!-- Sidebar nav button -->
+        <Style x:Key="NavBtn" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#9EC5EF"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Padding" Value="16,9"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="NavBtnActive" TargetType="Button" BasedOn="{StaticResource NavBtn}">
+            <Setter Property="Background" Value="#0958B8"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+
+        <!-- Toolbar button -->
+        <Style x:Key="TbBtn" TargetType="Button">
+            <Setter Property="Padding" Value="14,7"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style x:Key="TbBtnPrimary" TargetType="Button" BasedOn="{StaticResource TbBtn}">
+            <Setter Property="Background" Value="#0A78C9"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderBrush" Value="#0A78C9"/>
+        </Style>
+        <Style x:Key="TbBtnDefault" TargetType="Button" BasedOn="{StaticResource TbBtn}">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#444"/>
+            <Setter Property="BorderBrush" Value="#D0D5DC"/>
+        </Style>
+        <Style x:Key="TbBtnDanger" TargetType="Button" BasedOn="{StaticResource TbBtn}">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#DC2626"/>
+            <Setter Property="BorderBrush" Value="#FCA5A5"/>
+        </Style>
+
+        <!-- DataGrid -->
+        <Style TargetType="DataGridColumnHeader">
+            <Setter Property="Background" Value="#ECEEF3"/>
+            <Setter Property="Foreground" Value="#444"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="BorderBrush" Value="#D0D5DC"/>
+            <Setter Property="BorderThickness" Value="0,0,1,1"/>
+        </Style>
+        <Style TargetType="DataGridRow">
+            <Setter Property="Background" Value="White"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#DBEAFE"/>
+                    <Setter Property="Foreground" Value="#1E3A8A"/>
+                </Trigger>
+                <Trigger Property="AlternationIndex" Value="1">
+                    <Setter Property="Background" Value="#F8F9FC"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+        <Style TargetType="DataGridCell">
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="DataGridCell">
+                        <Border Background="{TemplateBinding Background}">
+                            <ContentPresenter Margin="12,5"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <DockPanel>
+
+        <!-- ═══ HEADER ═══ (Advanced Installer style) -->
+        <Border DockPanel.Dock="Top" Background="#073682" Height="52">
+            <Grid Margin="18,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Logo -->
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#0A78C9" Width="32" Height="32" CornerRadius="7" Margin="0,0,10,0">
+                        <TextBlock Text="N" Foreground="White" FontSize="18" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="NovaSCM" Foreground="White" FontSize="17" FontWeight="Bold"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="   Console" Foreground="#5588CC" FontSize="13"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Top nav links -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Button Background="Transparent" BorderThickness="0" Foreground="#7AAAD8"
+                            FontSize="13" Padding="14,0" Cursor="Hand">Dashboard</Button>
+                    <Button Background="Transparent" BorderThickness="0" Foreground="White"
+                            FontSize="13" FontWeight="SemiBold" Padding="14,0" Cursor="Hand">Deployment</Button>
+                    <Button Background="Transparent" BorderThickness="0" Foreground="#7AAAD8"
+                            FontSize="13" Padding="14,0" Cursor="Hand">Dispositivi</Button>
+                    <Button Background="Transparent" BorderThickness="0" Foreground="#7AAAD8"
+                            FontSize="13" Padding="14,0" Cursor="Hand">Report</Button>
+                </StackPanel>
+
+                <!-- User + search -->
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Border Background="#0F2848" BorderBrush="#2A4F8A" BorderThickness="1"
+                            CornerRadius="4" Padding="10,5" Margin="0,0,14,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#x1F50D;" FontSize="11" Foreground="#6688AA" VerticalAlignment="Center"/>
+                            <TextBlock Text="  Cerca..." FontSize="12" Foreground="#4466AA" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Background="#0A5CB8" CornerRadius="14" Width="28" Height="28" Margin="0,0,8,0">
+                        <TextBlock Text="A" Foreground="White" FontSize="13" FontWeight="Bold"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="Admin" Foreground="White" FontSize="13" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ═══ STATUS BAR ═══ (SCCM style) -->
+        <Border DockPanel.Dock="Bottom" Background="#E8EAED" Height="22"
+                BorderBrush="#CCC" BorderThickness="0,1,0,0">
+            <StackPanel Orientation="Horizontal" Margin="12,0" VerticalAlignment="Center">
+                <TextBlock Text="Connesso: 192.168.20.110:9091" FontSize="11" Foreground="#555"/>
+                <TextBlock Text="  |  " FontSize="11" Foreground="#BBB"/>
+                <TextBlock Text="Oggetti: 6" FontSize="11" Foreground="#555"/>
+                <TextBlock Text="  |  " FontSize="11" Foreground="#BBB"/>
+                <TextBlock Text="● Pronto" FontSize="11" Foreground="#228B22"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ═══ SIDEBAR ═══ (Advanced Installer style, semplificata) -->
+        <Border DockPanel.Dock="Left" Background="#0A78C9" Width="198">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="NAVIGAZIONE" Foreground="#5599DD" FontSize="10"
+                               FontWeight="Bold" Margin="16,16,16,6"/>
+                    <Button Content="&#x1F3E0;   Dashboard"      Style="{StaticResource NavBtn}"/>
+                    <Button Content="&#x1F4E6;   Applicazioni"   Style="{StaticResource NavBtn}"/>
+                    <Button Content="&#x2699;&#xFE0F;   Workflow"       Style="{StaticResource NavBtnActive}"/>
+                    <Button Content="&#x1F5A5;&#xFE0F;   Dispositivi"    Style="{StaticResource NavBtn}"/>
+                    <Button Content="&#x1F4BF;   Deploy OS"      Style="{StaticResource NavBtn}"/>
+                    <Button Content="&#x1F4E1;   Aggiornamenti"  Style="{StaticResource NavBtn}"/>
+                    <Button Content="&#x1F4CB;   Change Request" Style="{StaticResource NavBtn}"/>
+
+                    <TextBlock Text="SISTEMA" Foreground="#5599DD" FontSize="10"
+                               FontWeight="Bold" Margin="16,14,16,6"/>
+                    <Button Content="&#x1F512;   Certificati"   Style="{StaticResource NavBtn}"/>
+                    <Button Content="&#x2699;&#xFE0F;   Impostazioni"  Style="{StaticResource NavBtn}"/>
+                    <Button Content="&#x2139;&#xFE0F;   About"         Style="{StaticResource NavBtn}"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <!-- ═══ MAIN CONTENT ═══ -->
+        <Grid Background="#F4F6FA">
+            <Grid.RowDefinitions>
+                <!-- Breadcrumb -->
+                <RowDefinition Height="36"/>
+                <!-- Stat cards -->
+                <RowDefinition Height="108"/>
+                <!-- Card con toolbar + DataGrid + splitter + details -->
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Breadcrumb -->
+            <Border Grid.Row="0" Background="#ECEEF3" BorderBrush="#D0D5DC" BorderThickness="0,0,0,1">
+                <TextBlock Margin="20,0" VerticalAlignment="Center" FontSize="12" Foreground="#666">
+                    <Run Text="Workflow"/>
+                    <Run Text="  &#x25BA;  " Foreground="#AAA"/>
+                    <Run Text="Deploy Base Windows 11"/>
+                    <Run Text="  &#x25BA;  " Foreground="#AAA"/>
+                    <Run Text="Assegnazioni" FontWeight="SemiBold" Foreground="#333"/>
+                </TextBlock>
+            </Border>
+
+            <!-- Stat cards (Advanced Installer style) -->
+            <Grid Grid.Row="1" Margin="20,12,20,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Background="White" BorderBrush="#E0E6F0"
+                        BorderThickness="1" CornerRadius="7" Padding="18,12" Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="TOTALE PC" FontSize="10" Foreground="#999" FontWeight="Bold"/>
+                        <TextBlock Text="6" FontSize="30" FontWeight="Bold" Foreground="#0A78C9" Margin="0,2,0,1"/>
+                        <TextBlock Text="Assegnati al workflow" FontSize="11" Foreground="#BBB"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="1" Background="White" BorderBrush="#E0E6F0"
+                        BorderThickness="1" CornerRadius="7" Padding="18,12" Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="COMPLETATI" FontSize="10" Foreground="#999" FontWeight="Bold"/>
+                        <TextBlock Text="1" FontSize="30" FontWeight="Bold" Foreground="#16A34A" Margin="0,2,0,1"/>
+                        <TextBlock Text="Deploy riusciti" FontSize="11" Foreground="#BBB"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="2" Background="White" BorderBrush="#E0E6F0"
+                        BorderThickness="1" CornerRadius="7" Padding="18,12" Margin="0,0,10,0">
+                    <StackPanel>
+                        <TextBlock Text="IN ESECUZIONE" FontSize="10" Foreground="#999" FontWeight="Bold"/>
+                        <TextBlock Text="2" FontSize="30" FontWeight="Bold" Foreground="#2563EB" Margin="0,2,0,1"/>
+                        <TextBlock Text="Deploy attivi ora" FontSize="11" Foreground="#BBB"/>
+                    </StackPanel>
+                </Border>
+                <Border Grid.Column="3" Background="White" BorderBrush="#E0E6F0"
+                        BorderThickness="1" CornerRadius="7" Padding="18,12">
+                    <StackPanel>
+                        <TextBlock Text="IN ATTESA" FontSize="10" Foreground="#999" FontWeight="Bold"/>
+                        <TextBlock Text="3" FontSize="30" FontWeight="Bold" Foreground="#9CA3AF" Margin="0,2,0,1"/>
+                        <TextBlock Text="In coda" FontSize="11" Foreground="#BBB"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Card principale: toolbar + DataGrid + details (SCCM style) -->
+            <Border Grid.Row="2" Background="White" BorderBrush="#E0E4EC"
+                    BorderThickness="1" CornerRadius="8" Margin="20,0,20,16">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="50"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="5"/>
+                        <RowDefinition Height="170"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Toolbar compatta -->
+                    <Border Grid.Row="0" Background="#F8F9FC"
+                            BorderBrush="#E0E4EC" BorderThickness="0,0,0,1"
+                            CornerRadius="8,8,0,0">
+                        <StackPanel Orientation="Horizontal" Margin="14,0" VerticalAlignment="Center">
+                            <Button Content="+ Assegna PC"     Style="{StaticResource TbBtnPrimary}" Margin="0,0,6,0"/>
+                            <Button Content="&#x25B6; Avvia"   Style="{StaticResource TbBtnDefault}" Margin="0,0,6,0"/>
+                            <Button Content="&#x1F50D; Dettaglio" Style="{StaticResource TbBtnDefault}" Margin="0,0,6,0"/>
+                            <Button Content="&#x1F504; Aggiorna" Style="{StaticResource TbBtnDefault}" Margin="0,0,6,0"/>
+                            <Button Content="&#x1F5D1; Rimuovi"  Style="{StaticResource TbBtnDanger}"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- DataGrid (SCCM style) -->
+                    <DataGrid Grid.Row="1" x:Name="GridResults"
+                              AutoGenerateColumns="False" CanUserAddRows="False"
+                              SelectionMode="Single" AlternationCount="2"
+                              GridLinesVisibility="Horizontal"
+                              HorizontalGridLinesBrush="#E4E8F0"
+                              Background="White" BorderThickness="0" RowHeight="34">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Binding="{Binding Sel}" Width="38" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Nome PC"         Binding="{Binding Name}"     Width="155" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Stato"           Binding="{Binding Status}"   Width="130" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Progresso"       Binding="{Binding Progress}" Width="90"  IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Ultimo contatto" Binding="{Binding LastSeen}" Width="140" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Dominio"         Binding="{Binding Domain}"   Width="185" IsReadOnly="True"/>
+                            <DataGridTextColumn Header="Workflow"        Binding="{Binding Workflow}" Width="*"   IsReadOnly="True"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+
+                    <!-- GridSplitter (SCCM style) -->
+                    <GridSplitter Grid.Row="2" HorizontalAlignment="Stretch"
+                                  Background="#D0D5DC" ResizeBehavior="PreviousAndNext"/>
+
+                    <!-- Dettaglio in basso (SCCM style) -->
+                    <Grid Grid.Row="3" Background="#FAFBFC">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="26"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Grid.Row="0" Background="#ECEEF3"
+                                BorderBrush="#D0D5DC" BorderThickness="0,0,0,1">
+                            <TextBlock Margin="14,0" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#333" VerticalAlignment="Center"
+                                       Text="Dettaglio — PC-LAB-001"/>
+                        </Border>
+                        <UniformGrid Grid.Row="1" Rows="1" Margin="20,10">
+                            <StackPanel Margin="0,0,24,0">
+                                <TextBlock Text="NOME PC" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                                <TextBlock Text="PC-LAB-001" FontSize="13" Margin="0,0,0,8"/>
+                                <TextBlock Text="DOMINIO" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                                <TextBlock Text="WORKGROUP" FontSize="13" Margin="0,0,0,8"/>
+                                <TextBlock Text="IP / DC" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                                <TextBlock Text="192.168.1.1" FontSize="13"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,24,0">
+                                <TextBlock Text="WORKFLOW" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                                <TextBlock Text="Deploy Base Windows 11" FontSize="13" Margin="0,0,0,8"/>
+                                <TextBlock Text="STATO" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                                <TextBlock Text="Completato" FontSize="13" Foreground="#16A34A" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                                <TextBlock Text="PROGRESSO" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                                <TextBlock Text="9 / 9 step  (100%)" FontSize="13"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Text="UTENTE ASSEGNATO" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                                <TextBlock Text="—" FontSize="13" Margin="0,0,0,8"/>
+                                <TextBlock Text="NOTE" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                                <TextBlock Text="Postazione laboratorio A" FontSize="13" Margin="0,0,0,8"/>
+                                <TextBlock Text="ULTIMO CONTATTO" FontSize="10" FontWeight="Bold" Foreground="#888" Margin="0,0,0,2"/>
+                                <TextBlock Text="07/03/2026  09:42" FontSize="13"/>
+                            </StackPanel>
+                        </UniformGrid>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>
