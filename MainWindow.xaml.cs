@@ -2609,7 +2609,7 @@ public partial class MainWindow : Window
             ? _navSections[idx] : "";
     }
 
-    private const string CurrentVersion = "1.0.6";
+    private const string CurrentVersion = "1.1.0";
     private string? _updateDownloadUrl;
 
     // ── Controlla aggiornamenti dal server NovaSCM ────────────────────────────
