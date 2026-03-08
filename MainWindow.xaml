@@ -110,6 +110,11 @@
             <Setter Property="IsReadOnly"               Value="True"/>
             <Setter Property="FontSize"                 Value="13"/>
             <Setter Property="RowHeight"                Value="36"/>
+            <!-- PERF-01: virtualizzazione per grandi dataset -->
+            <Setter Property="EnableRowVirtualization"               Value="True"/>
+            <Setter Property="VirtualizingPanel.IsVirtualizing"      Value="True"/>
+            <Setter Property="VirtualizingPanel.VirtualizationMode"  Value="Recycling"/>
+            <Setter Property="VirtualizingPanel.ScrollUnit"          Value="Item"/>
         </Style>
         <Style TargetType="DataGridColumnHeader">
             <Setter Property="Background"      Value="#ECEEF3"/>
@@ -473,6 +478,7 @@
                 <!-- Workspace: Asset e Conformità -->
                 <TreeViewItem x:Name="TvGroupAsset" IsExpanded="True" Padding="4,4"
                               Header="🏠  Asset e Conformità">
+                    <TreeViewItem Header="🏠  Dashboard"      Tag="13" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="📡  Rete e Device"  Tag="0" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="🖥️  PC Gestiti"     Tag="4" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="🔐  Certificati"    Tag="1" Padding="4,3" Selected="NavTree_ItemSelected"/>
@@ -499,7 +505,7 @@
                 <TreeViewItem x:Name="TvGroupAdmin" IsExpanded="True" Padding="4,4"
                               Header="⚙️  Amministrazione" Visibility="Collapsed">
                     <TreeViewItem Header="🖥️  Proxmox"        Tag="11" Padding="4,3" Selected="NavTree_ItemSelected"/>
-                    <TreeViewItem Header="⚙️  Impostazioni"   Tag="13" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="⚙️  Impostazioni"   Tag="14" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="ℹ️  About"           Tag="12" Padding="4,3" Selected="NavTree_ItemSelected"/>
                 </TreeViewItem>
             </TreeView>
@@ -516,6 +522,7 @@
 
             <!-- Pulsanti nav nascosti (compatibilità codice) -->
             <StackPanel Visibility="Collapsed">
+                <Button x:Name="NavDashboard"    Tag="13" Click="Nav_Click"/>
                 <Button x:Name="NavRete"         Tag="0"  Click="Nav_Click"/>
                 <Button x:Name="NavCert"         Tag="1"  Click="Nav_Click"/>
                 <Button x:Name="NavApp"          Tag="2"  Click="Nav_Click"/>
@@ -2407,6 +2414,96 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                 </Grid>
             </TabItem>
 
+            <!-- ─── TAB DASHBOARD ─── (indice 13) -->
+            <TabItem Header="🏠  Dashboard">
+                <Grid Margin="16,12,16,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Titolo -->
+                    <TextBlock Grid.Row="0" Text="🏠  Dashboard" Style="{StaticResource SectionLabel}" Margin="0,0,0,12"/>
+
+                    <!-- Stat cards -->
+                    <UniformGrid Grid.Row="1" Rows="1" Margin="0,0,0,16">
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#3b82f6" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtDashPcOnline" Text="—" FontSize="26" FontWeight="Bold" Foreground="#3b82f6"/>
+                                <TextBlock Text="PC Online" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#10b981" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtDashWorkflow" Text="—" FontSize="26" FontWeight="Bold" Foreground="#10b981"/>
+                                <TextBlock Text="Workflow attivi" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#f59e0b" Margin="0,0,8,0">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtDashCrOpen" Text="—" FontSize="26" FontWeight="Bold" Foreground="#f59e0b"/>
+                                <TextBlock Text="CR aperte" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatCard}" BorderThickness="4,1,1,1" BorderBrush="#7c3aed" Margin="0,0,0,0">
+                            <StackPanel>
+                                <TextBlock x:Name="TxtDashDevices" Text="—" FontSize="26" FontWeight="Bold" Foreground="#7c3aed"/>
+                                <TextBlock Text="Device rilevati" Foreground="#64748b" FontSize="11"/>
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+
+                    <!-- Pannelli: feed + quick actions -->
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="260"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Feed eventi -->
+                        <Border Grid.Column="0" Background="White" BorderBrush="#E0E6F0"
+                                BorderThickness="1" CornerRadius="7" Padding="14,10" Margin="0,0,12,16">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top" Text="📋  Attività recente"
+                                           FontWeight="SemiBold" Foreground="#1D4ED8" FontSize="13" Margin="0,0,0,10"/>
+                                <ListBox x:Name="DashFeed" BorderThickness="0" Background="Transparent"
+                                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" FontSize="12" Foreground="#374151"
+                                                       TextWrapping="Wrap" Margin="0,3"/>
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                            </DockPanel>
+                        </Border>
+
+                        <!-- Quick actions -->
+                        <StackPanel Grid.Column="1" Margin="0,0,0,16">
+                            <TextBlock Text="⚡  Azioni rapide" FontWeight="SemiBold"
+                                       Foreground="#1D4ED8" FontSize="13" Margin="0,0,0,10"/>
+                            <Button Content="📋  Nuova CR"         Style="{StaticResource BtnBlue}"
+                                    Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                                    Click="BtnCrCreate_Click"/>
+                            <Button Content="📡  Scansione rete"   Style="{StaticResource BtnGreen}"
+                                    Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                                    Click="BtnDashScan_Click"/>
+                            <Button Content="⚙️  Nuovo workflow"   Style="{StaticResource BtnAmber}"
+                                    Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                                    Click="BtnDashWorkflow_Click"/>
+                            <Button Content="🔄  Aggiorna dati"    Style="{StaticResource BtnBase}"
+                                    Background="#F1F5F9" BorderBrush="#CBD5E1" Foreground="#374151"
+                                    Margin="0,0,0,8" HorizontalAlignment="Stretch"
+                                    Click="BtnDashRefresh_Click"/>
+                            <Border Height="1" Background="#E2E8F0" Margin="0,8,0,8"/>
+                            <TextBlock x:Name="TxtDashLastRefresh" Text="Ultimo aggiornamento: —"
+                                       FontSize="11" Foreground="#94a3b8"/>
+                        </StackPanel>
+                    </Grid>
+                </Grid>
+            </TabItem>
+
             <!-- ─── TAB IMPOSTAZIONI ─── -->
             <TabItem Header="⚙️  Impostazioni">
                 <ScrollViewer Margin="20,12,20,12" VerticalScrollBarVisibility="Auto"
@@ -2513,6 +2610,37 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
     </DockPanel>
 
     <!-- ═══ KONAMI CODE OVERLAY ═══ -->
+    <!-- ═══ FEAT-03: SEARCH OVERLAY (Ctrl+K) ═══ -->
+    <Grid x:Name="SearchOverlay" Visibility="Collapsed" Panel.ZIndex="1000"
+          Background="#80000000" MouseDown="SearchOverlay_BackdropClick">
+        <Border Background="White" CornerRadius="10" Width="620" MaxHeight="480"
+                VerticalAlignment="Top" HorizontalAlignment="Center" Margin="0,90,0,0"
+                MouseDown="SearchOverlay_ContentClick">
+            <StackPanel>
+                <TextBox x:Name="TxtGlobalSearch"
+                         FontSize="16" Padding="16,12" BorderThickness="0,0,0,1"
+                         BorderBrush="#E2E8F0" Background="Transparent"
+                         TextChanged="GlobalSearch_TextChanged"
+                         KeyDown="GlobalSearch_KeyDown"/>
+                <TextBlock Text="Cerca PC, workflow, CR, step... (min 2 caratteri)"
+                           Foreground="#94a3b8" FontSize="11" Margin="16,6,16,6"
+                           x:Name="TxtSearchHint"/>
+                <ListBox x:Name="SearchResults" BorderThickness="0" MaxHeight="380"
+                         Background="Transparent" SelectionChanged="SearchResult_Selected"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Margin="4,4">
+                                <TextBlock Text="{Binding Label}" FontSize="13" Foreground="#1a1a1a"/>
+                                <TextBlock Text="{Binding Sub}"   FontSize="11" Foreground="#64748b"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </StackPanel>
+        </Border>
+    </Grid>
+
     <Grid x:Name="KonamiOverlay" Visibility="Collapsed" Panel.ZIndex="9999"
           Background="#E0000000">
         <Canvas x:Name="KonamiCanvas" ClipToBounds="True"/>

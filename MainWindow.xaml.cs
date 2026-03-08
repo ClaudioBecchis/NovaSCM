@@ -215,6 +215,13 @@ public partial class MainWindow : Window
     private int _selectedWfId = -1;
     private string WfApiBase => (_config.NovaSCMApiUrl ?? "").TrimEnd('/');
 
+    // FEAT-01: Dashboard timer
+    private readonly System.Windows.Threading.DispatcherTimer _dashTimer = new()
+        { Interval = TimeSpan.FromSeconds(30) };
+
+    // FEAT-03: Search overlay record
+    private record SearchResult(string Label, string Sub, int TabIndex, string Workspace = "asset");
+
     public MainWindow()
     {
         InitializeComponent();
@@ -240,12 +247,16 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(async () => await CheckForUpdatesAsync(silent: true),
                                System.Windows.Threading.DispatcherPriority.Background);
 
+        // FEAT-01: Dashboard auto-refresh ogni 30s
+        _dashTimer.Tick += async (_, _) => await RefreshDashboardAsync();
+        _ = RefreshDashboardAsync();  // carica subito al primo avvio
+
         if (firstRun)
         {
             // Prima esecuzione: apre tab Impostazioni con messaggio di benvenuto
             Dispatcher.BeginInvoke(() =>
             {
-                MainTabs.SelectedIndex = MainTabs.Items.Count - 2; // tab Impostazioni
+                MainTabs.SelectedIndex = MainTabs.Items.Count - 1; // tab Impostazioni (ultimo)
                 TxtSettingsStatus.Text = "👋  Prima esecuzione — configura il server NovaSCM e salva.";
                 TxtSettingsStatus.Foreground = System.Windows.Media.Brushes.Gold;
             }, System.Windows.Threading.DispatcherPriority.Loaded);
@@ -2469,9 +2480,21 @@ public partial class MainWindow : Window
     // ── Sidebar navigation ────────────────────────────────────────────────────
     private static readonly string[] _navSections =
     [
-        "Rete", "Certificati", "Applicazioni", "OPSI",
-        "PC", "Deploy OS", "Workflow", "Richieste",
-        "SCCM", "Impostazioni", "About"
+        "Rete e Device",  // 0
+        "Certificati",    // 1
+        "Applicazioni",   // 2
+        "OPSI",           // 3
+        "PC Gestiti",     // 4
+        "Deploy OS",      // 5
+        "Workflow",       // 6
+        "Richieste CR",   // 7
+        "Console SCCM",   // 8
+        "Script Library", // 9
+        "Wiki",           // 10
+        "Proxmox",        // 11
+        "About",          // 12
+        "Dashboard",      // 13
+        "Impostazioni",   // 14
     ];
 
     private readonly Button[] _navBtns = [];
@@ -2608,7 +2631,148 @@ public partial class MainWindow : Window
             ? _navSections[idx] : "";
     }
 
-    private const string CurrentVersion = "1.2.0";
+    // ── FEAT-01: Dashboard ────────────────────────────────────────────────────
+    private async Task RefreshDashboardAsync()
+    {
+        var pcOnline   = _netRows.Count(r => r.Status.Contains("online", StringComparison.OrdinalIgnoreCase) || r.Status.Contains("🟢"));
+        var pcTotal    = _netRows.Count;
+        var wfRunning  = _wfAssignRows.Count(w => w.Status.Contains("running", StringComparison.OrdinalIgnoreCase));
+        var devices    = _netRows.Count;
+
+        int crOpen = 0;
+        var feedItems = new List<string>();
+        if (!string.IsNullOrEmpty(CrApiBase))
+        {
+            try
+            {
+                using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+                var json = await http.GetStringAsync(CrApiBase);
+                var doc  = System.Text.Json.JsonDocument.Parse(json);
+                foreach (var el in doc.RootElement.EnumerateArray())
+                {
+                    var st = el.TryGetProperty("status", out var s) ? s.GetString() ?? "" : "";
+                    if (st == "open" || st == "pending" || st == "in_progress") crOpen++;
+                    var pc = el.TryGetProperty("pc_name", out var p) ? p.GetString() ?? "" : "";
+                    var ts = el.TryGetProperty("created_at", out var t) ? t.GetString() ?? "" : "";
+                    feedItems.Add($"📋 CR {pc}  [{st}]  {ts[..Math.Min(10, ts.Length)]}");
+                }
+            }
+            catch { feedItems.Add("⚠️  Server API non raggiungibile"); }
+        }
+
+        // Aggiungi eventi workflow recenti
+        foreach (var wf in _wfAssignRows.Take(3))
+            feedItems.Add($"⚙️  {wf.PcName} — {wf.WorkflowNome} [{wf.Status}]");
+
+        if (feedItems.Count == 0) feedItems.Add("Nessun evento recente.");
+
+        Dispatcher.Invoke(() =>
+        {
+            TxtDashPcOnline.Text  = pcTotal > 0 ? $"{pcOnline}/{pcTotal}" : "—";
+            TxtDashWorkflow.Text  = _wfAssignRows.Count > 0 ? wfRunning.ToString() : "—";
+            TxtDashCrOpen.Text    = crOpen.ToString();
+            TxtDashDevices.Text   = devices > 0 ? devices.ToString() : "—";
+            DashFeed.ItemsSource  = feedItems.Take(12).ToList();
+            TxtDashLastRefresh.Text = $"Aggiornato: {DateTime.Now:HH:mm:ss}";
+        });
+    }
+
+    private void BtnDashRefresh_Click(object s, RoutedEventArgs e)
+        => _ = RefreshDashboardAsync();
+
+    private void BtnDashScan_Click(object s, RoutedEventArgs e)
+    {
+        MainTabs.SelectedIndex = 0;
+        SwitchWorkspace("asset");
+        BtnScan_Click(s, e);
+    }
+
+    private void BtnDashWorkflow_Click(object s, RoutedEventArgs e)
+    {
+        MainTabs.SelectedIndex = 6;
+        SwitchWorkspace("software");
+        BtnWfNew_Click(s, e);
+    }
+
+    // ── FEAT-03: Ricerca globale Ctrl+K ──────────────────────────────────────
+    private void SearchOverlay_BackdropClick(object s, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (e.Source == SearchOverlay) CloseSearch();
+    }
+
+    private void SearchOverlay_ContentClick(object s, System.Windows.Input.MouseButtonEventArgs e)
+        => e.Handled = true;
+
+    private void GlobalSearch_KeyDown(object s, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Escape) CloseSearch();
+        else if (e.Key == System.Windows.Input.Key.Enter && SearchResults.Items.Count > 0)
+        {
+            if (SearchResults.SelectedIndex < 0) SearchResults.SelectedIndex = 0;
+            SearchResult_Selected(SearchResults, null!);
+        }
+        else if (e.Key == System.Windows.Input.Key.Down)
+        {
+            if (SearchResults.SelectedIndex < SearchResults.Items.Count - 1)
+                SearchResults.SelectedIndex++;
+            e.Handled = true;
+        }
+        else if (e.Key == System.Windows.Input.Key.Up)
+        {
+            if (SearchResults.SelectedIndex > 0) SearchResults.SelectedIndex--;
+            e.Handled = true;
+        }
+    }
+
+    private void GlobalSearch_TextChanged(object s, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        var q = TxtGlobalSearch.Text.ToLowerInvariant();
+        TxtSearchHint.Visibility = string.IsNullOrEmpty(q) ? Visibility.Visible : Visibility.Collapsed;
+        if (q.Length < 2) { SearchResults.ItemsSource = null; return; }
+
+        var results = new List<SearchResult>();
+
+        // Device dalla scan rete
+        foreach (var r in _netRows.Where(r =>
+            r.Ip.Contains(q) || r.Name.ToLower().Contains(q) ||
+            r.Vendor.ToLower().Contains(q)).Take(5))
+            results.Add(new SearchResult($"📡  {r.Ip}", $"{r.Name}  {r.Vendor}", 0, "asset"));
+
+        // Workflow
+        foreach (var w in _wfRows.Where(w => w.Nome.ToLower().Contains(q)).Take(5))
+            results.Add(new SearchResult($"⚙️  {w.Nome}", $"Workflow — {w.Descrizione}", 6, "software"));
+
+        // Workflow assignments (PC)
+        foreach (var a in _wfAssignRows.Where(a =>
+            a.PcName.ToLower().Contains(q) || a.WorkflowNome.ToLower().Contains(q)).Take(5))
+            results.Add(new SearchResult($"🖥️  {a.PcName}", $"{a.WorkflowNome}  [{a.Status}]", 6, "software"));
+
+        SearchResults.ItemsSource = results;
+    }
+
+    private void SearchResult_Selected(object s, System.Windows.Controls.SelectionChangedEventArgs? e)
+    {
+        if (SearchResults.SelectedItem is not SearchResult r) return;
+        CloseSearch();
+        SwitchWorkspace(r.Workspace);
+        MainTabs.SelectedIndex = r.TabIndex;
+    }
+
+    private void CloseSearch()
+    {
+        SearchOverlay.Visibility = Visibility.Collapsed;
+        TxtGlobalSearch.Text     = "";
+        SearchResults.ItemsSource = null;
+    }
+
+    private void OpenSearch()
+    {
+        SearchOverlay.Visibility = Visibility.Visible;
+        TxtGlobalSearch.Focus();
+        TxtSearchHint.Visibility = Visibility.Visible;
+    }
+
+    private const string CurrentVersion = "1.3.0";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -3103,6 +3267,16 @@ public partial class MainWindow : Window
         UpdateNavState(MainTabs.SelectedIndex);
         if (MainTabs.SelectedItem is not TabItem tab) return;
         var header = tab.Header?.ToString() ?? "";
+
+        // FEAT-01: avvia/ferma timer dashboard
+        if (header.Contains("Dashboard"))
+        {
+            _dashTimer.Start();
+            await RefreshDashboardAsync();
+            return;
+        }
+        _dashTimer.Stop();
+
         if (header.Contains("Richieste"))
             await LoadCrListAsync();
         else if (header.Contains("Workflow"))
@@ -4433,6 +4607,47 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private void Window_PreviewKeyDown(object s, System.Windows.Input.KeyEventArgs e)
     {
+        var ctrl  = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control);
+        var shift = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift);
+
+        // DX-03 + FEAT-03: shortcut tastiera
+        if (ctrl && e.Key == System.Windows.Input.Key.K)
+        {
+            if (SearchOverlay.Visibility == Visibility.Visible) CloseSearch();
+            else OpenSearch();
+            e.Handled = true; return;
+        }
+        if (e.Key == System.Windows.Input.Key.Escape && SearchOverlay.Visibility == Visibility.Visible)
+        {
+            CloseSearch(); e.Handled = true; return;
+        }
+        if ((e.Key == System.Windows.Input.Key.F5) ||
+            (ctrl && e.Key == System.Windows.Input.Key.R))
+        {
+            // F5 / Ctrl+R — aggiorna tab corrente
+            var header = (MainTabs.SelectedItem as TabItem)?.Header?.ToString() ?? "";
+            if (header.Contains("Rete"))         BtnScan_Click(s, new RoutedEventArgs());
+            else if (header.Contains("Richieste")) _ = LoadCrListAsync();
+            else if (header.Contains("Workflow"))  _ = LoadWorkflowsAsync();
+            else if (header.Contains("SCCM"))      BtnSccmRefresh_Click(s, new RoutedEventArgs());
+            else if (header.Contains("Dashboard")) _ = RefreshDashboardAsync();
+            e.Handled = true; return;
+        }
+        // Ctrl+1..9 → naviga al tab N
+        if (ctrl && e.Key >= System.Windows.Input.Key.D1 && e.Key <= System.Windows.Input.Key.D9)
+        {
+            var idx = e.Key - System.Windows.Input.Key.D1;
+            if (idx < MainTabs.Items.Count) MainTabs.SelectedIndex = idx;
+            e.Handled = true; return;
+        }
+        // Ctrl+N → nuova CR
+        if (ctrl && e.Key == System.Windows.Input.Key.N)
+        {
+            BtnCrCreate_Click(s, new RoutedEventArgs());
+            e.Handled = true; return;
+        }
+
+        // Konami
         _konamiInput.Add(e.Key);
         if (_konamiInput.Count > KonamiSequence.Length)
             _konamiInput.RemoveAt(0);
