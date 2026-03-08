@@ -191,6 +191,7 @@ class AppConfig
     // Subnet multiple — una per riga in formato "192.168.1.0/24"
     public string ScanNetworks  { get; set; } = "192.168.1.0/24";
     public string NovaSCMApiUrl { get; set; } = "";
+    public string NovaSCMApiKey { get; set; } = "";
 }
 
 public class CrRow
@@ -266,6 +267,9 @@ public partial class MainWindow : Window
     // PERF-03: API cache
     private readonly ApiCache _apiCache = new();
 
+    // ARCH-01: servizio API centralizzato (ricreato in LoadConfig quando cambia l'URL)
+    private NovaSCMApiService? _apiSvc;
+
     // FEAT-03: Search overlay record
     private record SearchResult(string Label, string Sub, int TabIndex, string Workspace = "asset");
 
@@ -316,6 +320,10 @@ public partial class MainWindow : Window
         if (File.Exists(ConfigPath))
             try { _config = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath)) ?? new(); }
             catch { _config = new(); }
+        // ARCH-01: ricrea il servizio API con i nuovi parametri di configurazione
+        _apiSvc = string.IsNullOrWhiteSpace(_config.NovaSCMApiUrl)
+            ? null
+            : new NovaSCMApiService(_config.NovaSCMApiUrl, _config.NovaSCMApiKey, _apiCache);
         ApplyConfigToUI();
         InitConfigWatcher();
     }
@@ -360,7 +368,8 @@ public partial class MainWindow : Window
         TxtScanNetworks.Text  = _config.ScanNetworks;
         TxtAdminUser.Text     = _config.AdminUser;
         TxtAdminPass.Password = _config.AdminPass;
-        TxtNovaSCMApiUrl.Text = _config.NovaSCMApiUrl;
+        TxtNovaSCMApiUrl.Text    = _config.NovaSCMApiUrl;
+        TxtNovaSCMApiKey.Password = _config.NovaSCMApiKey;
     }
 
     private void SaveConfig()
@@ -380,6 +389,7 @@ public partial class MainWindow : Window
         _config.AdminUser     = TxtAdminUser.Text.Trim();
         _config.AdminPass     = TxtAdminPass.Password;
         _config.NovaSCMApiUrl = TxtNovaSCMApiUrl.Text.Trim();
+        _config.NovaSCMApiKey = TxtNovaSCMApiKey.Password;
         Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
         File.WriteAllText(ConfigPath,
             JsonSerializer.Serialize(_config, new JsonSerializerOptions { WriteIndented = true }));
@@ -1711,7 +1721,10 @@ public partial class MainWindow : Window
         {
             var handler = new System.Net.Http.HttpClientHandler
             {
-                ServerCertificateCustomValidationCallback = (_, _, _, _) => true
+                // Accetta self-signed ma verifica l'hostname (blocca MITM)
+                ServerCertificateCustomValidationCallback = (_, _, _, errors) =>
+                    errors == System.Net.Security.SslPolicyErrors.None ||
+                    errors == System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors
             };
             using var http = new System.Net.Http.HttpClient(handler)
                 { BaseAddress = new Uri(url), Timeout = TimeSpan.FromSeconds(12) };
@@ -1880,6 +1893,8 @@ public partial class MainWindow : Window
     // ── Handler pulsanti ──────────────────────────────────────────────────────
     private async void BtnRegisterDevices_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         var selected = NetGrid.SelectedItems.Cast<DeviceRow>().ToList();
         if (selected.Count == 0)
         {
@@ -1961,6 +1976,8 @@ public partial class MainWindow : Window
         MessageBox.Show(msg, "Registrazione completata",
             MessageBoxButton.OK,
             fail == 0 ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        catch (Exception ex) { App.Log($"[BtnRegisterDevices_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private void BtnGenerateCert_Click(object s, RoutedEventArgs e)
@@ -1996,6 +2013,8 @@ public partial class MainWindow : Window
 
     private async void BtnMonitor_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         if (_monitoring)
         {
             _monitorCts?.Cancel();
@@ -2090,6 +2109,8 @@ public partial class MainWindow : Window
         if (!token.IsCancellationRequested) return;
         _monitoring = false;
         Dispatcher.Invoke(() => BtnMonitor.Content = "👁  Monitora");
+        }
+        catch (Exception ex) { App.Log($"[BtnMonitor_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private void BtnRefresh_Click(object s, RoutedEventArgs e) =>
@@ -2255,7 +2276,10 @@ public partial class MainWindow : Window
         var handler = new System.Net.Http.HttpClientHandler
         {
             Credentials = new System.Net.NetworkCredential(user, pass, domain),
-            ServerCertificateCustomValidationCallback = (_, _, _, _) => true
+            // Accetta self-signed ma verifica l'hostname (blocca MITM)
+            ServerCertificateCustomValidationCallback = (_, _, _, errors) =>
+                errors == System.Net.Security.SslPolicyErrors.None ||
+                errors == System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors
         };
         _sccmClient?.Dispose();
         _sccmClient = new System.Net.Http.HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
@@ -2288,13 +2312,20 @@ public partial class MainWindow : Window
         }
     }
 
-    private async void BtnSccmRefresh_Click(object s, RoutedEventArgs e) =>
-        await LoadSccmSection(_sccmCurrentSection);
+    private async void BtnSccmRefresh_Click(object s, RoutedEventArgs e)
+    {
+        try { await LoadSccmSection(_sccmCurrentSection); }
+        catch (Exception ex) { App.Log($"[BtnSccmRefresh_Click] {ex.Message}"); }
+    }
 
     private async void SccmNavTree_SelectedItemChanged(object s, RoutedPropertyChangedEventArgs<object> e)
     {
+        try
+        {
         if (e.NewValue is TreeViewItem item && item.Tag is string tag)
             await LoadSccmSection(tag);
+        }
+        catch (Exception ex) { App.Log($"[SccmNavTree_SelectedItemChanged] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private Task LoadSccmSection(string tag)
@@ -2924,7 +2955,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.4.0";
+    private const string CurrentVersion = "1.5.0";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -3092,6 +3123,9 @@ public partial class MainWindow : Window
 
     // ── Deploy tab ────────────────────────────────────────────────────────────
     private string? _deployTmpDir;
+    // Winget package ID: Publisher.Name, solo caratteri sicuri (no injection)
+    private static readonly System.Text.RegularExpressions.Regex _wingetIdRegex =
+        new(@"^[a-zA-Z0-9][a-zA-Z0-9.\-_]{0,127}$", System.Text.RegularExpressions.RegexOptions.Compiled);
     private static readonly string ProfilesDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                      "PolarisManager", "profiles");
@@ -3391,6 +3425,11 @@ public partial class MainWindow : Window
     {
         var id = TxtNewPackage.Text.Trim();
         if (string.IsNullOrEmpty(id)) return;
+        if (!_wingetIdRegex.IsMatch(id))
+        {
+            SetStatus("⚠️ ID pacchetto non valido (usa formato Publisher.Nome, es: Mozilla.Firefox)");
+            return;
+        }
         if (!_deployPackages.Contains(id, StringComparer.OrdinalIgnoreCase))
             _deployPackages.Add(id);
         TxtNewPackage.Clear();
@@ -3428,6 +3467,8 @@ public partial class MainWindow : Window
 
     private async void MainTabs_SelectionChanged(object s, SelectionChangedEventArgs e)
     {
+        try
+        {
         if (e.Source != MainTabs) return;
         FadeInContent();
         UpdateNavState(MainTabs.SelectedIndex);
@@ -3475,6 +3516,8 @@ public partial class MainWindow : Window
         {
             StopMatrixRain();
         }
+        }
+        catch (Exception ex) { App.Log($"[MainTabs_SelectionChanged] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private void TxtCrNewPackage_KeyDown(object s, System.Windows.Input.KeyEventArgs e)
@@ -3488,6 +3531,11 @@ public partial class MainWindow : Window
     {
         var id = TxtCrNewPackage.Text.Trim();
         if (string.IsNullOrEmpty(id)) return;
+        if (!_wingetIdRegex.IsMatch(id))
+        {
+            Notifier.Show("ID pacchetto non valido", $"'{id}' non è un ID winget valido.\nUsa il formato Publisher.Nome (es: Mozilla.Firefox)", Notifier.Level.Warning, autoCloseSec: 4);
+            return;
+        }
         if (!_crPackages.Contains(id, StringComparer.OrdinalIgnoreCase))
             _crPackages.Add(id);
         TxtCrNewPackage.Clear();
@@ -3608,7 +3656,10 @@ public partial class MainWindow : Window
     }
 
     private async void BtnCrRefresh_Click(object s, RoutedEventArgs e)
-        => await LoadCrListAsync();
+    {
+        try { await LoadCrListAsync(); }
+        catch (Exception ex) { App.Log($"[BtnCrRefresh_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
+    }
 
     private async Task LoadCrListAsync()
     {
@@ -4769,20 +4820,28 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnWfStepUp_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         if (GridWfSteps.SelectedItem is not WfStepRow step) return;
         if (LstWorkflows.SelectedItem is not WfRow wf) return;
         var prev = _wfStepRows.Where(st => st.Ordine < step.Ordine).OrderByDescending(st => st.Ordine).FirstOrDefault();
         if (prev == null) return;
         await SwapStepOrdineAsync(wf.Id, step, prev);
+        }
+        catch (Exception ex) { App.Log($"[BtnWfStepUp_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private async void BtnWfStepDown_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         if (GridWfSteps.SelectedItem is not WfStepRow step) return;
         if (LstWorkflows.SelectedItem is not WfRow wf) return;
         var next = _wfStepRows.Where(st => st.Ordine > step.Ordine).OrderBy(st => st.Ordine).FirstOrDefault();
         if (next == null) return;
         await SwapStepOrdineAsync(wf.Id, step, next);
+        }
+        catch (Exception ex) { App.Log($"[BtnWfStepDown_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private async Task SwapStepOrdineAsync(int wfId, WfStepRow a, WfStepRow b)
@@ -4803,6 +4862,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnWfDeleteStep_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         if (GridWfSteps.SelectedItem is not WfStepRow step)
         {
             MessageBox.Show("Seleziona uno step.", "NovaSCM", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -4815,6 +4876,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         await http.DeleteAsync($"{WfApiBase}/api/workflows/{wf.Id}/steps/{step.Id}");
         await LoadWorkflowStepsAsync(wf.Id);
         wf.StepCount = _wfStepRows.Count;
+        }
+        catch (Exception ex) { App.Log($"[BtnWfDeleteStep_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private async void BtnWfAssign_Click(object s, RoutedEventArgs e)
@@ -4853,6 +4916,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnWfDeleteAssign_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         if (GridWfAssignments.SelectedItem is not WfAssignRow assign)
         {
             MessageBox.Show("Seleziona un'assegnazione.", "NovaSCM", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -4863,10 +4928,15 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         await http.DeleteAsync($"{WfApiBase}/api/pc-workflows/{assign.Id}");
         await LoadWorkflowAssignmentsAsync();
+        }
+        catch (Exception ex) { App.Log($"[BtnWfDeleteAssign_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private async void BtnWfRefreshAssign_Click(object s, RoutedEventArgs e)
-        => await LoadWorkflowAssignmentsAsync();
+    {
+        try { await LoadWorkflowAssignmentsAsync(); }
+        catch (Exception ex) { App.Log($"[BtnWfRefreshAssign_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
+    }
 
     // ── Supporta il progetto ──────────────────────────────────────────────────
     private void BtnKofi_Click(object s, RoutedEventArgs e)
@@ -5636,12 +5706,16 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnSpeedTest_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         if (_speedTestRunning) return;
         // Mostra pannello speed test
         HideAllNetPanels();
         SpeedTestPanel.Visibility = Visibility.Visible;
         NetGrid.Visibility        = Visibility.Collapsed;
         await RunSpeedTestAsync();
+        }
+        catch (Exception ex) { App.Log($"[BtnSpeedTest_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private void BtnCloseSpeedTest_Click(object s, RoutedEventArgs e)
@@ -5779,6 +5853,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnMdns_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         SetStatus("🔍 Scansione mDNS/Bonjour in corso...");
         var found = await ScanMdnsAsync();
 
@@ -5813,6 +5889,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
         SetStatus($"✅ mDNS: {found.Count} device trovati, {added} nuovi aggiunti");
         ShowToast("mDNS Scan", $"{found.Count} device Bonjour trovati sulla rete");
+        }
+        catch (Exception ex) { App.Log($"[BtnMdns_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private static async Task<List<(string ip, string name)>> ScanMdnsAsync()
@@ -6258,6 +6336,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnRunScriptOnPc_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         var ip = TxtScriptTarget.Text.Trim();
         if (string.IsNullOrEmpty(ip) && NetGrid.SelectedItem is DeviceRow dev)
             ip = dev.Ip;
@@ -6299,10 +6379,14 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
         TxtScriptOutput.Text    = result;
         TxtScriptRunStatus.Text = "✅ Completato";
+        }
+        catch (Exception ex) { App.Log($"[BtnRunScriptOnPc_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private async void BtnRunScriptLocal_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         var code = TxtScriptEditor.Text;
         if (string.IsNullOrWhiteSpace(code)) return;
 
@@ -6333,6 +6417,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
         TxtScriptOutput.Text    = result;
         TxtScriptRunStatus.Text = "✅ Completato";
+        }
+        catch (Exception ex) { App.Log($"[BtnRunScriptLocal_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private void BtnSaveScript_Click(object s, RoutedEventArgs e)
@@ -6688,8 +6774,10 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (_pveHttp != null) return;
         var handler = new HttpClientHandler
         {
-            ServerCertificateCustomValidationCallback =
-                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+            // Accetta self-signed (Proxmox usa cert auto-firmati) ma verifica l'hostname
+            ServerCertificateCustomValidationCallback = (_, _, _, errors) =>
+                errors == System.Net.Security.SslPolicyErrors.None ||
+                errors == System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors
         };
         _pveHttp = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
     }
@@ -6732,7 +6820,10 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
     }
 
     private async void BtnPveRefresh_Click(object s, RoutedEventArgs e)
-        => await PveRefreshAsync();
+    {
+        try { await PveRefreshAsync(); }
+        catch (Exception ex) { App.Log($"[BtnPveRefresh_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
+    }
 
     private async Task PveRefreshAsync()
     {

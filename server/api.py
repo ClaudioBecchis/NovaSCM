@@ -6,8 +6,33 @@ DB:    /data/novascm.db (configurabile con NOVASCM_DB env var)
 from flask import Flask, request, jsonify, Response, send_from_directory
 import sqlite3, json, datetime, os, functools, hmac, logging, re
 from contextlib import contextmanager
+try:
+    from flask_limiter import Limiter
+    from flask_limiter.util import get_remote_address
+    _limiter_available = True
+except ImportError:
+    _limiter_available = False
+    log_startup = logging.getLogger("novascm-api")
+    log_startup.warning("flask-limiter non disponibile — rate limiting disabilitato (pip install flask-limiter)")
 
 app = Flask(__name__)
+
+# ── Rate limiting (facoltativo: richiede flask-limiter) ───────────────────────
+if _limiter_available:
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["300 per minute", "3000 per hour"],
+        storage_uri="memory://",
+    )
+else:
+    # Stub no-op quando flask-limiter non è installato
+    class _NoOpLimiter:
+        def limit(self, *a, **kw):
+            return lambda f: f
+        def exempt(self, f):
+            return f
+    limiter = _NoOpLimiter()
 
 # Percorso DB: variabile d'ambiente NOVASCM_DB, default /data/novascm.db
 DB = os.environ.get("NOVASCM_DB", "/data/novascm.db")
@@ -166,9 +191,8 @@ def row_to_dict(row):
 @app.route("/api/cr", methods=["GET"])
 @require_auth
 def list_cr():
-    conn = get_db()
-    rows = conn.execute("SELECT * FROM cr ORDER BY id DESC").fetchall()
-    conn.close()
+    with get_db_ctx() as conn:
+        rows = conn.execute("SELECT * FROM cr ORDER BY id DESC").fetchall()
     return jsonify([row_to_dict(r) for r in rows])
 
 @app.route("/api/cr", methods=["POST"])
@@ -179,43 +203,40 @@ def create_cr():
         if not data.get(f):
             return jsonify({"error": f"Campo obbligatorio: {f}"}), 400
     now = datetime.datetime.now().isoformat()
-    conn = get_db()
-    try:
-        conn.execute("""
-            INSERT INTO cr (pc_name, domain, ou, dc_ip, join_user, join_pass,
-                            odj_blob, admin_pass, software, assigned_user, notes, status, created_at, workflow_id)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """, (
-            data["pc_name"].upper().strip(),
-            data["domain"],
-            data.get("ou", ""),
-            data.get("dc_ip", ""),
-            data.get("join_user", ""),
-            data.get("join_pass", ""),
-            data.get("odj_blob", ""),
-            data.get("admin_pass", ""),
-            json.dumps(data.get("software", [])),
-            data.get("assigned_user", ""),
-            data.get("notes", ""),
-            "open",
-            now,
-            data.get("workflow_id") or None
-        ))
-        conn.commit()
-        row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
-                           (data["pc_name"].upper().strip(),)).fetchone()
-        conn.close()
-        return jsonify(row_to_dict(row)), 201
-    except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"error": f"PC '{data['pc_name']}' esiste già"}), 409
+    with get_db_ctx() as conn:
+        try:
+            conn.execute("""
+                INSERT INTO cr (pc_name, domain, ou, dc_ip, join_user, join_pass,
+                                odj_blob, admin_pass, software, assigned_user, notes, status, created_at, workflow_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (
+                data["pc_name"].upper().strip(),
+                data["domain"],
+                data.get("ou", ""),
+                data.get("dc_ip", ""),
+                data.get("join_user", ""),
+                data.get("join_pass", ""),
+                data.get("odj_blob", ""),
+                data.get("admin_pass", ""),
+                json.dumps(data.get("software", [])),
+                data.get("assigned_user", ""),
+                data.get("notes", ""),
+                "open",
+                now,
+                data.get("workflow_id") or None
+            ))
+            conn.commit()
+            row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
+                               (data["pc_name"].upper().strip(),)).fetchone()
+            return jsonify(row_to_dict(row)), 201
+        except sqlite3.IntegrityError:
+            return jsonify({"error": f"PC '{data['pc_name']}' esiste già"}), 409
 
 @app.route("/api/cr/<int:cr_id>", methods=["GET"])
 @require_auth
 def get_cr(cr_id):
-    conn = get_db()
-    row = conn.execute("SELECT * FROM cr WHERE id=?", (cr_id,)).fetchone()
-    conn.close()
+    with get_db_ctx() as conn:
+        row = conn.execute("SELECT * FROM cr WHERE id=?", (cr_id,)).fetchone()
     if not row:
         return jsonify({"error": "Non trovato"}), 404
     return jsonify(row_to_dict(row))
@@ -223,10 +244,9 @@ def get_cr(cr_id):
 @app.route("/api/cr/by-name/<pc_name>", methods=["GET"])
 @require_auth
 def get_cr_by_name(pc_name):
-    conn = get_db()
-    row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
-                       (pc_name.upper().strip(),)).fetchone()
-    conn.close()
+    with get_db_ctx() as conn:
+        row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
+                           (pc_name.upper().strip(),)).fetchone()
     if not row:
         return jsonify({"error": "CR non trovato"}), 404
     return jsonify(row_to_dict(row))
@@ -239,12 +259,11 @@ def update_status(cr_id):
     if status not in ("open", "in_progress", "completed"):
         return jsonify({"error": "Stato non valido"}), 400
     now = datetime.datetime.now().isoformat() if status == "completed" else None
-    conn = get_db()
-    conn.execute("UPDATE cr SET status=?, completed_at=? WHERE id=?",
-                 (status, now, cr_id))
-    conn.commit()
-    row = conn.execute("SELECT * FROM cr WHERE id=?", (cr_id,)).fetchone()
-    conn.close()
+    with get_db_ctx() as conn:
+        conn.execute("UPDATE cr SET status=?, completed_at=? WHERE id=?",
+                     (status, now, cr_id))
+        conn.commit()
+        row = conn.execute("SELECT * FROM cr WHERE id=?", (cr_id,)).fetchone()
     if not row:
         return jsonify({"error": "Non trovato"}), 404
     return jsonify(row_to_dict(row))
@@ -252,11 +271,10 @@ def update_status(cr_id):
 @app.route("/api/cr/<int:cr_id>", methods=["DELETE"])
 @require_auth
 def delete_cr(cr_id):
-    conn = get_db()
-    affected = conn.execute("DELETE FROM cr WHERE id=?", (cr_id,)).rowcount
-    conn.execute("DELETE FROM cr_steps WHERE cr_id=?", (cr_id,))
-    conn.commit()
-    conn.close()
+    with get_db_ctx() as conn:
+        affected = conn.execute("DELETE FROM cr WHERE id=?", (cr_id,)).rowcount
+        conn.execute("DELETE FROM cr_steps WHERE cr_id=?", (cr_id,))
+        conn.commit()
     if affected == 0:
         return jsonify({"error": "Non trovato"}), 404
     return jsonify({"ok": True})
@@ -266,10 +284,9 @@ def delete_cr(cr_id):
 @app.route("/api/cr/by-name/<pc_name>/autounattend.xml", methods=["GET"])
 @require_auth
 def get_autounattend(pc_name):
-    conn = get_db()
-    row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
-                       (pc_name.upper().strip(),)).fetchone()
-    conn.close()
+    with get_db_ctx() as conn:
+        row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
+                           (pc_name.upper().strip(),)).fetchone()
     if not row:
         return "CR non trovato", 404
     d = row_to_dict(row)
@@ -428,16 +445,14 @@ def get_autounattend(pc_name):
 @require_auth
 def checkin_cr(pc_name):
     now = datetime.datetime.now().isoformat()
-    conn = get_db()
-    affected = conn.execute("UPDATE cr SET last_seen=? WHERE pc_name=?",
-                            (now, pc_name.upper().strip())).rowcount
-    conn.commit()
-    if affected == 0:
-        conn.close()
-        return jsonify({"error": "CR non trovato"}), 404
-    row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
-                       (pc_name.upper().strip(),)).fetchone()
-    conn.close()
+    with get_db_ctx() as conn:
+        affected = conn.execute("UPDATE cr SET last_seen=? WHERE pc_name=?",
+                                (now, pc_name.upper().strip())).rowcount
+        conn.commit()
+        if affected == 0:
+            return jsonify({"error": "CR non trovato"}), 404
+        row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
+                           (pc_name.upper().strip(),)).fetchone()
     return jsonify({"ok": True, "last_seen": now, "cr": row_to_dict(row)})
 
 # ── Settings ──────────────────────────────────────────────────────────────────
@@ -445,24 +460,22 @@ def checkin_cr(pc_name):
 @app.route("/api/settings", methods=["GET"])
 @require_auth
 def get_settings():
-    conn = get_db()
-    rows = conn.execute("SELECT key, value FROM settings").fetchall()
-    conn.close()
+    with get_db_ctx() as conn:
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
     return jsonify({r["key"]: r["value"] for r in rows})
 
 @app.route("/api/settings", methods=["PUT"])
 @require_auth
 def update_settings():
     data = request.get_json(force=True)
-    conn = get_db()
-    for key, value in data.items():
-        conn.execute(
-            "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            (key, str(value) if value is not None else "")
-        )
-    conn.commit()
-    rows = conn.execute("SELECT key, value FROM settings").fetchall()
-    conn.close()
+    with get_db_ctx() as conn:
+        for key, value in data.items():
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, str(value) if value is not None else "")
+            )
+        conn.commit()
+        rows = conn.execute("SELECT key, value FROM settings").fetchall()
     return jsonify({r["key"]: r["value"] for r in rows})
 
 @app.route("/api/cr/by-name/<pc_name>/step", methods=["POST"])
@@ -471,31 +484,28 @@ def report_step(pc_name):
     data   = request.get_json(force=True)
     step   = data.get("step", "")
     status = data.get("status", "done")
-    ts     = datetime.datetime.now().isoformat()  # BUG-08: timestamp sempre server-side
-    conn   = get_db()
-    row    = conn.execute("SELECT id FROM cr WHERE pc_name=?",
-                          (pc_name.upper().strip(),)).fetchone()
-    if not row:
-        conn.close()
-        return jsonify({"error": "CR non trovato"}), 404
-    cr_id = row["id"]
-    conn.execute("""
-        INSERT INTO cr_steps (cr_id, step_name, status, timestamp) VALUES (?,?,?,?)
-        ON CONFLICT(cr_id, step_name) DO UPDATE SET status=excluded.status, timestamp=excluded.timestamp
-    """, (cr_id, step, status, ts))
-    conn.execute("UPDATE cr SET last_seen=? WHERE id=?", (ts, cr_id))
-    conn.commit()
-    conn.close()
+    ts     = datetime.datetime.now().isoformat()
+    with get_db_ctx() as conn:
+        row = conn.execute("SELECT id FROM cr WHERE pc_name=?",
+                           (pc_name.upper().strip(),)).fetchone()
+        if not row:
+            return jsonify({"error": "CR non trovato"}), 404
+        cr_id = row["id"]
+        conn.execute("""
+            INSERT INTO cr_steps (cr_id, step_name, status, timestamp) VALUES (?,?,?,?)
+            ON CONFLICT(cr_id, step_name) DO UPDATE SET status=excluded.status, timestamp=excluded.timestamp
+        """, (cr_id, step, status, ts))
+        conn.execute("UPDATE cr SET last_seen=? WHERE id=?", (ts, cr_id))
+        conn.commit()
     return jsonify({"ok": True, "step": step, "status": status})
 
 @app.route("/api/cr/<int:cr_id>/steps", methods=["GET"])
 @require_auth
 def get_steps(cr_id):
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT step_name, status, timestamp FROM cr_steps WHERE cr_id=? ORDER BY id ASC",
-        (cr_id,)).fetchall()
-    conn.close()
+    with get_db_ctx() as conn:
+        rows = conn.execute(
+            "SELECT step_name, status, timestamp FROM cr_steps WHERE cr_id=? ORDER BY id ASC",
+            (cr_id,)).fetchall()
     return jsonify([dict(r) for r in rows])
 
 # ── Workflow Engine — Workflow CRUD ───────────────────────────────────────────
@@ -503,9 +513,8 @@ def get_steps(cr_id):
 @app.route("/api/workflows", methods=["GET"])
 @require_auth
 def list_workflows():
-    conn = get_db()
-    rows = conn.execute("SELECT * FROM workflows ORDER BY id ASC").fetchall()
-    conn.close()
+    with get_db_ctx() as conn:
+        rows = conn.execute("SELECT * FROM workflows ORDER BY id ASC").fetchall()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/workflows", methods=["POST"])
@@ -515,32 +524,28 @@ def create_workflow():
     if not data.get("nome"):
         return jsonify({"error": "Campo obbligatorio: nome"}), 400
     now = datetime.datetime.now().isoformat()
-    conn = get_db()
-    try:
-        conn.execute(
-            "INSERT INTO workflows (nome, descrizione, versione, created_at, updated_at) VALUES (?,?,?,?,?)",
-            (data["nome"].strip(), data.get("descrizione", ""), data.get("versione", 1), now, now)
-        )
-        conn.commit()
-        row = conn.execute("SELECT * FROM workflows WHERE nome=?", (data["nome"].strip(),)).fetchone()
-        conn.close()
-        return jsonify(dict(row)), 201
-    except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"error": f"Workflow '{data['nome']}' esiste già"}), 409
+    with get_db_ctx() as conn:
+        try:
+            conn.execute(
+                "INSERT INTO workflows (nome, descrizione, versione, created_at, updated_at) VALUES (?,?,?,?,?)",
+                (data["nome"].strip(), data.get("descrizione", ""), data.get("versione", 1), now, now)
+            )
+            conn.commit()
+            row = conn.execute("SELECT * FROM workflows WHERE nome=?", (data["nome"].strip(),)).fetchone()
+            return jsonify(dict(row)), 201
+        except sqlite3.IntegrityError:
+            return jsonify({"error": f"Workflow '{data['nome']}' esiste già"}), 409
 
 @app.route("/api/workflows/<int:wf_id>", methods=["GET"])
 @require_auth
 def get_workflow(wf_id):
-    conn = get_db()
-    wf = conn.execute("SELECT * FROM workflows WHERE id=?", (wf_id,)).fetchone()
-    if not wf:
-        conn.close()
-        return jsonify({"error": "Non trovato"}), 404
-    steps = conn.execute(
-        "SELECT * FROM workflow_steps WHERE workflow_id=? ORDER BY ordine ASC", (wf_id,)
-    ).fetchall()
-    conn.close()
+    with get_db_ctx() as conn:
+        wf = conn.execute("SELECT * FROM workflows WHERE id=?", (wf_id,)).fetchone()
+        if not wf:
+            return jsonify({"error": "Non trovato"}), 404
+        steps = conn.execute(
+            "SELECT * FROM workflow_steps WHERE workflow_id=? ORDER BY ordine ASC", (wf_id,)
+        ).fetchall()
     result = dict(wf)
     result["steps"] = [dict(s) for s in steps]
     return jsonify(result)
@@ -550,14 +555,13 @@ def get_workflow(wf_id):
 def update_workflow(wf_id):
     data = request.get_json(force=True)
     now  = datetime.datetime.now().isoformat()
-    conn = get_db()
-    conn.execute(
-        "UPDATE workflows SET nome=?, descrizione=?, versione=versione+1, updated_at=? WHERE id=?",
-        (data.get("nome", "").strip(), data.get("descrizione", ""), now, wf_id)
-    )
-    conn.commit()
-    row = conn.execute("SELECT * FROM workflows WHERE id=?", (wf_id,)).fetchone()
-    conn.close()
+    with get_db_ctx() as conn:
+        conn.execute(
+            "UPDATE workflows SET nome=?, descrizione=?, versione=versione+1, updated_at=? WHERE id=?",
+            (data.get("nome", "").strip(), data.get("descrizione", ""), now, wf_id)
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM workflows WHERE id=?", (wf_id,)).fetchone()
     if not row:
         return jsonify({"error": "Non trovato"}), 404
     return jsonify(dict(row))
@@ -565,10 +569,9 @@ def update_workflow(wf_id):
 @app.route("/api/workflows/<int:wf_id>", methods=["DELETE"])
 @require_auth
 def delete_workflow(wf_id):
-    conn = get_db()
-    affected = conn.execute("DELETE FROM workflows WHERE id=?", (wf_id,)).rowcount
-    conn.commit()
-    conn.close()
+    with get_db_ctx() as conn:
+        affected = conn.execute("DELETE FROM workflows WHERE id=?", (wf_id,)).rowcount
+        conn.commit()
     if affected == 0:
         return jsonify({"error": "Non trovato"}), 404
     return jsonify({"ok": True})
@@ -578,11 +581,10 @@ def delete_workflow(wf_id):
 @app.route("/api/workflows/<int:wf_id>/steps", methods=["GET"])
 @require_auth
 def list_steps(wf_id):
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT * FROM workflow_steps WHERE workflow_id=? ORDER BY ordine ASC", (wf_id,)
-    ).fetchall()
-    conn.close()
+    with get_db_ctx() as conn:
+        rows = conn.execute(
+            "SELECT * FROM workflow_steps WHERE workflow_id=? ORDER BY ordine ASC", (wf_id,)
+        ).fetchall()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/workflows/<int:wf_id>/steps", methods=["POST"])
@@ -605,27 +607,25 @@ def add_step(wf_id):
     parametri = data.get("parametri", {})
     if isinstance(parametri, dict):
         parametri = json.dumps(parametri)
-    conn = get_db()
-    try:
-        conn.execute("""
-            INSERT INTO workflow_steps (workflow_id, ordine, nome, tipo, parametri, condizione, su_errore, platform)
-            VALUES (?,?,?,?,?,?,?,?)
-        """, (
-            wf_id, data["ordine"], data["nome"].strip(), data["tipo"],
-            parametri, data.get("condizione", ""), data.get("su_errore", "stop"),
-            data.get("platform", "all")
-        ))
-        conn.execute("UPDATE workflows SET versione=versione+1, updated_at=? WHERE id=?",
-                     (datetime.datetime.now().isoformat(), wf_id))
-        conn.commit()
-        row = conn.execute(
-            "SELECT * FROM workflow_steps WHERE workflow_id=? AND ordine=?", (wf_id, data["ordine"])
-        ).fetchone()
-        conn.close()
-        return jsonify(dict(row)), 201
-    except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"error": f"Ordine {data['ordine']} già esistente in questo workflow"}), 409
+    with get_db_ctx() as conn:
+        try:
+            conn.execute("""
+                INSERT INTO workflow_steps (workflow_id, ordine, nome, tipo, parametri, condizione, su_errore, platform)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                wf_id, data["ordine"], data["nome"].strip(), data["tipo"],
+                parametri, data.get("condizione", ""), data.get("su_errore", "stop"),
+                data.get("platform", "all")
+            ))
+            conn.execute("UPDATE workflows SET versione=versione+1, updated_at=? WHERE id=?",
+                         (datetime.datetime.now().isoformat(), wf_id))
+            conn.commit()
+            row = conn.execute(
+                "SELECT * FROM workflow_steps WHERE workflow_id=? AND ordine=?", (wf_id, data["ordine"])
+            ).fetchone()
+            return jsonify(dict(row)), 201
+        except sqlite3.IntegrityError:
+            return jsonify({"error": f"Ordine {data['ordine']} già esistente in questo workflow"}), 409
 
 @app.route("/api/workflows/<int:wf_id>/steps/<int:step_id>", methods=["PUT"])
 @require_auth
@@ -634,21 +634,20 @@ def update_step(wf_id, step_id):
     parametri = data.get("parametri", {})
     if isinstance(parametri, dict):
         parametri = json.dumps(parametri)
-    conn = get_db()
-    conn.execute("""
-        UPDATE workflow_steps SET ordine=?, nome=?, tipo=?, parametri=?, condizione=?, su_errore=?, platform=?
-        WHERE id=? AND workflow_id=?
-    """, (
-        data.get("ordine"), data.get("nome", "").strip(), data.get("tipo"),
-        parametri, data.get("condizione", ""), data.get("su_errore", "stop"),
-        data.get("platform", "all"),
-        step_id, wf_id
-    ))
-    conn.execute("UPDATE workflows SET versione=versione+1, updated_at=? WHERE id=?",
-                 (datetime.datetime.now().isoformat(), wf_id))
-    conn.commit()
-    row = conn.execute("SELECT * FROM workflow_steps WHERE id=?", (step_id,)).fetchone()
-    conn.close()
+    with get_db_ctx() as conn:
+        conn.execute("""
+            UPDATE workflow_steps SET ordine=?, nome=?, tipo=?, parametri=?, condizione=?, su_errore=?, platform=?
+            WHERE id=? AND workflow_id=?
+        """, (
+            data.get("ordine"), data.get("nome", "").strip(), data.get("tipo"),
+            parametri, data.get("condizione", ""), data.get("su_errore", "stop"),
+            data.get("platform", "all"),
+            step_id, wf_id
+        ))
+        conn.execute("UPDATE workflows SET versione=versione+1, updated_at=? WHERE id=?",
+                     (datetime.datetime.now().isoformat(), wf_id))
+        conn.commit()
+        row = conn.execute("SELECT * FROM workflow_steps WHERE id=?", (step_id,)).fetchone()
     if not row:
         return jsonify({"error": "Step non trovato"}), 404
     return jsonify(dict(row))
@@ -656,14 +655,13 @@ def update_step(wf_id, step_id):
 @app.route("/api/workflows/<int:wf_id>/steps/<int:step_id>", methods=["DELETE"])
 @require_auth
 def delete_step(wf_id, step_id):
-    conn = get_db()
-    affected = conn.execute(
-        "DELETE FROM workflow_steps WHERE id=? AND workflow_id=?", (step_id, wf_id)
-    ).rowcount
-    conn.execute("UPDATE workflows SET versione=versione+1, updated_at=? WHERE id=?",
-                 (datetime.datetime.now().isoformat(), wf_id))
-    conn.commit()
-    conn.close()
+    with get_db_ctx() as conn:
+        affected = conn.execute(
+            "DELETE FROM workflow_steps WHERE id=? AND workflow_id=?", (step_id, wf_id)
+        ).rowcount
+        conn.execute("UPDATE workflows SET versione=versione+1, updated_at=? WHERE id=?",
+                     (datetime.datetime.now().isoformat(), wf_id))
+        conn.commit()
     if affected == 0:
         return jsonify({"error": "Step non trovato"}), 404
     return jsonify({"ok": True})
@@ -673,14 +671,13 @@ def delete_step(wf_id, step_id):
 @app.route("/api/pc-workflows", methods=["GET"])
 @require_auth
 def list_pc_workflows():
-    conn = get_db()
-    rows = conn.execute("""
-        SELECT pw.*, w.nome as workflow_nome
-        FROM pc_workflows pw
-        JOIN workflows w ON w.id = pw.workflow_id
-        ORDER BY pw.id DESC
-    """).fetchall()
-    conn.close()
+    with get_db_ctx() as conn:
+        rows = conn.execute("""
+            SELECT pw.*, w.nome as workflow_nome
+            FROM pc_workflows pw
+            JOIN workflows w ON w.id = pw.workflow_id
+            ORDER BY pw.id DESC
+        """).fetchall()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/pc-workflows", methods=["POST"])
@@ -691,49 +688,44 @@ def assign_workflow():
         if not data.get(f):
             return jsonify({"error": f"Campo obbligatorio: {f}"}), 400
     now = datetime.datetime.now().isoformat()
-    conn = get_db()
-    wf = conn.execute("SELECT id FROM workflows WHERE id=?", (data["workflow_id"],)).fetchone()
-    if not wf:
-        conn.close()
-        return jsonify({"error": "Workflow non trovato"}), 404
-    try:
-        conn.execute(
-            "INSERT INTO pc_workflows (pc_name, workflow_id, status, assigned_at) VALUES (?,?,?,?)",
-            (data["pc_name"].upper().strip(), data["workflow_id"], "pending", now)
-        )
-        conn.commit()
-        row = conn.execute(
-            "SELECT * FROM pc_workflows WHERE pc_name=? AND workflow_id=?",
-            (data["pc_name"].upper().strip(), data["workflow_id"])
-        ).fetchone()
-        conn.close()
-        return jsonify(dict(row)), 201
-    except sqlite3.IntegrityError:
-        conn.close()
-        return jsonify({"error": "Workflow già assegnato a questo PC"}), 409
+    with get_db_ctx() as conn:
+        wf = conn.execute("SELECT id FROM workflows WHERE id=?", (data["workflow_id"],)).fetchone()
+        if not wf:
+            return jsonify({"error": "Workflow non trovato"}), 404
+        try:
+            conn.execute(
+                "INSERT INTO pc_workflows (pc_name, workflow_id, status, assigned_at) VALUES (?,?,?,?)",
+                (data["pc_name"].upper().strip(), data["workflow_id"], "pending", now)
+            )
+            conn.commit()
+            row = conn.execute(
+                "SELECT * FROM pc_workflows WHERE pc_name=? AND workflow_id=?",
+                (data["pc_name"].upper().strip(), data["workflow_id"])
+            ).fetchone()
+            return jsonify(dict(row)), 201
+        except sqlite3.IntegrityError:
+            return jsonify({"error": "Workflow già assegnato a questo PC"}), 409
 
 @app.route("/api/pc-workflows/<int:pw_id>", methods=["GET"])
 @require_auth
 def get_pc_workflow(pw_id):
-    conn = get_db()
-    pw = conn.execute("""
-        SELECT pw.*, w.nome as workflow_nome
-        FROM pc_workflows pw JOIN workflows w ON w.id=pw.workflow_id
-        WHERE pw.id=?
-    """, (pw_id,)).fetchone()
-    if not pw:
-        conn.close()
-        return jsonify({"error": "Non trovato"}), 404
-    steps = conn.execute("""
-        SELECT ws.ordine, ws.nome, ws.tipo, ws.parametri, ws.su_errore,
-               COALESCE(pws.status,'pending') as status,
-               pws.output, pws.timestamp
-        FROM workflow_steps ws
-        LEFT JOIN pc_workflow_steps pws ON pws.step_id=ws.id AND pws.pc_workflow_id=?
-        WHERE ws.workflow_id=?
-        ORDER BY ws.ordine ASC
-    """, (pw_id, dict(pw)["workflow_id"])).fetchall()
-    conn.close()
+    with get_db_ctx() as conn:
+        pw = conn.execute("""
+            SELECT pw.*, w.nome as workflow_nome
+            FROM pc_workflows pw JOIN workflows w ON w.id=pw.workflow_id
+            WHERE pw.id=?
+        """, (pw_id,)).fetchone()
+        if not pw:
+            return jsonify({"error": "Non trovato"}), 404
+        steps = conn.execute("""
+            SELECT ws.ordine, ws.nome, ws.tipo, ws.parametri, ws.su_errore,
+                   COALESCE(pws.status,'pending') as status,
+                   pws.output, pws.timestamp
+            FROM workflow_steps ws
+            LEFT JOIN pc_workflow_steps pws ON pws.step_id=ws.id AND pws.pc_workflow_id=?
+            WHERE ws.workflow_id=?
+            ORDER BY ws.ordine ASC
+        """, (pw_id, dict(pw)["workflow_id"])).fetchall()
     result = dict(pw)
     result["steps"] = [dict(s) for s in steps]
     return jsonify(result)
@@ -741,10 +733,9 @@ def get_pc_workflow(pw_id):
 @app.route("/api/pc-workflows/<int:pw_id>", methods=["DELETE"])
 @require_auth
 def delete_pc_workflow(pw_id):
-    conn = get_db()
-    affected = conn.execute("DELETE FROM pc_workflows WHERE id=?", (pw_id,)).rowcount
-    conn.commit()
-    conn.close()
+    with get_db_ctx() as conn:
+        affected = conn.execute("DELETE FROM pc_workflows WHERE id=?", (pw_id,)).rowcount
+        conn.commit()
     if affected == 0:
         return jsonify({"error": "Non trovato"}), 404
     return jsonify({"ok": True})
@@ -762,68 +753,64 @@ def get_pc_assigned_workflow(pc_name):
     """
     pc = pc_name.upper().strip()
     now = datetime.datetime.now().isoformat()
-    conn = get_db()
+    with get_db_ctx() as conn:
+        # 1. Cerca assegnazione esistente
+        pw = conn.execute("""
+            SELECT pw.*, w.nome as workflow_nome
+            FROM pc_workflows pw JOIN workflows w ON w.id=pw.workflow_id
+            WHERE pw.pc_name=? AND pw.status IN ('pending','running')
+            ORDER BY pw.id DESC LIMIT 1
+        """, (pc,)).fetchone()
 
-    # 1. Cerca assegnazione esistente
-    pw = conn.execute("""
-        SELECT pw.*, w.nome as workflow_nome
-        FROM pc_workflows pw JOIN workflows w ON w.id=pw.workflow_id
-        WHERE pw.pc_name=? AND pw.status IN ('pending','running')
-        ORDER BY pw.id DESC LIMIT 1
-    """, (pc,)).fetchone()
-
-    # 2. Auto-assign: cerca workflow_id nella CR
-    if not pw:
-        cr = conn.execute(
-            "SELECT workflow_id FROM cr WHERE pc_name=? AND workflow_id IS NOT NULL", (pc,)
-        ).fetchone()
-        wf_id = cr["workflow_id"] if cr else None
-
-        # 3. Fallback: default workflow dalle impostazioni
-        if not wf_id:
-            setting = conn.execute(
-                "SELECT value FROM settings WHERE key='default_workflow_id'"
+        # 2. Auto-assign: cerca workflow_id nella CR
+        if not pw:
+            cr = conn.execute(
+                "SELECT workflow_id FROM cr WHERE pc_name=? AND workflow_id IS NOT NULL", (pc,)
             ).fetchone()
-            wf_id = int(setting["value"]) if setting and setting["value"] else None
+            wf_id = cr["workflow_id"] if cr else None
 
-        if wf_id:
-            # Verifica che il workflow esista
-            wf_exists = conn.execute("SELECT id FROM workflows WHERE id=?", (wf_id,)).fetchone()
-            if wf_exists:
-                conn.execute(
-                    "INSERT OR IGNORE INTO pc_workflows (pc_name, workflow_id, status, assigned_at) VALUES (?,?,?,?)",
-                    (pc, wf_id, "pending", now)
-                )
-                conn.commit()
-                pw = conn.execute("""
-                    SELECT pw.*, w.nome as workflow_nome
-                    FROM pc_workflows pw JOIN workflows w ON w.id=pw.workflow_id
-                    WHERE pw.pc_name=? AND pw.status IN ('pending','running')
-                    ORDER BY pw.id DESC LIMIT 1
-                """, (pc,)).fetchone()
+            # 3. Fallback: default workflow dalle impostazioni
+            if not wf_id:
+                setting = conn.execute(
+                    "SELECT value FROM settings WHERE key='default_workflow_id'"
+                ).fetchone()
+                wf_id = int(setting["value"]) if setting and setting["value"] else None
 
-    if not pw:
-        conn.close()
-        return jsonify({"error": "Nessun workflow assegnato"}), 404
+            if wf_id:
+                wf_exists = conn.execute("SELECT id FROM workflows WHERE id=?", (wf_id,)).fetchone()
+                if wf_exists:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO pc_workflows (pc_name, workflow_id, status, assigned_at) VALUES (?,?,?,?)",
+                        (pc, wf_id, "pending", now)
+                    )
+                    conn.commit()
+                    pw = conn.execute("""
+                        SELECT pw.*, w.nome as workflow_nome
+                        FROM pc_workflows pw JOIN workflows w ON w.id=pw.workflow_id
+                        WHERE pw.pc_name=? AND pw.status IN ('pending','running')
+                        ORDER BY pw.id DESC LIMIT 1
+                    """, (pc,)).fetchone()
 
-    pw_dict = dict(pw)
-    steps = conn.execute("""
-        SELECT ws.id as step_id, ws.ordine, ws.nome, ws.tipo, ws.parametri,
-               ws.condizione, ws.su_errore, ws.platform,
-               COALESCE(pws.status,'pending') as status
-        FROM workflow_steps ws
-        LEFT JOIN pc_workflow_steps pws ON pws.step_id=ws.id AND pws.pc_workflow_id=?
-        WHERE ws.workflow_id=?
-        ORDER BY ws.ordine ASC
-    """, (pw_dict["id"], pw_dict["workflow_id"])).fetchall()
+        if not pw:
+            return jsonify({"error": "Nessun workflow assegnato"}), 404
 
-    if pw_dict["status"] == "pending":
-        conn.execute("UPDATE pc_workflows SET status='running', started_at=? WHERE id=?",
-                     (now, pw_dict["id"]))
-        conn.commit()
-        pw_dict["status"] = "running"
+        pw_dict = dict(pw)
+        steps = conn.execute("""
+            SELECT ws.id as step_id, ws.ordine, ws.nome, ws.tipo, ws.parametri,
+                   ws.condizione, ws.su_errore, ws.platform,
+                   COALESCE(pws.status,'pending') as status
+            FROM workflow_steps ws
+            LEFT JOIN pc_workflow_steps pws ON pws.step_id=ws.id AND pws.pc_workflow_id=?
+            WHERE ws.workflow_id=?
+            ORDER BY ws.ordine ASC
+        """, (pw_dict["id"], pw_dict["workflow_id"])).fetchall()
 
-    conn.close()
+        if pw_dict["status"] == "pending":
+            conn.execute("UPDATE pc_workflows SET status='running', started_at=? WHERE id=?",
+                         (now, pw_dict["id"]))
+            conn.commit()
+            pw_dict["status"] = "running"
+
     pw_dict["steps"] = [dict(s) for s in steps]
     return jsonify(pw_dict)
 
@@ -831,42 +818,40 @@ def get_pc_assigned_workflow(pc_name):
 @require_auth
 def report_wf_step(pc_name):
     """Agent: riporta lo stato di uno step di un workflow."""
-    data   = request.get_json(force=True)
+    data    = request.get_json(force=True)
     step_id = data.get("step_id")
     status  = data.get("status", "done")  # running | done | error | skipped
     output  = data.get("output", "")
-    ts      = datetime.datetime.now().isoformat()  # BUG-08: timestamp sempre server-side
+    ts      = datetime.datetime.now().isoformat()
     if not step_id:
         return jsonify({"error": "Campo obbligatorio: step_id"}), 400
-    conn = get_db()
-    pw = conn.execute(
-        "SELECT id, workflow_id FROM pc_workflows WHERE pc_name=? AND status='running' ORDER BY id DESC LIMIT 1",
-        (pc_name.upper().strip(),)
-    ).fetchone()
-    if not pw:
-        conn.close()
-        return jsonify({"error": "Nessun workflow in esecuzione"}), 404
-    pw_id = pw["id"]
-    conn.execute("""
-        INSERT INTO pc_workflow_steps (pc_workflow_id, step_id, status, output, timestamp)
-        VALUES (?,?,?,?,?)
-        ON CONFLICT(pc_workflow_id, step_id)
-        DO UPDATE SET status=excluded.status, output=excluded.output, timestamp=excluded.timestamp
-    """, (pw_id, step_id, status, output, ts))
-    conn.execute("UPDATE pc_workflows SET last_seen=? WHERE id=?", (ts, pw_id))
-    # Se tutti gli step sono done/skipped → completa workflow
-    total = conn.execute(
-        "SELECT COUNT(*) FROM workflow_steps WHERE workflow_id=?", (pw["workflow_id"],)
-    ).fetchone()[0]
-    done = conn.execute("""
-        SELECT COUNT(*) FROM pc_workflow_steps
-        WHERE pc_workflow_id=? AND status IN ('done','skipped')
-    """, (pw_id,)).fetchone()[0]
-    if total > 0 and done >= total:
-        conn.execute("UPDATE pc_workflows SET status='completed', completed_at=? WHERE id=?",
-                     (ts, pw_id))
-    conn.commit()
-    conn.close()
+    with get_db_ctx() as conn:
+        pw = conn.execute(
+            "SELECT id, workflow_id FROM pc_workflows WHERE pc_name=? AND status='running' ORDER BY id DESC LIMIT 1",
+            (pc_name.upper().strip(),)
+        ).fetchone()
+        if not pw:
+            return jsonify({"error": "Nessun workflow in esecuzione"}), 404
+        pw_id = pw["id"]
+        conn.execute("""
+            INSERT INTO pc_workflow_steps (pc_workflow_id, step_id, status, output, timestamp)
+            VALUES (?,?,?,?,?)
+            ON CONFLICT(pc_workflow_id, step_id)
+            DO UPDATE SET status=excluded.status, output=excluded.output, timestamp=excluded.timestamp
+        """, (pw_id, step_id, status, output, ts))
+        conn.execute("UPDATE pc_workflows SET last_seen=? WHERE id=?", (ts, pw_id))
+        # Se tutti gli step sono done/skipped → completa workflow
+        total = conn.execute(
+            "SELECT COUNT(*) FROM workflow_steps WHERE workflow_id=?", (pw["workflow_id"],)
+        ).fetchone()[0]
+        done = conn.execute("""
+            SELECT COUNT(*) FROM pc_workflow_steps
+            WHERE pc_workflow_id=? AND status IN ('done','skipped')
+        """, (pw_id,)).fetchone()[0]
+        if total > 0 and done >= total:
+            conn.execute("UPDATE pc_workflows SET status='completed', completed_at=? WHERE id=?",
+                         (ts, pw_id))
+        conn.commit()
     return jsonify({"ok": True, "step_id": step_id, "status": status})
 
 @app.route("/api/pc/<pc_name>/workflow/checkin", methods=["POST"])
@@ -874,13 +859,12 @@ def report_wf_step(pc_name):
 def checkin_wf(pc_name):
     """Agent: heartbeat durante esecuzione workflow."""
     now = datetime.datetime.now().isoformat()
-    conn = get_db()
-    affected = conn.execute(
-        "UPDATE pc_workflows SET last_seen=? WHERE pc_name=? AND status='running'",
-        (now, pc_name.upper().strip())
-    ).rowcount
-    conn.commit()
-    conn.close()
+    with get_db_ctx() as conn:
+        affected = conn.execute(
+            "UPDATE pc_workflows SET last_seen=? WHERE pc_name=? AND status='running'",
+            (now, pc_name.upper().strip())
+        ).rowcount
+        conn.commit()
     if affected == 0:
         return jsonify({"error": "Nessun workflow in esecuzione"}), 404
     return jsonify({"ok": True, "last_seen": now})
@@ -915,7 +899,7 @@ def download_exe():
 @app.route("/api/download/setup", methods=["GET"])
 @require_auth
 def download_setup():
-    """Serve l'installer NSIS per nuovi utenti."""
+    """Serve l'installer per nuovi utenti."""
     setup_file = os.path.join(os.path.dirname(DB), "NovaSCM-Setup.exe")
     if not os.path.exists(setup_file):
         return jsonify({"error": "Installer non disponibile"}), 404
