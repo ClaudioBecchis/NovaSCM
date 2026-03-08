@@ -1,4 +1,4 @@
-<!-- NovaSCM v1.4.0 -->
+<!-- NovaSCM v1.5.0 -->
 <Window x:Class="PolarisManager.WorkflowStepWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"

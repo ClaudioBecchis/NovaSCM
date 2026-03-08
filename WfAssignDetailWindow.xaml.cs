@@ -1,4 +1,4 @@
-// NovaSCM v1.4.0
+// NovaSCM v1.5.0
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Threading;
