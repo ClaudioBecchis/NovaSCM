@@ -1,6 +1,6 @@
 ; NovaSCM Inno Setup Script
-; Compila con: Inno Setup Compiler (https://jrsoftware.org/isinfo.php)
-; Output: NovaSCM-v1.2.0-Setup.exe
+; Compila con: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" NovaSCM.iss
+; Output: C:\Temp\NovaSCM_installer\NovaSCM-v1.4.0-Setup.exe
 
 #define AppName "NovaSCM"
 #define AppVersion "1.4.0"
@@ -42,20 +42,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; EXE principale
-Source: "{#SourceDir}\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-; DLL native WPF (non embedabili nel single-file)
-Source: "{#SourceDir}\D3DCompiler_47_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\PenImc_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\PresentationNative_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\e_sqlite3.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\vcruntime140_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\wpfgfx_cor3.dll"; DestDir: "{app}"; Flags: ignoreversion
+; Tutti i file del publish self-contained (include .NET runtime + DLL native WPF)
+; Nessun prerequisito richiesto — funziona su qualsiasi Windows 10/11 x64
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"
+Name: "{group}\{#AppName}";                       Filename: "{app}\{#AppExeName}"
 Name: "{group}\{cm:UninstallProgram,{#AppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\{#AppName}";                 Filename: "{app}\{#AppExeName}"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(AppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
