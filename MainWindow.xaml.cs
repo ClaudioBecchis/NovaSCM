@@ -2611,6 +2611,16 @@ public partial class MainWindow : Window
     private const string CurrentVersion = "1.1.0";
     private string? _updateDownloadUrl;
 
+    // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
+    private static bool IsNewerVersion(string remote, string current)
+    {
+        if (Version.TryParse(remote.TrimStart('v'), out var r) &&
+            Version.TryParse(current.TrimStart('v'), out var c))
+            return r > c;
+        // fallback lessicografico solo se il parse fallisce
+        return string.Compare(remote, current, StringComparison.OrdinalIgnoreCase) > 0;
+    }
+
     // ── Controlla aggiornamenti dal server NovaSCM ────────────────────────────
 
     private const string GitHubReleasesApi =
@@ -2655,8 +2665,7 @@ public partial class MainWindow : Window
             }
 
             bool hasUpdate = !string.IsNullOrEmpty(serverVer) &&
-                             string.Compare(serverVer, CurrentVersion,
-                                            StringComparison.OrdinalIgnoreCase) > 0;
+                             IsNewerVersion(serverVer, CurrentVersion);
 
             if (hasUpdate && !string.IsNullOrEmpty(dlUrl))
             {

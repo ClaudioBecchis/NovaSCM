@@ -4,6 +4,20 @@ namespace NovaSCMAgent;
 
 public class Worker : BackgroundService
 {
+    // BUG-06: valuta condizione semplice prima di eseguire lo step
+    private static bool EvaluateCondition(string? condizione)
+    {
+        if (string.IsNullOrWhiteSpace(condizione)) return true;
+        var cond = condizione.Trim().ToLowerInvariant();
+        if (cond == "windows") return OperatingSystem.IsWindows();
+        if (cond == "linux")   return OperatingSystem.IsLinux();
+        if (cond.StartsWith("os="))
+            return (OperatingSystem.IsWindows() ? "windows" : "linux") == cond[3..].Trim();
+        if (cond.StartsWith("hostname="))
+            return Environment.MachineName.Equals(cond[9..].Trim(), StringComparison.OrdinalIgnoreCase);
+        return true;  // condizione sconosciuta → esegui comunque
+    }
+
     private readonly ILogger<Worker> _log;
     private readonly ApiClient       _api;
     private readonly StepExecutor    _exec;
@@ -26,7 +40,7 @@ public class Worker : BackgroundService
 
             try
             {
-                var wf = await _api.GetWorkflowAsync(cfg.ApiUrl, cfg.PcName, ct);
+                var wf = await _api.GetWorkflowAsync(cfg.ApiUrl, cfg.PcName, ct, cfg.ApiKey);
 
                 if (wf != null && wf["error"] is null)
                 {
@@ -73,10 +87,20 @@ public class Worker : BackgroundService
                 continue;
             }
 
+            // BUG-06: valuta condizione prima di eseguire
+            var condizione = step["condizione"]?.GetValue<string>() ?? "";
+            if (!EvaluateCondition(condizione))
+            {
+                _log.LogInformation("[{N}] {Nome} — SKIP condizione: {Cond}", ordine, nome, condizione);
+                await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, "skipped",
+                    $"Condizione non soddisfatta: {condizione}", ct, cfg.ApiKey);
+                continue;
+            }
+
             _log.LogInformation("[{N}/{Tot}] {Nome}", ordine, steps.Count, nome);
 
             // Segnala running
-            await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, "running", "", ct);
+            await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, "running", "", ct, cfg.ApiKey);
 
             // Esegui
             var result = await _exec.ExecuteAsync(step, ct);
@@ -85,7 +109,7 @@ public class Worker : BackgroundService
             {
                 // Skipped
                 _log.LogInformation("  → SKIPPED");
-                await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, "skipped", result.Output, ct);
+                await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, "skipped", result.Output, ct, cfg.ApiKey);
                 continue;
             }
 
@@ -93,7 +117,7 @@ public class Worker : BackgroundService
             _log.LogInformation("  → {Status}: {Out}", status.ToUpperInvariant(),
                 result.Output.Length > 200 ? result.Output[..200] + "..." : result.Output);
 
-            await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, status, result.Output, ct);
+            await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, status, result.Output, ct, cfg.ApiKey);
 
             if (!result.Ok.Value && suErr == "stop")
             {

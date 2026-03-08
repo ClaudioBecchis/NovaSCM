@@ -54,7 +54,9 @@ public class StepExecutor
     {
         var id = p["id"]?.GetValue<string>() ?? "";
         if (string.IsNullOrEmpty(id)) return new(false, "Parametro 'id' mancante");
-        return await Run($"winget install --id \"{id}\" --silent --accept-package-agreements --accept-source-agreements", ct: ct);
+        // BUG-02: lista argomenti — nessuna interpolazione shell
+        return await RunArgs(["winget", "install", "--id", id,
+            "--silent", "--accept-package-agreements", "--accept-source-agreements"], ct: ct);
     }
 
     private async Task<StepResult> AptInstall(JsonObject p, CancellationToken ct)
@@ -76,19 +78,23 @@ public class StepExecutor
     {
         var script = p["script"]?.GetValue<string>() ?? "";
         if (string.IsNullOrEmpty(script)) return new(false, "Parametro 'script' mancante");
-        var exe  = IsWindows ? "powershell.exe" : "pwsh";
-        var args = $"-NonInteractive -ExecutionPolicy Bypass -Command \"{script.Replace("\"", "\\\"")}\"";
-        return await Run(exe, args, ct: ct);
+        // BUG-02: script passato come argomento separato, nessuna interpolazione
+        var exe = IsWindows ? "powershell.exe" : "pwsh";
+        return await RunArgs([exe, "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], ct: ct);
     }
 
     private async Task<StepResult> ShellScript(JsonObject p, CancellationToken ct)
     {
         var script = p["script"]?.GetValue<string>() ?? "";
         if (string.IsNullOrEmpty(script)) return new(false, "Parametro 'script' mancante");
+        // BUG-02: lista argomenti — script non interpolato nella stringa del processo
         return IsWindows
-            ? await Run("cmd.exe", $"/c {script}", ct: ct)
-            : await Run("bash",    $"-c \"{script.Replace("\"", "\\\"")}\"", ct: ct);
+            ? await RunArgs(["cmd.exe",  "/c",   script], ct: ct)
+            : await RunArgs(["bash",     "-c",   script], ct: ct);
     }
+
+    private static readonly HashSet<string> _validRegTypes =
+        ["REG_SZ", "REG_DWORD", "REG_QWORD", "REG_BINARY", "REG_EXPAND_SZ", "REG_MULTI_SZ"];
 
     private async Task<StepResult> RegSet(JsonObject p, CancellationToken ct)
     {
@@ -97,8 +103,13 @@ public class StepExecutor
         var name  = p["name"]?.GetValue<string>()  ?? "";
         var value = p["value"]?.GetValue<string>() ?? "";
         var type  = p["type"]?.GetValue<string>()  ?? "REG_SZ";
-        return await Run($"reg add \"{path}\" /v \"{name}\" /t {type} /d \"{value}\" /f", ct: ct);
+        // BUG-02: whitelist tipo + lista argomenti
+        if (!_validRegTypes.Contains(type)) return new(false, $"Tipo registro non valido: {type}");
+        return await RunArgs(["reg", "add", path, "/v", name, "/t", type, "/d", value, "/f"], ct: ct);
     }
+
+    private static readonly HashSet<string> _validSystemdActions =
+        ["start", "stop", "enable", "disable", "restart", "reload", "status"];
 
     private async Task<StepResult> SystemdService(JsonObject p, CancellationToken ct)
     {
@@ -106,7 +117,9 @@ public class StepExecutor
         var name   = p["name"]?.GetValue<string>()   ?? "";
         var action = p["action"]?.GetValue<string>() ?? "start";
         if (string.IsNullOrEmpty(name)) return new(false, "Parametro 'name' mancante");
-        return await Run($"systemctl {action} {name}", ct: ct);
+        // BUG-02: whitelist azione + lista argomenti
+        if (!_validSystemdActions.Contains(action)) return new(false, $"Azione systemd non valida: {action}");
+        return await RunArgs(["systemctl", action, name], ct: ct);
     }
 
     private async Task<StepResult> FileCopy(JsonObject p, CancellationToken ct)
@@ -193,6 +206,44 @@ public class StepExecutor
     }
 
     // ── Runner comandi ────────────────────────────────────────────────────────
+
+    // BUG-02: RunArgs usa ArgumentList — ogni argomento è passato senza shell, nessuna injection
+    private async Task<StepResult> RunArgs(string[] argv, Dictionary<string, string>? env = null,
+                                           CancellationToken ct = default)
+    {
+        if (argv.Length == 0) return new(false, "Nessun comando specificato");
+        var psi = new ProcessStartInfo(argv[0])
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
+            UseShellExecute        = false,
+            CreateNoWindow         = true,
+        };
+        for (int i = 1; i < argv.Length; i++)
+            psi.ArgumentList.Add(argv[i]);
+        if (env != null)
+            foreach (var (k, v) in env)
+                psi.Environment[k] = v;
+
+        try
+        {
+            using var proc = new Process { StartInfo = psi };
+            var sbOut = new System.Text.StringBuilder();
+            var sbErr = new System.Text.StringBuilder();
+            proc.OutputDataReceived += (_, e) => { if (e.Data != null) sbOut.AppendLine(e.Data); };
+            proc.ErrorDataReceived  += (_, e) => { if (e.Data != null) sbErr.AppendLine(e.Data); };
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(StepTimeoutSec));
+            await proc.WaitForExitAsync(cts.Token);
+            var output = (sbOut.ToString() + sbErr.ToString()).Trim();
+            return new(proc.ExitCode == 0, output);
+        }
+        catch (OperationCanceledException) { return new(false, $"Timeout dopo {StepTimeoutSec}s"); }
+        catch (Exception ex)               { return new(false, ex.Message); }
+    }
 
     private async Task<StepResult> Run(string cmd, string? args = null,
                                        Dictionary<string, string>? env = null,

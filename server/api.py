@@ -4,18 +4,54 @@ Porta: 9091 (configurabile con PORT env var)
 DB:    /data/novascm.db (configurabile con NOVASCM_DB env var)
 """
 from flask import Flask, request, jsonify, Response, send_from_directory
-import sqlite3, json, datetime, os
+import sqlite3, json, datetime, os, functools, hmac, logging, re
+from contextlib import contextmanager
 
 app = Flask(__name__)
 
 # Percorso DB: variabile d'ambiente NOVASCM_DB, default /data/novascm.db
 DB = os.environ.get("NOVASCM_DB", "/data/novascm.db")
 
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s"
+)
+log = logging.getLogger("novascm-api")
+
+# ── Autenticazione API Key ────────────────────────────────────────────────────
+API_KEY = os.environ.get("NOVASCM_API_KEY", "")
+
+def require_auth(fn):
+    """Decorator: richiede header X-Api-Key corrispondente a NOVASCM_API_KEY."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not API_KEY:
+            log.error("NOVASCM_API_KEY non configurata — accesso bloccato")
+            return jsonify({"error": "Server non configurato: NOVASCM_API_KEY mancante"}), 500
+        token = request.headers.get("X-Api-Key", "")
+        if not hmac.compare_digest(token, API_KEY):
+            log.warning("Accesso non autorizzato da %s", request.remote_addr)
+            return jsonify({"error": "Non autorizzato"}), 401
+        return fn(*args, **kwargs)
+    return wrapper
+
 # ── DB ────────────────────────────────────────────────────────────────────────
 def get_db():
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(DB, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
+
+@contextmanager
+def get_db_ctx():
+    conn = get_db()
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 def init_db():
     os.makedirs(os.path.dirname(DB), exist_ok=True)
@@ -128,6 +164,7 @@ def row_to_dict(row):
 # ── CR CRUD ───────────────────────────────────────────────────────────────────
 
 @app.route("/api/cr", methods=["GET"])
+@require_auth
 def list_cr():
     conn = get_db()
     rows = conn.execute("SELECT * FROM cr ORDER BY id DESC").fetchall()
@@ -135,6 +172,7 @@ def list_cr():
     return jsonify([row_to_dict(r) for r in rows])
 
 @app.route("/api/cr", methods=["POST"])
+@require_auth
 def create_cr():
     data = request.get_json(force=True)
     for f in ("pc_name", "domain"):
@@ -173,6 +211,7 @@ def create_cr():
         return jsonify({"error": f"PC '{data['pc_name']}' esiste già"}), 409
 
 @app.route("/api/cr/<int:cr_id>", methods=["GET"])
+@require_auth
 def get_cr(cr_id):
     conn = get_db()
     row = conn.execute("SELECT * FROM cr WHERE id=?", (cr_id,)).fetchone()
@@ -182,6 +221,7 @@ def get_cr(cr_id):
     return jsonify(row_to_dict(row))
 
 @app.route("/api/cr/by-name/<pc_name>", methods=["GET"])
+@require_auth
 def get_cr_by_name(pc_name):
     conn = get_db()
     row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
@@ -192,6 +232,7 @@ def get_cr_by_name(pc_name):
     return jsonify(row_to_dict(row))
 
 @app.route("/api/cr/<int:cr_id>/status", methods=["PUT"])
+@require_auth
 def update_status(cr_id):
     data = request.get_json(force=True)
     status = data.get("status")
@@ -209,6 +250,7 @@ def update_status(cr_id):
     return jsonify(row_to_dict(row))
 
 @app.route("/api/cr/<int:cr_id>", methods=["DELETE"])
+@require_auth
 def delete_cr(cr_id):
     conn = get_db()
     affected = conn.execute("DELETE FROM cr WHERE id=?", (cr_id,)).rowcount
@@ -222,6 +264,7 @@ def delete_cr(cr_id):
 # ── Autounattend.xml generato dal server ──────────────────────────────────────
 
 @app.route("/api/cr/by-name/<pc_name>/autounattend.xml", methods=["GET"])
+@require_auth
 def get_autounattend(pc_name):
     conn = get_db()
     row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
@@ -231,9 +274,12 @@ def get_autounattend(pc_name):
         return "CR non trovato", 404
     d = row_to_dict(row)
     pkgs = d.get("software", [])
+    def _safe_pkg(pkg_id):
+        """Sanifica package ID winget: solo caratteri alfanumerici, punto, trattino, underscore."""
+        return re.sub(r"[^a-zA-Z0-9.\-_]", "", str(pkg_id))
     winget_block = "\n".join(
-        f"winget install --id {p} --silent --accept-package-agreements --accept-source-agreements"
-        for p in pkgs
+        f"winget install --id {_safe_pkg(p)} --silent --accept-package-agreements --accept-source-agreements"
+        for p in pkgs if p and _safe_pkg(p)
     ) if pkgs else "# Nessun software configurato"
 
     odj_blob   = (d.get("odj_blob") or "").strip()
@@ -379,6 +425,7 @@ def get_autounattend(pc_name):
 # ── Check-in + Step tracking ──────────────────────────────────────────────────
 
 @app.route("/api/cr/by-name/<pc_name>/checkin", methods=["POST"])
+@require_auth
 def checkin_cr(pc_name):
     now = datetime.datetime.now().isoformat()
     conn = get_db()
@@ -396,6 +443,7 @@ def checkin_cr(pc_name):
 # ── Settings ──────────────────────────────────────────────────────────────────
 
 @app.route("/api/settings", methods=["GET"])
+@require_auth
 def get_settings():
     conn = get_db()
     rows = conn.execute("SELECT key, value FROM settings").fetchall()
@@ -403,6 +451,7 @@ def get_settings():
     return jsonify({r["key"]: r["value"] for r in rows})
 
 @app.route("/api/settings", methods=["PUT"])
+@require_auth
 def update_settings():
     data = request.get_json(force=True)
     conn = get_db()
@@ -417,11 +466,12 @@ def update_settings():
     return jsonify({r["key"]: r["value"] for r in rows})
 
 @app.route("/api/cr/by-name/<pc_name>/step", methods=["POST"])
+@require_auth
 def report_step(pc_name):
     data   = request.get_json(force=True)
     step   = data.get("step", "")
     status = data.get("status", "done")
-    ts     = data.get("ts", datetime.datetime.now().isoformat())
+    ts     = datetime.datetime.now().isoformat()  # BUG-08: timestamp sempre server-side
     conn   = get_db()
     row    = conn.execute("SELECT id FROM cr WHERE pc_name=?",
                           (pc_name.upper().strip(),)).fetchone()
@@ -439,6 +489,7 @@ def report_step(pc_name):
     return jsonify({"ok": True, "step": step, "status": status})
 
 @app.route("/api/cr/<int:cr_id>/steps", methods=["GET"])
+@require_auth
 def get_steps(cr_id):
     conn = get_db()
     rows = conn.execute(
@@ -450,6 +501,7 @@ def get_steps(cr_id):
 # ── Workflow Engine — Workflow CRUD ───────────────────────────────────────────
 
 @app.route("/api/workflows", methods=["GET"])
+@require_auth
 def list_workflows():
     conn = get_db()
     rows = conn.execute("SELECT * FROM workflows ORDER BY id ASC").fetchall()
@@ -457,6 +509,7 @@ def list_workflows():
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/workflows", methods=["POST"])
+@require_auth
 def create_workflow():
     data = request.get_json(force=True)
     if not data.get("nome"):
@@ -477,6 +530,7 @@ def create_workflow():
         return jsonify({"error": f"Workflow '{data['nome']}' esiste già"}), 409
 
 @app.route("/api/workflows/<int:wf_id>", methods=["GET"])
+@require_auth
 def get_workflow(wf_id):
     conn = get_db()
     wf = conn.execute("SELECT * FROM workflows WHERE id=?", (wf_id,)).fetchone()
@@ -492,6 +546,7 @@ def get_workflow(wf_id):
     return jsonify(result)
 
 @app.route("/api/workflows/<int:wf_id>", methods=["PUT"])
+@require_auth
 def update_workflow(wf_id):
     data = request.get_json(force=True)
     now  = datetime.datetime.now().isoformat()
@@ -508,6 +563,7 @@ def update_workflow(wf_id):
     return jsonify(dict(row))
 
 @app.route("/api/workflows/<int:wf_id>", methods=["DELETE"])
+@require_auth
 def delete_workflow(wf_id):
     conn = get_db()
     affected = conn.execute("DELETE FROM workflows WHERE id=?", (wf_id,)).rowcount
@@ -520,6 +576,7 @@ def delete_workflow(wf_id):
 # ── Workflow Engine — Steps CRUD ───────────────────────────────────────────────
 
 @app.route("/api/workflows/<int:wf_id>/steps", methods=["GET"])
+@require_auth
 def list_steps(wf_id):
     conn = get_db()
     rows = conn.execute(
@@ -529,6 +586,7 @@ def list_steps(wf_id):
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/workflows/<int:wf_id>/steps", methods=["POST"])
+@require_auth
 def add_step(wf_id):
     data = request.get_json(force=True)
     for f in ("nome", "tipo", "ordine"):
@@ -570,6 +628,7 @@ def add_step(wf_id):
         return jsonify({"error": f"Ordine {data['ordine']} già esistente in questo workflow"}), 409
 
 @app.route("/api/workflows/<int:wf_id>/steps/<int:step_id>", methods=["PUT"])
+@require_auth
 def update_step(wf_id, step_id):
     data = request.get_json(force=True)
     parametri = data.get("parametri", {})
@@ -595,6 +654,7 @@ def update_step(wf_id, step_id):
     return jsonify(dict(row))
 
 @app.route("/api/workflows/<int:wf_id>/steps/<int:step_id>", methods=["DELETE"])
+@require_auth
 def delete_step(wf_id, step_id):
     conn = get_db()
     affected = conn.execute(
@@ -611,6 +671,7 @@ def delete_step(wf_id, step_id):
 # ── Workflow Engine — PC Assignments ──────────────────────────────────────────
 
 @app.route("/api/pc-workflows", methods=["GET"])
+@require_auth
 def list_pc_workflows():
     conn = get_db()
     rows = conn.execute("""
@@ -623,6 +684,7 @@ def list_pc_workflows():
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/pc-workflows", methods=["POST"])
+@require_auth
 def assign_workflow():
     data = request.get_json(force=True)
     for f in ("pc_name", "workflow_id"):
@@ -651,6 +713,7 @@ def assign_workflow():
         return jsonify({"error": "Workflow già assegnato a questo PC"}), 409
 
 @app.route("/api/pc-workflows/<int:pw_id>", methods=["GET"])
+@require_auth
 def get_pc_workflow(pw_id):
     conn = get_db()
     pw = conn.execute("""
@@ -676,6 +739,7 @@ def get_pc_workflow(pw_id):
     return jsonify(result)
 
 @app.route("/api/pc-workflows/<int:pw_id>", methods=["DELETE"])
+@require_auth
 def delete_pc_workflow(pw_id):
     conn = get_db()
     affected = conn.execute("DELETE FROM pc_workflows WHERE id=?", (pw_id,)).rowcount
@@ -688,6 +752,7 @@ def delete_pc_workflow(pw_id):
 # ── Workflow Engine — Agent endpoints ─────────────────────────────────────────
 
 @app.route("/api/pc/<pc_name>/workflow", methods=["GET"])
+@require_auth
 def get_pc_assigned_workflow(pc_name):
     """Agent: scarica il workflow assegnato al PC.
     Auto-assign logic:
@@ -763,13 +828,14 @@ def get_pc_assigned_workflow(pc_name):
     return jsonify(pw_dict)
 
 @app.route("/api/pc/<pc_name>/workflow/step", methods=["POST"])
+@require_auth
 def report_wf_step(pc_name):
     """Agent: riporta lo stato di uno step di un workflow."""
     data   = request.get_json(force=True)
     step_id = data.get("step_id")
     status  = data.get("status", "done")  # running | done | error | skipped
     output  = data.get("output", "")
-    ts      = data.get("ts", datetime.datetime.now().isoformat())
+    ts      = datetime.datetime.now().isoformat()  # BUG-08: timestamp sempre server-side
     if not step_id:
         return jsonify({"error": "Campo obbligatorio: step_id"}), 400
     conn = get_db()
@@ -804,6 +870,7 @@ def report_wf_step(pc_name):
     return jsonify({"ok": True, "step_id": step_id, "status": status})
 
 @app.route("/api/pc/<pc_name>/workflow/checkin", methods=["POST"])
+@require_auth
 def checkin_wf(pc_name):
     """Agent: heartbeat durante esecuzione workflow."""
     now = datetime.datetime.now().isoformat()
@@ -824,6 +891,7 @@ VERSION_FILE = os.path.join(os.path.dirname(DB), "version.json")
 EXE_FILE     = os.path.join(os.path.dirname(DB), "NovaSCM.exe")
 
 @app.route("/api/version", methods=["GET"])
+@require_auth
 def get_version():
     """Restituisce la versione corrente disponibile per il download."""
     if os.path.exists(VERSION_FILE):
@@ -834,6 +902,7 @@ def get_version():
     return jsonify({"version": "1.0.0", "url": "", "notes": ""}), 200
 
 @app.route("/api/download/NovaSCM.exe", methods=["GET"])
+@require_auth
 def download_exe():
     """Serve il file NovaSCM.exe per l'auto-update."""
     if not os.path.exists(EXE_FILE):
@@ -844,6 +913,7 @@ def download_exe():
                      mimetype="application/octet-stream")
 
 @app.route("/api/download/setup", methods=["GET"])
+@require_auth
 def download_setup():
     """Serve l'installer NSIS per nuovi utenti."""
     setup_file = os.path.join(os.path.dirname(DB), "NovaSCM-Setup.exe")
@@ -855,6 +925,7 @@ def download_setup():
                      mimetype="application/octet-stream")
 
 @app.route("/api/download/agent", methods=["GET"])
+@require_auth
 def download_agent():
     """Serve NovaSCMAgent.exe (Windows) o NovaSCMAgent-linux (Linux) in base all'User-Agent."""
     ua = request.headers.get("User-Agent", "").lower()
@@ -868,6 +939,7 @@ def download_agent():
                      mimetype="application/octet-stream")
 
 @app.route("/api/download/agent-install.ps1", methods=["GET"])
+@require_auth
 def download_agent_installer_ps1():
     """Genera install-windows.ps1 con API URL pre-configurato."""
     api_url = request.host_url.rstrip("/")
@@ -880,6 +952,7 @@ Invoke-Expression (Invoke-WebRequest -Uri "$ApiUrl/api/download/agent-install-fu
                     headers={"Content-Disposition": "attachment; filename=agent-install.ps1"})
 
 @app.route("/api/download/agent-install.sh", methods=["GET"])
+@require_auth
 def download_agent_installer_sh():
     """Genera install-linux.sh con API URL pre-configurato."""
     api_url = request.host_url.rstrip("/")
