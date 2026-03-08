@@ -1497,12 +1497,15 @@ public partial class MainWindow : Window
             }
             catch { }
 
-            var p = Process.Start(new ProcessStartInfo("arp", $"-a {ip}")
+            var startInfo = new ProcessStartInfo("arp")
             {
                 RedirectStandardOutput = true,
                 CreateNoWindow = true,
                 UseShellExecute = false
-            });
+            };
+            startInfo.ArgumentList.Add("-a");
+            startInfo.ArgumentList.Add(ip);
+            var p = Process.Start(startInfo);
             if (p == null) return "—";
             var output = p.StandardOutput.ReadToEnd();
             p.WaitForExit(1000);
@@ -5479,12 +5482,19 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
         if (File.Exists(wtPath))
         {
-            Process.Start(new ProcessStartInfo("wt.exe", $"ssh {target}") { UseShellExecute = true });
+            var startInfo = new ProcessStartInfo("wt.exe") { UseShellExecute = true };
+            startInfo.ArgumentList.Add("ssh");
+            startInfo.ArgumentList.Add(target);
+            Process.Start(startInfo);
         }
         else
         {
-            Process.Start(new ProcessStartInfo("cmd.exe", $"/k ssh {target}")
-            { UseShellExecute = true, CreateNoWindow = false });
+            var startInfo = new ProcessStartInfo("cmd.exe")
+            { UseShellExecute = true, CreateNoWindow = false };
+            startInfo.ArgumentList.Add("/k");
+            startInfo.ArgumentList.Add("ssh");
+            startInfo.ArgumentList.Add(target);
+            Process.Start(startInfo);
         }
         SetStatus($"🖥️ Apertura SSH verso {target}");
     }
