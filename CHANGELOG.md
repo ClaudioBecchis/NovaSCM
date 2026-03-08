@@ -4,6 +4,20 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.2] - 2026-03-08
+
+### Security fix — UI (argument injection)
+
+- **SEC-02**: Eliminata vulnerabilità argument injection in `MainWindow.xaml.cs` — 5 chiamate `ProcessStartInfo` usavano `.Arguments` con f-string, permettendo injection tramite IP/path controllati dall'utente o dalla rete
+  - `GetMacFromArp`: `arp -a {ip}` → `ArgumentList.Add("-a"); ArgumentList.Add(ip)`
+  - `OpenSshTerminal` (Windows Terminal): `wt.exe ssh {target}` → `ArgumentList`
+  - `OpenSshTerminal` (cmd fallback): `cmd.exe /k ssh {target}` → `ArgumentList`
+  - `BtnRdp_Click`: `mstsc /v:{p.Ip}` → `ArgumentList.Add($"/v:{p.Ip}")`
+  - `BtnInstallUpdate_Click`: `cmd.exe /C "{batPath}"` → `ArgumentList`
+- Fix segnalato da **Aikido Security** (PR #2) + 2 pattern aggiuntivi identificati manualmente
+
+---
+
 ## [1.6.1] - 2026-03-08
 
 ### Security fix — agent (command injection)
