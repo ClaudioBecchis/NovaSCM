@@ -11,7 +11,7 @@ Log:    %ProgramData%\NovaSCM\agent.log   (Windows)
         /var/log/novascm/agent.log        (Linux)
 """
 
-import os, sys, json, time, platform, subprocess, socket, logging, traceback
+import os, sys, json, time, platform, subprocess, socket, logging, traceback, shutil
 from datetime import datetime
 from urllib.request import urlopen, Request
 from urllib.error import URLError
@@ -127,14 +127,12 @@ def api_post(base_url, path, body, api_key=""):
 def get_os_platform():
     return "windows" if IS_WINDOWS else "linux"
 
-def run_cmd(cmd, shell=None, timeout=STEP_TIMEOUT):
-    """Esegue un comando. Se cmd è lista usa shell=False, se stringa shell=True."""
-    if shell is None:
-        shell = isinstance(cmd, str)
+def run_cmd(cmd, shell=False, timeout=STEP_TIMEOUT, env=None):
+    """Esegue un comando. cmd deve essere una lista di argomenti (shell=False)."""
     try:
         r = subprocess.run(
             cmd, shell=shell, capture_output=True, text=True,
-            timeout=timeout, encoding="utf-8", errors="replace"
+            timeout=timeout, encoding="utf-8", errors="replace", env=env
         )
         out = (r.stdout + r.stderr).strip()
         return r.returncode == 0, out
@@ -162,24 +160,26 @@ def execute_step(step):
         pkg_id = parametri.get("id", "")
         if not pkg_id:
             return False, "Parametro 'id' mancante"
-        cmd = f'winget install --id "{pkg_id}" --silent --accept-package-agreements --accept-source-agreements'
-        return run_cmd(cmd)
+        return run_cmd(["winget", "install", "--id", pkg_id, "--silent",
+                        "--accept-package-agreements", "--accept-source-agreements"], shell=False)
 
     # ── apt_install ──
     elif tipo == "apt_install":
         pkg = parametri.get("package", "")
         if not pkg:
             return False, "Parametro 'package' mancante"
-        cmd = f"DEBIAN_FRONTEND=noninteractive apt-get install -y {pkg}"
-        return run_cmd(cmd)
+        env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
+        return run_cmd(["apt-get", "install", "-y", pkg], shell=False, env=env)
 
     # ── snap_install ──
     elif tipo == "snap_install":
-        pkg     = parametri.get("package", "")
-        classic = "--classic" if parametri.get("classic") else ""
+        pkg = parametri.get("package", "")
         if not pkg:
             return False, "Parametro 'package' mancante"
-        return run_cmd(f"snap install {pkg} {classic}".strip())
+        cmd = ["snap", "install", pkg]
+        if parametri.get("classic"):
+            cmd.append("--classic")
+        return run_cmd(cmd, shell=False)
 
     # ── ps_script ──
     elif tipo == "ps_script":
@@ -236,19 +236,23 @@ def execute_step(step):
         dst = parametri.get("dst", "")
         if not src or not dst:
             return False, "Parametri 'src' e 'dst' obbligatori"
-        if IS_WINDOWS:
-            return run_cmd(f'copy /Y "{src}" "{dst}"')
-        else:
-            return run_cmd(f'cp -f "{src}" "{dst}"')
+        try:
+            shutil.copy2(src, dst)
+            return True, f"Copiato: {src} → {dst}"
+        except Exception as e:
+            return False, str(e)
 
     # ── reboot ──
     elif tipo == "reboot":
-        delay = parametri.get("delay", 5)
+        try:
+            delay = int(parametri.get("delay", 5))
+        except (ValueError, TypeError):
+            delay = 5
         log.info(f"  Riavvio programmato tra {delay}s")
         if IS_WINDOWS:
-            run_cmd(f"shutdown /r /t {delay}")
+            run_cmd(["shutdown", "/r", "/t", str(delay)], shell=False)
         else:
-            run_cmd(f"shutdown -r +{max(1, delay//60)}")
+            run_cmd(["shutdown", "-r", f"+{max(1, delay // 60)}"], shell=False)
         return True, f"Riavvio programmato tra {delay}s"
 
     # ── message ──
