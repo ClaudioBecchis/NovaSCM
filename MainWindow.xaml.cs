@@ -370,7 +370,7 @@ public partial class MainWindow : Window
                         if (reply.Status == IPStatus.Success)
                         {
                             var row = new DeviceRow { Ip = ip.ToString(), Status = "🟢 Online" };
-                            Dispatcher.Invoke(() => { _netRows.Add(row); found++; AddRadarBlip(row); TxtRadarStatus.Text = $"● SCANNING — {found} FOUND"; });
+                            await Dispatcher.InvokeAsync(() => { _netRows.Add(row); found++; AddRadarBlip(row); TxtRadarStatus.Text = $"● SCANNING — {found} FOUND"; });
                             App.Log($"  Online: {ip}");
 
                             _ = Task.Run(async () =>
@@ -414,7 +414,7 @@ public partial class MainWindow : Window
                                     // Deduplicazione per MAC — stessa NIC, due IP (cavo+WiFi)
                                     if (mac != "—")
                                     {
-                                        Dispatcher.Invoke(() =>
+                                        await Dispatcher.InvokeAsync(() =>
                                         {
                                             var dupes = _netRows.Where(r => r.Mac == mac).ToList();
                                             if (dupes.Count > 1)
@@ -436,7 +436,7 @@ public partial class MainWindow : Window
                         }
 
                         var d2 = done; var f2 = found;
-                        Dispatcher.Invoke(() =>
+                        await Dispatcher.InvokeAsync(() =>
                         {
                             ScanProgress.Value = d2;
                             TxtScanStatus.Text = $"Scansione: {d2}/{total} — {f2} device trovati";
@@ -4964,7 +4964,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
         var hops = new List<(int ttl, string hopIp, long ms, string name)>();
 
-        await Task.Run(() =>
+        await Task.Run(async () =>
         {
             for (int ttl = 1; ttl <= 30; ttl++)
             {
@@ -5004,7 +5004,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                 var finalHop = hopIp == ip;
                 hops.Add((ttl, hopIp, bestMs, hopName));
 
-                Dispatcher.Invoke(() =>
+                await Dispatcher.InvokeAsync(() =>
                 {
                     TracerouteStack.Children.Clear();
                     foreach (var h in hops)
