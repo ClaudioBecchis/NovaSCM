@@ -1,3 +1,4 @@
+// NovaSCM v1.4.0
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Net.Sockets;

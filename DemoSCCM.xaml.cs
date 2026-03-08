@@ -1,3 +1,4 @@
+// NovaSCM v1.4.0
 using System.Windows;
 
 namespace PolarisManager;
