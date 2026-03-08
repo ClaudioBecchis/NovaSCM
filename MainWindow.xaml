@@ -2168,6 +2168,9 @@
                                 <ListBoxItem Tag="opsi"         Content="📦  OPSI Software"/>
                                 <ListBoxItem Tag="sccm"         Content="🏢  SCCM / OSD"/>
                                 <ListBoxItem Tag="cr"           Content="📋  Change Requests"/>
+                                <ListBoxItem Tag="ui"           Content="🎨  Interfaccia"/>
+                                <ListBoxItem Tag="agent"        Content="🤖  NovaSCM Agent"/>
+                                <ListBoxItem Tag="server"       Content="🖧  Server API"/>
                                 <ListBoxItem Tag="faq"          Content="❓  FAQ"/>
                             </ListBox>
                         </StackPanel>
