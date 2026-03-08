@@ -888,40 +888,34 @@ public partial class MainWindow : Window
             ? System.Windows.Media.Color.FromRgb(0,  255, 100)
             : System.Windows.Media.Color.FromRgb(255, 60,  60);
 
-        // Pulse ring
+        // Pulse ring — una sola volta (non Forever, evita accumulo animazioni)
         var pulse = new System.Windows.Shapes.Ellipse
         {
             Width = 18, Height = 18,
             Stroke = new System.Windows.Media.SolidColorBrush(col),
-            StrokeThickness = 1.5, Opacity = 0.8,
+            StrokeThickness = 1.5, Opacity = 0,
             RenderTransformOrigin = new System.Windows.Point(0.5, 0.5),
             RenderTransform = new System.Windows.Media.ScaleTransform(1, 1)
         };
         Canvas.SetLeft(pulse, bx - 9); Canvas.SetTop(pulse, by - 9);
-        var sx = new System.Windows.Media.Animation.DoubleAnimation(1, 2.8,
-            new Duration(TimeSpan.FromSeconds(1.8))) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever };
-        ((System.Windows.Media.ScaleTransform)pulse.RenderTransform).BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, sx);
+        var scaleAnim = new System.Windows.Media.Animation.DoubleAnimation(1, 2.5,
+            new Duration(TimeSpan.FromSeconds(0.8))) { FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop };
+        ((System.Windows.Media.ScaleTransform)pulse.RenderTransform).BeginAnimation(System.Windows.Media.ScaleTransform.ScaleXProperty, scaleAnim);
         ((System.Windows.Media.ScaleTransform)pulse.RenderTransform).BeginAnimation(System.Windows.Media.ScaleTransform.ScaleYProperty,
-            new System.Windows.Media.Animation.DoubleAnimation(1, 2.8, new Duration(TimeSpan.FromSeconds(1.8))) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
+            new System.Windows.Media.Animation.DoubleAnimation(1, 2.5, new Duration(TimeSpan.FromSeconds(0.8))) { FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop });
         pulse.BeginAnimation(UIElement.OpacityProperty,
             new System.Windows.Media.Animation.DoubleAnimation(0.8, 0,
-                new Duration(TimeSpan.FromSeconds(1.8))) { RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
+                new Duration(TimeSpan.FromSeconds(0.8))));
         _radarBlipLayer.Children.Add(pulse);
 
-        // Core dot
+        // Core dot — statico, nessuna animazione né effetti costosi
         var dot = new System.Windows.Shapes.Ellipse
         {
-            Width = 8, Height = 8, Opacity = 0,
+            Width = 7, Height = 7,
             Fill = new System.Windows.Media.SolidColorBrush(col),
-            Effect = new System.Windows.Media.Effects.DropShadowEffect
-            {
-                Color = col, BlurRadius = 10, ShadowDepth = 0
-            }
+            Opacity = 1
         };
-        Canvas.SetLeft(dot, bx - 4); Canvas.SetTop(dot, by - 4);
-        dot.BeginAnimation(UIElement.OpacityProperty,
-            new System.Windows.Media.Animation.DoubleAnimation(0, 1,
-                new Duration(TimeSpan.FromSeconds(0.4))));
+        Canvas.SetLeft(dot, bx - 3.5); Canvas.SetTop(dot, by - 3.5);
         _radarBlipLayer.Children.Add(dot);
 
         // Label
@@ -936,7 +930,7 @@ public partial class MainWindow : Window
         Canvas.SetLeft(lbl, bx + 7); Canvas.SetTop(lbl, by - 5);
         lbl.BeginAnimation(UIElement.OpacityProperty,
             new System.Windows.Media.Animation.DoubleAnimation(0, 1,
-                new Duration(TimeSpan.FromSeconds(0.7))));
+                new Duration(TimeSpan.FromSeconds(0.5))));
         _radarBlipLayer.Children.Add(lbl);
     }
 
