@@ -18,8 +18,16 @@ public class ApiClient
         _http.DefaultRequestHeaders.Add("User-Agent", $"NovaSCMAgent/{AgentVer}");
     }
 
-    public async Task<JsonObject?> GetWorkflowAsync(string apiUrl, string pcName, CancellationToken ct)
+    private void SetApiKey(string apiKey)
     {
+        _http.DefaultRequestHeaders.Remove("X-Api-Key");
+        if (!string.IsNullOrEmpty(apiKey))
+            _http.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+    }
+
+    public async Task<JsonObject?> GetWorkflowAsync(string apiUrl, string pcName, CancellationToken ct, string apiKey = "")
+    {
+        SetApiKey(apiKey);
         try
         {
             var url = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow";
@@ -36,8 +44,9 @@ public class ApiClient
     }
 
     public async Task ReportStepAsync(string apiUrl, string pcName, int stepId,
-                                      string status, string output, CancellationToken ct)
+                                      string status, string output, CancellationToken ct, string apiKey = "")
     {
+        SetApiKey(apiKey);
         try
         {
             var url  = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow/step";
@@ -56,8 +65,9 @@ public class ApiClient
         }
     }
 
-    public async Task CheckinAsync(string apiUrl, string pcName, CancellationToken ct)
+    public async Task CheckinAsync(string apiUrl, string pcName, CancellationToken ct, string apiKey = "")
     {
+        SetApiKey(apiKey);
         try
         {
             var url  = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow/checkin";

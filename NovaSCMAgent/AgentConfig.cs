@@ -19,7 +19,8 @@ public class AgentConfig
         ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "NovaSCM", "logs")
         : "/var/log/novascm";
 
-    public string ApiUrl  { get; set; } = "http://192.168.20.110:9091";
+    public string ApiUrl  { get; set; } = "http://YOUR-NOVASCM-SERVER:9091";
+    public string ApiKey  { get; set; } = "";
     public string PcName  { get; set; } = Environment.MachineName.ToUpperInvariant();
     public int    PollSec { get; set; } = 60;
 
@@ -47,6 +48,8 @@ public class AgentConfig
                       ?? new AgentConfig();
             if (string.IsNullOrWhiteSpace(cfg.PcName))
                 cfg.PcName = Environment.MachineName.ToUpperInvariant();
+            if (cfg.ApiUrl.Contains("YOUR-NOVASCM-SERVER"))
+                Console.Error.WriteLine($"[ATTENZIONE] agent.json non configurato! Modifica ApiUrl in: {ConfigPath}");
             return cfg;
         }
         catch

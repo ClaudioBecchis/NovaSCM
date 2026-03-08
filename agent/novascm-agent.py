@@ -54,6 +54,7 @@ log = logging.getLogger("novascm-agent")
 # ── Config ────────────────────────────────────────────────────────────────────
 DEFAULT_CONFIG = {
     "api_url":   "http://YOUR-SERVER-IP:9091",
+    "api_key":   "",
     "poll_sec":  POLL_SEC,
     "pc_name":   socket.gethostname().upper(),
 }
@@ -67,6 +68,9 @@ def load_config():
         cfg = json.load(f)
     cfg.setdefault("pc_name", socket.gethostname().upper())
     cfg.setdefault("poll_sec", POLL_SEC)
+    cfg.setdefault("api_key", "")
+    if "YOUR-SERVER-IP" in cfg.get("api_url", ""):
+        log.error("[ATTENZIONE] agent.json non configurato! Modifica api_url in: %s", CONFIG_FILE)
     return cfg
 
 # ── State (persistenza tra riavvii) ──────────────────────────────────────────
@@ -88,10 +92,13 @@ def clear_state():
         os.remove(STATE_FILE)
 
 # ── API Client ────────────────────────────────────────────────────────────────
-def api_get(base_url, path):
+def api_get(base_url, path, api_key=""):
     try:
         url = f"{base_url}{path}"
-        req = Request(url, headers={"User-Agent": f"NovaSCM-Agent/{AGENT_VER}"})
+        headers = {"User-Agent": f"NovaSCM-Agent/{AGENT_VER}"}
+        if api_key:
+            headers["X-Api-Key"] = api_key
+        req = Request(url, headers=headers)
         with urlopen(req, timeout=15) as r:
             return json.loads(r.read())
     except URLError as e:
@@ -101,13 +108,15 @@ def api_get(base_url, path):
         log.error(f"API GET {path}: {e}")
         return None
 
-def api_post(base_url, path, body):
+def api_post(base_url, path, body, api_key=""):
     try:
         url  = f"{base_url}{path}"
         data = json.dumps(body).encode("utf-8")
-        req  = Request(url, data=data, method="POST",
-                       headers={"Content-Type": "application/json",
-                                "User-Agent": f"NovaSCM-Agent/{AGENT_VER}"})
+        headers = {"Content-Type": "application/json",
+                   "User-Agent": f"NovaSCM-Agent/{AGENT_VER}"}
+        if api_key:
+            headers["X-Api-Key"] = api_key
+        req  = Request(url, data=data, method="POST", headers=headers)
         with urlopen(req, timeout=15) as r:
             return json.loads(r.read())
     except Exception as e:
@@ -118,8 +127,10 @@ def api_post(base_url, path, body):
 def get_os_platform():
     return "windows" if IS_WINDOWS else "linux"
 
-def run_cmd(cmd, shell=True, timeout=STEP_TIMEOUT):
-    """Esegue un comando e restituisce (ok, output)."""
+def run_cmd(cmd, shell=None, timeout=STEP_TIMEOUT):
+    """Esegue un comando. Se cmd è lista usa shell=False, se stringa shell=True."""
+    if shell is None:
+        shell = isinstance(cmd, str)
     try:
         r = subprocess.run(
             cmd, shell=shell, capture_output=True, text=True,
@@ -186,10 +197,11 @@ def execute_step(step):
         script = parametri.get("script", "")
         if not script:
             return False, "Parametro 'script' mancante"
+        # BUG-02: usa lista argomenti — nessuna interpolazione shell
         if IS_WINDOWS:
-            return run_cmd(f"cmd /c {script}")
+            return run_cmd(["cmd.exe", "/c", script], shell=False)
         else:
-            return run_cmd(f"bash -c '{script}'")
+            return run_cmd(["bash", "-c", script], shell=False)
 
     # ── reg_set (Windows only) ──
     elif tipo == "reg_set":
@@ -199,18 +211,24 @@ def execute_step(step):
         name  = parametri.get("name", "")
         value = parametri.get("value", "")
         rtype = parametri.get("type", "REG_SZ")
-        cmd   = f'reg add "{path}" /v "{name}" /t {rtype} /d "{value}" /f'
-        return run_cmd(cmd)
+        # BUG-02: whitelist tipo registro
+        _VALID_REG_TYPES = {"REG_SZ","REG_DWORD","REG_QWORD","REG_BINARY","REG_EXPAND_SZ","REG_MULTI_SZ"}
+        if rtype not in _VALID_REG_TYPES:
+            return False, f"Tipo registro non valido: {rtype}"
+        return run_cmd(["reg", "add", path, "/v", name, "/t", rtype, "/d", value, "/f"], shell=False)
 
     # ── systemd_service (Linux only) ──
     elif tipo == "systemd_service":
         if not IS_LINUX:
             return None, "Skipped: systemd_service è solo Linux"
         name   = parametri.get("name", "")
-        action = parametri.get("action", "start")  # start | stop | enable | restart
+        action = parametri.get("action", "start")
         if not name:
             return False, "Parametro 'name' mancante"
-        return run_cmd(f"systemctl {action} {name}")
+        # BUG-02: whitelist azione systemd
+        if action not in ("start", "stop", "enable", "disable", "restart", "reload", "status"):
+            return False, f"Azione systemd non valida: {action}"
+        return run_cmd(["systemctl", action, name], shell=False)
 
     # ── file_copy ──
     elif tipo == "file_copy":
@@ -242,17 +260,34 @@ def execute_step(step):
     else:
         return False, f"Tipo step sconosciuto: {tipo}"
 
+# ── Condition Evaluator ───────────────────────────────────────────────────────
+def evaluate_condition(condizione):
+    """Valuta una condizione semplice. Ritorna True se lo step va eseguito."""
+    if not condizione or not condizione.strip():
+        return True
+    cond = condizione.strip().lower()
+    if cond == "windows":
+        return IS_WINDOWS
+    if cond == "linux":
+        return IS_LINUX
+    if cond.startswith("os="):
+        return get_os_platform() == cond[3:].strip()
+    if cond.startswith("hostname="):
+        return socket.gethostname().lower() == cond[9:].strip().lower()
+    log.warning(f"Condizione non riconosciuta: '{condizione}' — eseguendo step")
+    return True
+
 # ── Workflow Runner ───────────────────────────────────────────────────────────
 def run_workflow(cfg, workflow):
     """Esegue il workflow step per step, con persistenza stato per gestire riavvii."""
     pc_name    = cfg["pc_name"]
     api_url    = cfg["api_url"]
+    api_key    = cfg.get("api_key", "")
     pw_id      = workflow["id"]
     steps      = workflow.get("steps", [])
 
-    # Stato persistente: ricorda fino a dove siamo arrivati dopo un riavvio
     state = load_state()
-    resume_from = state.get("resume_step", 0)  # step_id da cui riprendere
+    resume_from = state.get("resume_step", 0)
 
     if resume_from:
         log.info(f"Riprendo workflow dopo riavvio — da step_id={resume_from}")
@@ -264,47 +299,47 @@ def run_workflow(cfg, workflow):
         step_num = step["ordine"]
         nome     = step["nome"]
 
-        # Salta step già completati (resume dopo reboot)
         if resume_from and step_id <= resume_from:
             log.info(f"[{step_num}] {nome} — già completato, salto")
             continue
 
+        # BUG-06: valuta condizione prima di eseguire
+        condizione = step.get("condizione", "")
+        if not evaluate_condition(condizione):
+            log.info(f"[{step_num}] {nome} — SKIP condizione: {condizione}")
+            api_post(api_url, f"/api/pc/{pc_name}/workflow/step", {
+                "step_id": step_id, "status": "skipped",
+                "output": f"Condizione non soddisfatta: {condizione}",
+                "ts": datetime.now().isoformat()
+            }, api_key)
+            continue
+
         log.info(f"[{step_num}/{len(steps)}] {nome}")
 
-        # Segnala 'running'
         api_post(api_url, f"/api/pc/{pc_name}/workflow/step", {
-            "step_id": step_id,
-            "status":  "running",
-            "output":  "",
-            "ts":      datetime.now().isoformat()
-        })
+            "step_id": step_id, "status": "running", "output": "",
+            "ts": datetime.now().isoformat()
+        }, api_key)
 
-        # Esegui
         ok, output = execute_step(step)
-        output = (output or "")[:2000]  # max 2000 char
+        output = (output or "")[:2000]
 
-        # Skip (piattaforma non compatibile)
         if ok is None:
             log.info(f"  → SKIPPED: {output}")
             api_post(api_url, f"/api/pc/{pc_name}/workflow/step", {
-                "step_id": step_id,
-                "status":  "skipped",
-                "output":  output,
-                "ts":      datetime.now().isoformat()
-            })
+                "step_id": step_id, "status": "skipped",
+                "output": output, "ts": datetime.now().isoformat()
+            }, api_key)
             continue
 
         status = "done" if ok else "error"
         log.info(f"  → {status.upper()}: {output[:200]}")
 
         api_post(api_url, f"/api/pc/{pc_name}/workflow/step", {
-            "step_id": step_id,
-            "status":  status,
-            "output":  output,
-            "ts":      datetime.now().isoformat()
-        })
+            "step_id": step_id, "status": status,
+            "output": output, "ts": datetime.now().isoformat()
+        }, api_key)
 
-        # Gestione errore
         if not ok:
             su_errore = step.get("su_errore", "stop")
             if su_errore == "stop":
@@ -313,7 +348,6 @@ def run_workflow(cfg, workflow):
             else:
                 log.warning(f"Step fallito con su_errore=continua — proseguo")
 
-        # Gestione reboot: salva stato e ferma, l'Agent riprenderà dopo il reboot
         if step["tipo"] == "reboot" and ok:
             save_state({"pw_id": pw_id, "resume_step": step_id})
             log.info("Stato salvato per resume dopo reboot")
@@ -343,7 +377,8 @@ def main_loop():
                 log.info(f"Resume rilevato per pw_id={state['pw_id']}")
 
             # Polling workflow assegnato
-            workflow = api_get(url, f"/api/pc/{pc}/workflow")
+            api_key  = cfg.get("api_key", "")
+            workflow = api_get(url, f"/api/pc/{pc}/workflow", api_key)
 
             if workflow and "error" not in workflow:
                 log.info(f"Workflow trovato: '{workflow.get('workflow_nome')}' (id={workflow.get('id')})")

@@ -16,4 +16,4 @@ ENV PORT=9091
 EXPOSE 9091
 
 # Gunicorn: 2 worker, timeout 30s
-CMD ["gunicorn", "--workers=2", "--timeout=30", "--bind=0.0.0.0:9091", "api:app"]
+CMD ["gunicorn", "--workers=1", "--threads=4", "--timeout=30", "--bind=0.0.0.0:9091", "api:app"]
