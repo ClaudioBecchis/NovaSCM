@@ -2719,6 +2719,9 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         <TextBlock Text="URL API NovaSCM (tab Richieste)" Style="{StaticResource SettingsLabel}"/>
                         <TextBox x:Name="TxtNovaSCMApiUrl" Style="{StaticResource SettingsBox}"
                                  ToolTip="Es: http://192.168.20.110:9091/api/cr"/>
+                        <TextBlock Text="API Key (X-Api-Key header)" Style="{StaticResource SettingsLabel}"/>
+                        <PasswordBox x:Name="TxtNovaSCMApiKey" Style="{StaticResource SettingsPass}"
+                                     ToolTip="Chiave NOVASCM_API_KEY configurata nel server Docker"/>
 
                         <!-- UI-02: Aspetto -->
                         <TextBlock Text="🎨 Aspetto" Style="{StaticResource GroupTitle}"/>

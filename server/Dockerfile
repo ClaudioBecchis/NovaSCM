@@ -3,7 +3,7 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Dipendenze
-RUN pip install --no-cache-dir flask gunicorn
+RUN pip install --no-cache-dir flask gunicorn flask-limiter
 
 COPY api.py .
 

@@ -4,6 +4,23 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.5.0] - 2026-03-08
+
+### Sicurezza e qualità (v2 analysis report)
+
+- **NEW-B**: try/catch aggiunto a 15 handler `async void` privi di protezione (BtnMonitor, BtnSccmRefresh, MainTabs_SelectionChanged, BtnCrRefresh, BtnWfStep*, BtnSpeedTest, BtnMdns, BtnRunScript*, BtnPveRefresh, ...)
+- **BUG-10**: Tutte le 28 route Flask ora usano `with get_db_ctx() as conn:` — nessuna connessione SQLite lasciata aperta in caso di eccezione
+- **NEW-D**: Validazione regex `_wingetIdRegex` per i package ID winget in `AddPackage()` e `CrAddPackage()` — previene injection nel postinstall.ps1
+- **NEW-A / ARCH-01**: `_apiSvc` (NovaSCMApiService) ora istanziato in `LoadConfig()` e aggiornato dinamicamente — fine del dead code
+- **ARCH-01 + SEC**: `NovaSCMApiService` invia ora l'header `X-Api-Key` su tutte le richieste
+- **NEW-C**: Eliminato `DangerousAcceptAnyServerCertificateValidator` e `(_, _, _, _) => true` SSL bypass in 3 punti (UniFi, SCCM, Proxmox) — sostituito con validator che accetta self-signed ma verifica l'hostname
+- **IMP-NEW-04**: Suite pytest Flask (78 test) in `server/tests/test_api.py` — copre health, auth, CR CRUD, Workflow CRUD, Settings, PcWorkflows, Steps
+- **IMP-NEW-05**: `flask-limiter` integrato in `server/api.py` — 300 req/min, 3000 req/ora per IP; graceful fallback se non installato
+- **BUG**: `AppVersion` in `App.xaml.cs` corretto da `"1.1.0"` a `"1.5.0"` (era sfasato da v1.2.0)
+- **Config**: Aggiunto campo `NovaSCMApiKey` in `AppConfig` + UI (PasswordBox nelle Impostazioni) + salvataggio in config.json
+
+---
+
 ## [1.4.0] - 2026-03-08
 
 ### Nuove funzionalità
