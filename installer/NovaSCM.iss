@@ -1,13 +1,13 @@
 ; NovaSCM Inno Setup Script
 ; Compila con: Inno Setup Compiler (https://jrsoftware.org/isinfo.php)
-; Output: NovaSCM-v1.1.0-Setup.exe
+; Output: NovaSCM-v1.2.0-Setup.exe
 
 #define AppName "NovaSCM"
-#define AppVersion "1.1.0"
+#define AppVersion "1.2.0"
 #define AppPublisher "Claudio Becchis"
 #define AppURL "https://polariscore.it/novascm"
 #define AppExeName "NovaSCM.exe"
-#define SourceDir "C:\Temp\NovaSCM_v1.1.0_r3"
+#define SourceDir "C:\Temp\NovaSCM_v1.2.0"
 
 [Setup]
 AppId={{A3F2E1D0-9B4C-4E7A-8F3D-2C1A6B5E9D08}
