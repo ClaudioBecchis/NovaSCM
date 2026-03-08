@@ -4,6 +4,18 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.1] - 2026-03-08
+
+### Security fix — agent (command injection)
+
+- **SEC-01 (Critico)**: Eliminata vulnerabilità command injection in `agent/novascm-agent.py` — `run_cmd()` usava `shell=True` quando il comando era una stringa, permettendo l'esecuzione di comandi arbitrari tramite dati controllati dall'API
+  - `run_cmd()`: default cambiato a `shell=False`, aggiunto parametro `env` opzionale
+  - `winget_install`: da f-string a lista `["winget", "install", "--id", pkg_id, ...]`
+  - `apt_install`: da f-string a `["apt-get", "install", "-y", pkg]` con `env={"DEBIAN_FRONTEND": "noninteractive"}`
+  - `snap_install`: da f-string a `["snap", "install", pkg]` + `"--classic"` condizionale
+  - `file_copy`: da `copy /Y` / `cp -f` shell a `shutil.copy2(src, dst)` puro Python
+  - `reboot`: `delay` validato come intero, da f-string a lista argomenti tipizzata
+
 ## [1.6.0] - 2026-03-08
 
 ### Bugfix e refactoring (v3 analysis report)
