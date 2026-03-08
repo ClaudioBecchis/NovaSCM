@@ -1,4 +1,4 @@
-// NovaSCM v1.4.0 — © 2026 Claudio Becchis — https://github.com/ClaudioBecchis/NovaSCM
+// NovaSCM v1.5.0 — © 2026 Claudio Becchis — https://github.com/ClaudioBecchis/NovaSCM
 using System.Windows;
 
 [assembly:ThemeInfo(
