@@ -70,6 +70,18 @@ Sì, aggiungi uno step di tipo `powershell` e inserisci il percorso o il contenu
 
 ---
 
+## Sicurezza
+
+**L'agent è sicuro da usare?**
+Sì. A partire da **v1.6.1** (fix SEC-01), l'agent usa sempre `shell=False` con lista di argomenti espliciti per tutti i comandi. I parametri ricevuti dall'API non vengono mai interpolati in una stringa di shell, eliminando il rischio di command injection anche in caso di server API compromesso.
+
+I comandi supportati sono: `winget_install`, `apt_install`, `snap_install`, `file_copy` (via `shutil.copy2`), `reboot`, `ps_script`, `shell_script`, `reg_set`, `systemd_service`, `message`.
+
+**Il server API può eseguire comandi arbitrari sull'agent?**
+No. Ogni tipo di step ha un handler dedicato con argomenti separati — non è possibile iniettare caratteri shell come `&`, `|`, `;`, `$(...)`. Aggiorna sempre l'agent all'ultima versione.
+
+---
+
 ## Easter Egg
 
 **Ho sentito di un Easter Egg nascosto...**
