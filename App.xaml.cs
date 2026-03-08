@@ -1,6 +1,13 @@
 using System.IO;
+using System.Net;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Threading;
+using WpfBrushes = System.Windows.Media.Brushes;
+using WpfColor   = System.Windows.Media.Color;
+using WpfColors  = System.Windows.Media.Colors;
+using WpfSolidColorBrush = System.Windows.Media.SolidColorBrush;
+using WpfFontFamily = System.Windows.Media.FontFamily;
 
 namespace PolarisManager;
 
@@ -9,6 +16,9 @@ public partial class App : Application
     public static readonly string LogPath =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                      "PolarisManager", "debug.log");
+
+    private const string GitHubIssuesUrl = "https://github.com/ClaudioBecchis/NovaSCM/issues/new";
+    private const string AppVersion      = "1.1.0";
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
@@ -19,9 +29,7 @@ public partial class App : Application
         DispatcherUnhandledException += (s, ex) =>
         {
             Log($"[UI Exception] {ex.Exception}");
-            MessageBox.Show(
-                $"Errore imprevisto:\n\n{ex.Exception.Message}\n\nDettagli salvati in:\n{LogPath}",
-                "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+            ShowCrashDialog(ex.Exception);
             ex.Handled = true;
         };
 
@@ -29,9 +37,8 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (s, ex) =>
         {
             Log($"[Unhandled] {ex.ExceptionObject}");
-            MessageBox.Show(
-                $"Errore critico:\n\n{ex.ExceptionObject}\n\nDettagli in:\n{LogPath}",
-                "Errore critico", MessageBoxButton.OK, MessageBoxImage.Error);
+            var exc = ex.ExceptionObject as Exception;
+            Dispatcher.Invoke(() => ShowCrashDialog(exc, isFatal: true));
         };
 
         // Task non gestiti
@@ -70,4 +77,150 @@ public partial class App : Application
         }
         catch { }
     }
+
+    // ── Crash reporter ────────────────────────────────────────────────────────
+    private static void ShowCrashDialog(Exception? ex, bool isFatal = false)
+    {
+        var title   = isFatal ? "Errore critico — NovaSCM" : "Errore imprevisto — NovaSCM";
+        var message = ex?.Message ?? "Errore sconosciuto";
+        var stack   = ex?.ToString() ?? "Nessun dettaglio disponibile";
+
+        // Finestra crash personalizzata
+        var win = new Window
+        {
+            Title           = title,
+            Width           = 620,
+            Height          = 420,
+            WindowStartupLocation = WindowStartupLocation.CenterScreen,
+            ResizeMode      = ResizeMode.NoResize,
+            Background      = new WpfSolidColorBrush(WpfColor.FromRgb(30, 30, 30)),
+            Foreground      = WpfBrushes.White,
+            FontFamily      = new WpfFontFamily("Segoe UI"),
+        };
+
+        var grid = new Grid { Margin = new Thickness(16) };
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        // Titolo
+        var lblTitle = new TextBlock
+        {
+            Text       = isFatal ? "💥 Errore critico" : "⚠️ Errore imprevisto",
+            FontSize   = 18,
+            FontWeight = FontWeights.Bold,
+            Foreground = new WpfSolidColorBrush(WpfColor.FromRgb(255, 80, 80)),
+            Margin     = new Thickness(0, 0, 0, 8)
+        };
+        Grid.SetRow(lblTitle, 0);
+
+        // Messaggio breve
+        var lblMsg = new TextBlock
+        {
+            Text         = message,
+            FontSize     = 13,
+            Foreground   = WpfBrushes.LightGray,
+            TextWrapping = TextWrapping.Wrap,
+            Margin       = new Thickness(0, 0, 0, 10)
+        };
+        Grid.SetRow(lblMsg, 1);
+
+        // Stack trace
+        var txtStack = new TextBox
+        {
+            Text              = stack,
+            IsReadOnly        = true,
+            FontFamily        = new WpfFontFamily("Consolas"),
+            FontSize          = 11,
+            Background        = new WpfSolidColorBrush(WpfColor.FromRgb(20, 20, 20)),
+            Foreground        = new WpfSolidColorBrush(WpfColor.FromRgb(180, 180, 180)),
+            BorderBrush       = new WpfSolidColorBrush(WpfColor.FromRgb(60, 60, 60)),
+            VerticalScrollBarVisibility   = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            TextWrapping      = TextWrapping.NoWrap,
+            Margin            = new Thickness(0, 0, 0, 12),
+        };
+        Grid.SetRow(txtStack, 2);
+
+        // Pulsanti
+        var btnPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+
+        var btnGithub = new Button
+        {
+            Content    = "🐛  Segnala su GitHub",
+            Padding    = new Thickness(14, 8, 14, 8),
+            Margin     = new Thickness(0, 0, 8, 0),
+            Background = new WpfSolidColorBrush(WpfColor.FromRgb(36, 103, 178)),
+            Foreground = WpfBrushes.White,
+            BorderBrush = WpfBrushes.Transparent,
+            Cursor     = System.Windows.Input.Cursors.Hand,
+        };
+        btnGithub.Click += (_, _) =>
+        {
+            var os      = Environment.OSVersion.ToString();
+            var body    = WebUtility.UrlEncode(
+                $"**NovaSCM v{AppVersion}** — {os}\n\n" +
+                $"**Errore:** {message}\n\n" +
+                $"**Stack trace:**\n```\n{stack}\n```\n\n" +
+                $"**Log:** `{LogPath}`\n\n" +
+                $"**Passi per riprodurre:**\n1. \n2. \n3. \n\n" +
+                $"**Comportamento atteso:**\n\n**Comportamento effettivo:**\n");
+            var issueTitle = WebUtility.UrlEncode($"[Bug] {message.Split('\n')[0].Truncate(80)}");
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
+                $"{GitHubIssuesUrl}?title={issueTitle}&body={body}&labels=bug")
+                { UseShellExecute = true });
+        };
+
+        var btnCopy = new Button
+        {
+            Content    = "📋  Copia",
+            Padding    = new Thickness(14, 8, 14, 8),
+            Margin     = new Thickness(0, 0, 8, 0),
+            Background = new WpfSolidColorBrush(WpfColor.FromRgb(60, 60, 60)),
+            Foreground = WpfBrushes.White,
+            BorderBrush = WpfBrushes.Transparent,
+            Cursor     = System.Windows.Input.Cursors.Hand,
+        };
+        btnCopy.Click += (_, _) => Clipboard.SetText(stack);
+
+        var btnClose = new Button
+        {
+            Content    = isFatal ? "Chiudi app" : "Ignora",
+            Padding    = new Thickness(14, 8, 14, 8),
+            Background = new WpfSolidColorBrush(WpfColor.FromRgb(80, 40, 40)),
+            Foreground = WpfBrushes.White,
+            BorderBrush = WpfBrushes.Transparent,
+            Cursor     = System.Windows.Input.Cursors.Hand,
+        };
+        btnClose.Click += (_, _) =>
+        {
+            win.Close();
+            if (isFatal) Current.Shutdown(1);
+        };
+
+        btnPanel.Children.Add(btnGithub);
+        btnPanel.Children.Add(btnCopy);
+        btnPanel.Children.Add(btnClose);
+        Grid.SetRow(btnPanel, 3);
+
+        grid.Children.Add(lblTitle);
+        grid.Children.Add(lblMsg);
+        grid.Children.Add(txtStack);
+        grid.Children.Add(btnPanel);
+
+        win.Content = grid;
+        win.ShowDialog();
+    }
+}
+
+// Estensione helper
+internal static class StringExtensions
+{
+    public static string Truncate(this string s, int max) =>
+        s.Length <= max ? s : s[..max] + "…";
 }
