@@ -2134,6 +2134,7 @@
                         <Grid Grid.Column="2">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
 
@@ -2159,6 +2160,11 @@
                                             x:Name="BtnPveConsole" IsEnabled="False"
                                             ToolTip="Apri console VNC nel browser"/>
                                     <Separator Width="1" Background="#d1d5db" Margin="6,0"/>
+                                    <Button Content="🌡️  Temp" Style="{StaticResource BtnBlue}"
+                                            Padding="10,4" Click="BtnPveTemp_Click"
+                                            x:Name="BtnPveTemp" IsEnabled="False"
+                                            ToolTip="Legge temperature CPU/sistema via SSH (richiede lm-sensors sul nodo)"/>
+                                    <Separator Width="1" Background="#d1d5db" Margin="6,0"/>
                                     <TextBox x:Name="TxtPveFilter" Width="180" Padding="6,4"
                                              Background="White" BorderBrush="#d1d5db"
                                              FontSize="12" Tag="🔍  Filtra VM/CT..."
@@ -2167,8 +2173,50 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- Pannello temperature (collassabile) -->
+                            <Border x:Name="PveTempPanel" Grid.Row="1" Visibility="Collapsed"
+                                    Background="#0f172a" Padding="16,10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="🌡️  Temperature:"
+                                               Foreground="#94a3b8" FontSize="12"
+                                               VerticalAlignment="Center" Margin="0,0,12,0"/>
+                                    <ItemsControl Grid.Column="1" x:Name="PveTempItems">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#1e293b" CornerRadius="4"
+                                                        Padding="10,4" Margin="0,0,8,0">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding Label}"
+                                                                   Foreground="#94a3b8" FontSize="11"
+                                                                   Margin="0,0,6,0" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding TempText}"
+                                                                   Foreground="{Binding TempColor}"
+                                                                   FontSize="14" FontWeight="Bold"
+                                                                   FontFamily="Consolas"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button Grid.Column="2" Content="✕"
+                                            Background="Transparent" BorderThickness="0"
+                                            Foreground="#64748b" FontSize="11" Padding="6,2"
+                                            Cursor="Hand" Click="BtnClosePveTemp_Click"/>
+                                </Grid>
+                            </Border>
+
                             <!-- DataGrid VM/CT -->
-                            <DataGrid Grid.Row="1" x:Name="DgPveGuests"
+                            <DataGrid Grid.Row="2" x:Name="DgPveGuests"
                                       AutoGenerateColumns="False"
                                       IsReadOnly="True"
                                       GridLinesVisibility="Horizontal"

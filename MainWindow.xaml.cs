@@ -6186,6 +6186,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             _pveHttp.DefaultRequestHeaders.Add("Cookie", $"PVEAuthCookie={_pveCookie}");
             TxtPveStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(74, 222, 128));
             BtnPveRefresh.IsEnabled = true;
+            BtnPveTemp.IsEnabled    = true;
             await PveRefreshAsync();
         }
         catch (Exception ex)
@@ -6323,4 +6324,112 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                   $"&vmname={Uri.EscapeDataString(g.Name)}&node={g.Node}&resize=off&cmd=";
         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
     }
+
+    // ── Temperature Proxmox ───────────────────────────────────────────────────
+
+    private record PveTempReading(string Label, double Celsius)
+    {
+        public string TempText  => $"{Celsius:F1}°C";
+        public System.Windows.Media.Brush TempColor =>
+            Celsius >= 80 ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68,  68))  :
+            Celsius >= 65 ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(251, 191, 36))  :
+                            new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(74,  222, 128));
+    }
+
+    private async void BtnPveTemp_Click(object s, RoutedEventArgs e)
+    {
+        TxtPveStatus.Text = "🌡️ Lettura temperature...";
+        try
+        {
+            var keyPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".ssh", "id_ed25519");
+            var psi = new ProcessStartInfo("ssh.exe")
+            {
+                Arguments = $"-i \"{keyPath}\" -o StrictHostKeyChecking=no " +
+                            $"-o ConnectTimeout=5 root@{_pveHost} " +
+                            "\"sensors -j 2>/dev/null\"",
+                UseShellExecute        = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError  = true,
+                CreateNoWindow         = true
+            };
+            var proc = Process.Start(psi)!;
+            var json = await proc.StandardOutput.ReadToEndAsync();
+            await proc.WaitForExitAsync();
+
+            var readings = new List<PveTempReading>();
+
+            if (!string.IsNullOrWhiteSpace(json) && json.TrimStart().StartsWith("{"))
+            {
+                // Parse sensors -j output
+                var doc = JsonDocument.Parse(json);
+                foreach (var chip in doc.RootElement.EnumerateObject())
+                {
+                    foreach (var feature in chip.Value.EnumerateObject())
+                    {
+                        if (feature.Value.ValueKind != JsonValueKind.Object) continue;
+                        foreach (var sub in feature.Value.EnumerateObject())
+                        {
+                            if (sub.Name.EndsWith("_input") &&
+                                sub.Value.ValueKind == JsonValueKind.Number)
+                            {
+                                var temp = sub.Value.GetDouble();
+                                if (temp > 0 && temp < 150)
+                                {
+                                    var label = feature.Name
+                                        .Replace("Package id", "CPU Pkg")
+                                        .Replace("Composite", "NVMe")
+                                        .Replace("temp", "T");
+                                    readings.Add(new PveTempReading(label, temp));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (readings.Count == 0)
+            {
+                // Fallback: thermal_zone sysfs
+                var psi2 = new ProcessStartInfo("ssh.exe")
+                {
+                    Arguments = $"-i \"{keyPath}\" -o StrictHostKeyChecking=no " +
+                                $"-o ConnectTimeout=5 root@{_pveHost} " +
+                                "\"paste <(cat /sys/class/thermal/thermal_zone*/type) " +
+                                "<(cat /sys/class/thermal/thermal_zone*/temp)\"",
+                    UseShellExecute        = false,
+                    RedirectStandardOutput = true,
+                    CreateNoWindow         = true
+                };
+                var proc2  = Process.Start(psi2)!;
+                var output = await proc2.StandardOutput.ReadToEndAsync();
+                await proc2.WaitForExitAsync();
+                foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var parts = line.Split('\t');
+                    if (parts.Length == 2 && double.TryParse(parts[1].Trim(), out var raw))
+                        readings.Add(new PveTempReading(parts[0].Trim(), raw / 1000.0));
+                }
+            }
+
+            if (readings.Count > 0)
+            {
+                PveTempItems.ItemsSource  = readings;
+                PveTempPanel.Visibility   = Visibility.Visible;
+                TxtPveStatus.Text         = $"✅ {readings.Count} sensori letti";
+            }
+            else
+            {
+                TxtPveStatus.Text = "⚠️ Nessun sensore trovato (installa lm-sensors)";
+            }
+        }
+        catch (Exception ex)
+        {
+            TxtPveStatus.Text = $"❌ SSH: {ex.Message}";
+        }
+    }
+
+    private void BtnClosePveTemp_Click(object s, RoutedEventArgs e)
+        => PveTempPanel.Visibility = Visibility.Collapsed;
 }
