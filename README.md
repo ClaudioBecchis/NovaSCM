@@ -1,3 +1,14 @@
+<p align="center">
+  <img src="Assets/banner.png" alt="NovaSCM Banner" width="100%"/>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
+  <a href="../../releases"><img src="https://img.shields.io/badge/Console-Windows-0078D4?logo=windows" alt="Platform: Windows"/></a>
+  <a href="server/"><img src="https://img.shields.io/badge/Server-Docker%20%7C%20Python-2496ED?logo=docker" alt="Server: Docker"/></a>
+  <a href="https://github.com/ClaudioBecchis/NovaSCM/releases/latest"><img src="https://img.shields.io/github/v/release/ClaudioBecchis/NovaSCM" alt="GitHub release"/></a>
+</p>
+
 # NovaSCM
 
 > **Tired of paying for SCCM? There's a free alternative.**
@@ -8,11 +19,6 @@ Deploy Windows in zero-touch, manage software, scan networks, issue WiFi certifi
 **Built by an IT admin, for IT admins.**
 
 NovaSCM combines a **WPF desktop console** (Windows), a **REST API server** (Python/Flask) and a **cross-platform agent** (Linux & Windows) — self-hosted, lightweight, no licensing fees.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform: Windows](https://img.shields.io/badge/Console-Windows-0078D4?logo=windows)](../../releases)
-[![Server: Docker](https://img.shields.io/badge/Server-Docker%20%7C%20Python-2496ED?logo=docker)](server/)
-[![GitHub release](https://img.shields.io/github/v/release/ClaudioBecchis/NovaSCM)](https://github.com/ClaudioBecchis/NovaSCM/releases/latest)
 
 📖 **Read the full article on dev.to:** [I built a free open-source alternative to Microsoft SCCM](https://dev.to/claudio_f5c23617499305b57/i-built-a-free-open-source-alternative-to-microsoft-sccm-3dkh)
 
