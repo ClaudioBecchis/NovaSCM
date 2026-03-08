@@ -58,6 +58,19 @@ NovaSCM combines a **WPF desktop console** (Windows), a **REST API server** (Pyt
 
 ---
 
+## Screenshots
+
+<p align="center">
+  <img src="Assets/screenshots/screen-rete.jpg" alt="Network Scanner" width="49%"/>
+  <img src="Assets/screenshots/screen-certificati.jpg" alt="WiFi EAP-TLS Certificates" width="49%"/>
+</p>
+<p align="center">
+  <img src="Assets/screenshots/screen-applicazioni.jpg" alt="Software Portal" width="49%"/>
+  <img src="Assets/screenshots/screen-impostazioni.jpg" alt="Settings" width="49%"/>
+</p>
+
+---
+
 ## Architecture
 
 ```
