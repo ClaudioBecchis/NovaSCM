@@ -2181,7 +2181,9 @@ public partial class MainWindow : Window
     {
         if (PcGrid.SelectedItem is PcRow p && p.Ip != "—")
         {
-            Process.Start("mstsc", $"/v:{p.Ip}");
+            var mstscInfo = new ProcessStartInfo("mstsc");
+            mstscInfo.ArgumentList.Add($"/v:{p.Ip}");
+            Process.Start(mstscInfo);
             SetStatus($"🖥️ RDP verso {p.Name} ({p.Ip})");
         }
         else SetStatus("⚠️ Seleziona un PC online con IP valido");
@@ -3108,11 +3110,14 @@ public partial class MainWindow : Window
                              $"del \"%~f0\"\r\n";
             await File.WriteAllTextAsync(batPath, batContent, System.Text.Encoding.ASCII);
 
-            Process.Start(new ProcessStartInfo("cmd.exe", $"/C \"{batPath}\"")
+            var updaterInfo = new ProcessStartInfo("cmd.exe")
             {
                 UseShellExecute = true,
                 WindowStyle     = ProcessWindowStyle.Hidden
-            });
+            };
+            updaterInfo.ArgumentList.Add("/C");
+            updaterInfo.ArgumentList.Add(batPath);
+            Process.Start(updaterInfo);
 
             Application.Current.Shutdown();
         }
