@@ -80,106 +80,105 @@ def get_db_ctx():
 
 def init_db():
     os.makedirs(os.path.dirname(DB), exist_ok=True)
-    conn = get_db()
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS cr (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            pc_name       TEXT NOT NULL UNIQUE,
-            domain        TEXT NOT NULL,
-            ou            TEXT,
-            dc_ip         TEXT,
-            join_user     TEXT,
-            join_pass     TEXT,
-            odj_blob      TEXT,
-            admin_pass    TEXT,
-            software      TEXT DEFAULT '[]',
-            assigned_user TEXT,
-            notes         TEXT,
-            status        TEXT DEFAULT 'open',
-            created_at    TEXT,
-            completed_at  TEXT,
-            last_seen     TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS cr_steps (
-            id        INTEGER PRIMARY KEY AUTOINCREMENT,
-            cr_id     INTEGER NOT NULL,
-            step_name TEXT NOT NULL,
-            status    TEXT DEFAULT 'done',
-            timestamp TEXT,
-            UNIQUE(cr_id, step_name)
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS settings (
-            key   TEXT PRIMARY KEY,
-            value TEXT NOT NULL DEFAULT ''
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS workflows (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome        TEXT NOT NULL UNIQUE,
-            descrizione TEXT DEFAULT '',
-            versione    INTEGER DEFAULT 1,
-            created_at  TEXT,
-            updated_at  TEXT
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS workflow_steps (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
-            ordine      INTEGER NOT NULL,
-            nome        TEXT NOT NULL,
-            tipo        TEXT NOT NULL,
-            parametri   TEXT DEFAULT '{}',
-            condizione  TEXT DEFAULT '',
-            su_errore   TEXT DEFAULT 'stop',
-            platform    TEXT DEFAULT 'all',
-            UNIQUE(workflow_id, ordine)
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS pc_workflows (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            pc_name      TEXT NOT NULL,
-            workflow_id  INTEGER NOT NULL REFERENCES workflows(id),
-            status       TEXT DEFAULT 'pending',
-            assigned_at  TEXT,
-            started_at   TEXT,
-            completed_at TEXT,
-            last_seen    TEXT,
-            UNIQUE(pc_name, workflow_id)
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS pc_workflow_steps (
-            id             INTEGER PRIMARY KEY AUTOINCREMENT,
-            pc_workflow_id INTEGER NOT NULL REFERENCES pc_workflows(id) ON DELETE CASCADE,
-            step_id        INTEGER NOT NULL REFERENCES workflow_steps(id),
-            status         TEXT DEFAULT 'pending',
-            output         TEXT DEFAULT '',
-            timestamp      TEXT,
-            UNIQUE(pc_workflow_id, step_id)
-        )
-    """)
-    conn.commit()
-    # Migrazioni colonne (DB esistenti)
-    migrations = [
-        ("cr", "last_seen",   "TEXT"),
-        ("cr", "odj_blob",    "TEXT"),
-        ("cr", "workflow_id", "INTEGER"),
-        ("workflow_steps", "platform", "TEXT DEFAULT 'all'"),
-    ]
-    for table, col, typ in migrations:
-        try:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
-            conn.commit()
-        except Exception:
-            pass
-    conn.close()
+    with get_db_ctx() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cr (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                pc_name       TEXT NOT NULL UNIQUE,
+                domain        TEXT NOT NULL,
+                ou            TEXT,
+                dc_ip         TEXT,
+                join_user     TEXT,
+                join_pass     TEXT,
+                odj_blob      TEXT,
+                admin_pass    TEXT,
+                software      TEXT DEFAULT '[]',
+                assigned_user TEXT,
+                notes         TEXT,
+                status        TEXT DEFAULT 'open',
+                created_at    TEXT,
+                completed_at  TEXT,
+                last_seen     TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS cr_steps (
+                id        INTEGER PRIMARY KEY AUTOINCREMENT,
+                cr_id     INTEGER NOT NULL,
+                step_name TEXT NOT NULL,
+                status    TEXT DEFAULT 'done',
+                timestamp TEXT,
+                UNIQUE(cr_id, step_name)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT ''
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS workflows (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome        TEXT NOT NULL UNIQUE,
+                descrizione TEXT DEFAULT '',
+                versione    INTEGER DEFAULT 1,
+                created_at  TEXT,
+                updated_at  TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS workflow_steps (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                workflow_id INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+                ordine      INTEGER NOT NULL,
+                nome        TEXT NOT NULL,
+                tipo        TEXT NOT NULL,
+                parametri   TEXT DEFAULT '{}',
+                condizione  TEXT DEFAULT '',
+                su_errore   TEXT DEFAULT 'stop',
+                platform    TEXT DEFAULT 'all',
+                UNIQUE(workflow_id, ordine)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pc_workflows (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                pc_name      TEXT NOT NULL,
+                workflow_id  INTEGER NOT NULL REFERENCES workflows(id),
+                status       TEXT DEFAULT 'pending',
+                assigned_at  TEXT,
+                started_at   TEXT,
+                completed_at TEXT,
+                last_seen    TEXT,
+                UNIQUE(pc_name, workflow_id)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pc_workflow_steps (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                pc_workflow_id INTEGER NOT NULL REFERENCES pc_workflows(id) ON DELETE CASCADE,
+                step_id        INTEGER NOT NULL REFERENCES workflow_steps(id),
+                status         TEXT DEFAULT 'pending',
+                output         TEXT DEFAULT '',
+                timestamp      TEXT,
+                UNIQUE(pc_workflow_id, step_id)
+            )
+        """)
+        conn.commit()
+        # Migrazioni colonne (DB esistenti)
+        migrations = [
+            ("cr", "last_seen",   "TEXT"),
+            ("cr", "odj_blob",    "TEXT"),
+            ("cr", "workflow_id", "INTEGER"),
+            ("workflow_steps", "platform", "TEXT DEFAULT 'all'"),
+        ]
+        for table, col, typ in migrations:
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+                conn.commit()
+            except Exception:
+                pass
 
 def row_to_dict(row):
     d = dict(row)

@@ -4,6 +4,19 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.0] - 2026-03-08
+
+### Bugfix e refactoring (v3 analysis report)
+
+- **BUG-05 / ARCH-01**: Eliminati tutti i `new HttpClient()` inline nelle sezioni CR e Workflow — tutto il traffico HTTP verso NovaSCM API ora passa attraverso `NovaSCMApiService` con `static readonly HttpClient` condiviso (fix socket exhaustion)
+- **BUG-10 (Flask)**: `init_db()` riscritta con `with get_db_ctx() as conn:` — eliminati gli ultimi 2 `conn = get_db()` bare rimasti
+- **NEW-3**: Validator SSL ulteriormente ristretto — ora accetta **solo** `UntrustedRoot` (self-signed), blocca correttamente certificati scaduti, revocati e hostname errati (precedente v1.5.0 accettava qualsiasi `RemoteCertificateChainErrors`)
+- **NEW-B**: try/catch aggiunto a 3 ulteriori handler `async void`: `BtnScanAll_Click`, `BtnCheckUpdate_Click`, `LstWorkflows_SelectionChanged`
+- **NEW-1**: `AppVersion` in `App.xaml.cs` aggiornato a `1.6.0` (era 1.5.0 dopo fix precedente)
+- **CS Fix**: Corretti 8 errori di compilazione post-refactoring — variabili `resp` (tipo `string`) trattate erroneamente con `.IsSuccessStatusCode` e `.Content.ReadAsStringAsync()`
+
+---
+
 ## [1.5.0] - 2026-03-08
 
 ### Sicurezza e qualità (v2 analysis report)

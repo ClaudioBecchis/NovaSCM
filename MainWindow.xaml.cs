@@ -411,20 +411,24 @@ public partial class MainWindow : Window
 
     private async void BtnScanAll_Click(object s, RoutedEventArgs e)
     {
-        var lines = _config.ScanNetworks.Split('\n',
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var allIps = new List<IPAddress>();
-        foreach (var net in lines)
+        try
         {
-            var parts = net.Split('/');
-            if (parts.Length != 2) continue;
-            if (!IPAddress.TryParse(parts[0].Trim(), out var baseIp)) continue;
-            if (!int.TryParse(parts[1].Trim(), out int cidr) || cidr < 1 || cidr > 30) continue;
-            try { allIps.AddRange(GetHostsInSubnet(baseIp, cidr)); } catch { }
+            var lines = _config.ScanNetworks.Split('\n',
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var allIps = new List<IPAddress>();
+            foreach (var net in lines)
+            {
+                var parts = net.Split('/');
+                if (parts.Length != 2) continue;
+                if (!IPAddress.TryParse(parts[0].Trim(), out var baseIp)) continue;
+                if (!int.TryParse(parts[1].Trim(), out int cidr) || cidr < 1 || cidr > 30) continue;
+                try { allIps.AddRange(GetHostsInSubnet(baseIp, cidr)); } catch { }
+            }
+            if (allIps.Count == 0) { SetStatus("⚠️ Nessuna subnet valida configurata"); return; }
+            App.Log($"Scansione VLAN avviata — {lines.Length} subnet, {allIps.Count} host totali");
+            await RunScanAsync(allIps);
         }
-        if (allIps.Count == 0) { SetStatus("⚠️ Nessuna subnet valida configurata"); return; }
-        App.Log($"Scansione VLAN avviata — {lines.Length} subnet, {allIps.Count} host totali");
-        await RunScanAsync(allIps);
+        catch (Exception ex) { App.Log($"[BtnScanAll_Click] {ex}"); SetStatus($"❌ {ex.Message}"); }
     }
 
     private async Task RunScanAsync(List<IPAddress> ips)
@@ -1721,10 +1725,12 @@ public partial class MainWindow : Window
         {
             var handler = new System.Net.Http.HttpClientHandler
             {
-                // Accetta self-signed ma verifica l'hostname (blocca MITM)
-                ServerCertificateCustomValidationCallback = (_, _, _, errors) =>
+                // Accetta solo UntrustedRoot (self-signed); blocca scaduti, revocati, hostname errato
+                ServerCertificateCustomValidationCallback = (_, _, chain, errors) =>
                     errors == System.Net.Security.SslPolicyErrors.None ||
-                    errors == System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors
+                    (errors == System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors &&
+                     chain?.ChainStatus.Length == 1 &&
+                     chain.ChainStatus[0].Status == System.Security.Cryptography.X509Certificates.X509ChainStatusFlags.UntrustedRoot)
             };
             using var http = new System.Net.Http.HttpClient(handler)
                 { BaseAddress = new Uri(url), Timeout = TimeSpan.FromSeconds(12) };
@@ -2276,10 +2282,12 @@ public partial class MainWindow : Window
         var handler = new System.Net.Http.HttpClientHandler
         {
             Credentials = new System.Net.NetworkCredential(user, pass, domain),
-            // Accetta self-signed ma verifica l'hostname (blocca MITM)
-            ServerCertificateCustomValidationCallback = (_, _, _, errors) =>
+            // Accetta solo UntrustedRoot (self-signed); blocca scaduti, revocati, hostname errato
+            ServerCertificateCustomValidationCallback = (_, _, chain, errors) =>
                 errors == System.Net.Security.SslPolicyErrors.None ||
-                errors == System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors
+                (errors == System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors &&
+                 chain?.ChainStatus.Length == 1 &&
+                 chain.ChainStatus[0].Status == System.Security.Cryptography.X509Certificates.X509ChainStatusFlags.UntrustedRoot)
         };
         _sccmClient?.Dispose();
         _sccmClient = new System.Net.Http.HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) };
@@ -2955,7 +2963,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.5.0";
+    private const string CurrentVersion = "1.6.0";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -3050,17 +3058,21 @@ public partial class MainWindow : Window
 
     private async void BtnCheckUpdate_Click(object s, RoutedEventArgs e)
     {
-        TxtUpdateStatus.Text       = "⏳  Controllo in corso...";
-        TxtUpdateStatus.Foreground = System.Windows.Media.Brushes.Gray;
-
-        if (string.IsNullOrEmpty(_config.NovaSCMApiUrl))
+        try
         {
-            TxtUpdateStatus.Text       = "⚙️  Configura l'URL API NovaSCM nelle Impostazioni per ricevere aggiornamenti automatici";
-            TxtUpdateStatus.Foreground = System.Windows.Media.Brushes.Gold;
-            return;
-        }
+            TxtUpdateStatus.Text       = "⏳  Controllo in corso...";
+            TxtUpdateStatus.Foreground = System.Windows.Media.Brushes.Gray;
 
-        await CheckForUpdatesAsync(silent: false);
+            if (string.IsNullOrEmpty(_config.NovaSCMApiUrl))
+            {
+                TxtUpdateStatus.Text       = "⚙️  Configura l'URL API NovaSCM nelle Impostazioni per ricevere aggiornamenti automatici";
+                TxtUpdateStatus.Foreground = System.Windows.Media.Brushes.Gold;
+                return;
+            }
+
+            await CheckForUpdatesAsync(silent: false);
+        }
+        catch (Exception ex) { App.Log($"[BtnCheckUpdate_Click] {ex}"); }
     }
 
     // ── Auto-update: scarica e sostituisce l'exe ──────────────────────────────
@@ -3586,56 +3598,41 @@ public partial class MainWindow : Window
             return;
         }
 
-        var body = System.Text.Json.JsonSerializer.Serialize(new
-        {
-            pc_name       = pcName,
-            domain        = domain,
-            ou            = TxtCrOu.Text.Trim(),
-            dc_ip         = TxtCrDcIp.Text.Trim(),
-            join_user     = TxtCrJoinUser.Text.Trim(),
-            join_pass     = TxtCrJoinPass.Password,
-            odj_blob      = TxtCrOdjBlob.Text.Trim(),
-            admin_pass    = TxtCrAdminPass.Password,
-            assigned_user = TxtCrAssignedUser.Text.Trim(),
-            software      = _crPackages.ToList(),
-            notes         = TxtCrNotes.Text.Trim(),
-        });
-
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var resp = await http.PostAsync(CrApiBase,
-                new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
-            var json = await resp.Content.ReadAsStringAsync();
-            if (resp.IsSuccessStatusCode)
+            var json = await _apiSvc!.PostCrAsync(new
             {
-                // Salva anche nel DB locale (cache)
-                try
+                pc_name       = pcName,
+                domain        = domain,
+                ou            = TxtCrOu.Text.Trim(),
+                dc_ip         = TxtCrDcIp.Text.Trim(),
+                join_user     = TxtCrJoinUser.Text.Trim(),
+                join_pass     = TxtCrJoinPass.Password,
+                odj_blob      = TxtCrOdjBlob.Text.Trim(),
+                admin_pass    = TxtCrAdminPass.Password,
+                assigned_user = TxtCrAssignedUser.Text.Trim(),
+                software      = _crPackages.ToList(),
+                notes         = TxtCrNotes.Text.Trim(),
+            });
+            // Salva anche nel DB locale (cache)
+            try
+            {
+                var respDoc = System.Text.Json.JsonDocument.Parse(json);
+                int newId   = respDoc.RootElement.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
+                Database.UpsertCr(new CrRow
                 {
-                    var respDoc = System.Text.Json.JsonDocument.Parse(json);
-                    int newId   = respDoc.RootElement.TryGetProperty("id", out var idEl) ? idEl.GetInt32() : 0;
-                    Database.UpsertCr(new CrRow
-                    {
-                        Id = newId, PcName = pcName,
-                        Domain = TxtCrDomain.Text.Trim(), Ou = TxtCrOu.Text.Trim(),
-                        AssignedUser = TxtCrAssignedUser.Text.Trim(),
-                        Status = "pending", CreatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
-                        Notes = TxtCrNotes.Text.Trim(),
-                    });
-                }
-                catch { }
-                TxtCrStatus.Text       = $"✅  CR creato per {pcName}";
-                TxtCrStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
-                TxtCrPcName.Clear();
-                await LoadCrListAsync();
+                    Id = newId, PcName = pcName,
+                    Domain = TxtCrDomain.Text.Trim(), Ou = TxtCrOu.Text.Trim(),
+                    AssignedUser = TxtCrAssignedUser.Text.Trim(),
+                    Status = "pending", CreatedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm"),
+                    Notes = TxtCrNotes.Text.Trim(),
+                });
             }
-            else
-            {
-                var err = System.Text.Json.JsonDocument.Parse(json).RootElement
-                          .TryGetProperty("error", out var ep) ? ep.GetString() : json;
-                TxtCrStatus.Text       = $"❌  {err}";
-                TxtCrStatus.Foreground = System.Windows.Media.Brushes.Tomato;
-            }
+            catch { }
+            TxtCrStatus.Text       = $"✅  CR creato per {pcName}";
+            TxtCrStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
+            TxtCrPcName.Clear();
+            await LoadCrListAsync();
         }
         catch (Exception ex)
         {
@@ -3671,8 +3668,7 @@ public partial class MainWindow : Window
                 string json;
                 if (!_apiCache.TryGet(CrApiBase, out json))
                 {
-                    using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                    json = await http.GetStringAsync(CrApiBase);
+                    json = await _apiSvc!.GetCrListJsonAsync();
                     _apiCache.Set(CrApiBase, json, TimeSpan.FromSeconds(30));
                 }
                 var doc  = System.Text.Json.JsonDocument.Parse(json);
@@ -3719,8 +3715,7 @@ public partial class MainWindow : Window
         if (cr == null) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var json = await http.GetStringAsync($"{CrApiBase}/{cr.Id}");
+            var json = await _apiSvc!.GetCrJsonAsync(cr.Id);
             var doc  = System.Text.Json.JsonDocument.Parse(json);
             var win  = new CrDebugWindow(doc.RootElement, CrApiBase);
             win.Owner = this;
@@ -3746,10 +3741,7 @@ public partial class MainWindow : Window
         if (cr == null) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var body = System.Text.Json.JsonSerializer.Serialize(new { status });
-            await http.PutAsync($"{CrApiBase}/{cr.Id}/status",
-                new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+            await _apiSvc!.SetCrStatusAsync(cr.Id, status);
             _apiCache.Invalidate(CrApiBase);
             await LoadCrListAsync();
         }
@@ -3768,8 +3760,7 @@ public partial class MainWindow : Window
             MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            await http.DeleteAsync($"{CrApiBase}/{cr.Id}");
+            await _apiSvc!.DeleteCrAsync(cr.Id);
             _apiCache.Invalidate(CrApiBase);
             await LoadCrListAsync();
         }
@@ -3793,8 +3784,7 @@ public partial class MainWindow : Window
                 Title    = $"Salva autounattend.xml per {cr.PcName}",
             };
             if (dlg.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var xml = await http.GetStringAsync($"{CrApiBase}/by-name/{cr.PcName}/autounattend.xml");
+            var xml = await _apiSvc!.GetCrXmlAsync(cr.PcName);
             File.WriteAllText(dlg.FileName, xml, System.Text.Encoding.UTF8);
             TxtCrStatus.Text       = $"💾  Salvato: {dlg.FileName}";
             TxtCrStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
@@ -3829,12 +3819,11 @@ public partial class MainWindow : Window
         try
         {
             // 1. Scarica autounattend.xml dal server (generato dalla CR)
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-            var xml = await http.GetStringAsync($"{CrApiBase}/by-name/{cr.PcName}/autounattend.xml");
+            var xml = await _apiSvc!.GetCrXmlAsync(cr.PcName);
             File.WriteAllText(Path.Combine(folder, "autounattend.xml"), xml, System.Text.Encoding.UTF8);
 
             // 2. Genera postinstall.ps1 dalla CR
-            var crJson = await http.GetStringAsync($"{CrApiBase}/{cr.Id}");
+            var crJson = await _apiSvc!.GetCrJsonAsync(cr.Id);
             var crData = System.Text.Json.JsonDocument.Parse(crJson).RootElement;
 
             var software = new List<string>();
@@ -4430,8 +4419,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         }
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var json = await http.GetStringAsync($"{WfApiBase}/api/workflows");
+            var json = await _apiSvc!.GetWorkflowsJsonAsync();
             var doc  = System.Text.Json.JsonDocument.Parse(json);
 
             var prevId = _selectedWfId;
@@ -4480,8 +4468,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (string.IsNullOrEmpty(WfApiBase) || wfId <= 0) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var json = await http.GetStringAsync($"{WfApiBase}/api/workflows/{wfId}");
+            var json = await _apiSvc!.GetWorkflowDetailJsonAsync(wfId);
             var doc  = System.Text.Json.JsonDocument.Parse(json);
             if (!doc.RootElement.TryGetProperty("steps", out var stepsEl)) return;
             foreach (var el in stepsEl.EnumerateArray())
@@ -4568,10 +4555,9 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (string.IsNullOrEmpty(WfApiBase) || _selectedWfId <= 0) { _draggedStep = null; return; }
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             foreach (var step in _wfStepRows)
             {
-                var body = System.Text.Json.JsonSerializer.Serialize(new
+                await _apiSvc!.PutWorkflowStepAsync(_selectedWfId, step.Id, new
                 {
                     nome      = step.Nome,
                     tipo      = step.Tipo,
@@ -4580,8 +4566,6 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                     su_errore = step.SuErrore,
                     ordine    = step.Ordine,
                 });
-                await http.PutAsync($"{WfApiBase}/api/workflows/{_selectedWfId}/steps/{step.Id}",
-                    new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
             }
             TxtWfStatus.Text       = "✅  Ordine step salvato";
             TxtWfStatus.Foreground = new System.Windows.Media.SolidColorBrush(
@@ -4619,8 +4603,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (string.IsNullOrEmpty(WfApiBase)) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var json = await http.GetStringAsync($"{WfApiBase}/api/pc-workflows");
+            var json = await _apiSvc!.GetPcWorkflowsJsonAsync();
             var doc  = System.Text.Json.JsonDocument.Parse(json);
             _wfAssignRows.Clear();
             foreach (var el in doc.RootElement.EnumerateArray())
@@ -4652,15 +4635,19 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void LstWorkflows_SelectionChanged(object s, SelectionChangedEventArgs e)
     {
-        if (LstWorkflows.SelectedItem is WfRow wf)
+        try
         {
-            _selectedWfId = wf.Id;
-            await LoadWorkflowStepsAsync(wf.Id);
+            if (LstWorkflows.SelectedItem is WfRow wf)
+            {
+                _selectedWfId = wf.Id;
+                await LoadWorkflowStepsAsync(wf.Id);
+            }
+            else
+            {
+                _wfStepRows.Clear();
+            }
         }
-        else
-        {
-            _wfStepRows.Clear();
-        }
+        catch (Exception ex) { App.Log($"[LstWorkflows_SelectionChanged] {ex}"); }
     }
 
     private async void BtnWfNew_Click(object s, RoutedEventArgs e)
@@ -4670,16 +4657,10 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (string.IsNullOrEmpty(WfApiBase)) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var body = System.Text.Json.JsonSerializer.Serialize(new { nome = win.WfNome, descrizione = win.WfDesc });
-            var resp = await http.PostAsync($"{WfApiBase}/api/workflows",
-                new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
-            if (resp.IsSuccessStatusCode)
-            {
-                await LoadWorkflowsAsync();
-                TxtWfStatus.Text = $"✅  Workflow '{win.WfNome}' creato";
-                TxtWfStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
-            }
+            await _apiSvc!.PostWorkflowAsync(new { nome = win.WfNome, descrizione = win.WfDesc });
+            await LoadWorkflowsAsync();
+            TxtWfStatus.Text = $"✅  Workflow '{win.WfNome}' creato";
+            TxtWfStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         }
         catch (Exception ex)
         {
@@ -4699,11 +4680,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (win.ShowDialog() != true || string.IsNullOrEmpty(win.WfNome)) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var body = System.Text.Json.JsonSerializer.Serialize(new { nome = win.WfNome, descrizione = win.WfDesc });
-            var resp = await http.PutAsync($"{WfApiBase}/api/workflows/{wf.Id}",
-                new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
-            if (resp.IsSuccessStatusCode) await LoadWorkflowsAsync();
+            await _apiSvc!.PutWorkflowAsync(wf.Id, new { nome = win.WfNome, descrizione = win.WfDesc });
+            await LoadWorkflowsAsync();
         }
         catch (Exception ex)
         {
@@ -4723,8 +4701,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             "Conferma eliminazione", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            await http.DeleteAsync($"{WfApiBase}/api/workflows/{wf.Id}");
+            await _apiSvc!.DeleteWorkflowAsync(wf.Id);
             _selectedWfId = -1;
             _wfStepRows.Clear();
             await LoadWorkflowsAsync();
@@ -4755,8 +4732,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (win.ShowDialog() != true || win.Result == null) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var body = System.Text.Json.JsonSerializer.Serialize(new
+            await _apiSvc!.PostWorkflowStepAsync(wf.Id, new
             {
                 ordine    = win.Result.Ordine,
                 nome      = win.Result.Nome,
@@ -4765,19 +4741,9 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                 platform  = win.Result.Platform,
                 su_errore = win.Result.SuErrore,
             });
-            var resp = await http.PostAsync($"{WfApiBase}/api/workflows/{wf.Id}/steps",
-                new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
-            if (resp.IsSuccessStatusCode)
-            {
-                await LoadWorkflowStepsAsync(wf.Id);
-                // Aggiorna il conteggio step nella lista
-                wf.StepCount = _wfStepRows.Count;
-            }
-            else
-            {
-                var err = await resp.Content.ReadAsStringAsync();
-                MessageBox.Show($"Errore: {err}", "NovaSCM", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            await LoadWorkflowStepsAsync(wf.Id);
+            // Aggiorna il conteggio step nella lista
+            wf.StepCount = _wfStepRows.Count;
         }
         catch (Exception ex)
         {
@@ -4797,8 +4763,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (win.ShowDialog() != true || win.Result == null) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var body = System.Text.Json.JsonSerializer.Serialize(new
+            await _apiSvc!.PutWorkflowStepAsync(wf.Id, step.Id, new
             {
                 ordine    = win.Result.Ordine,
                 nome      = win.Result.Nome,
@@ -4807,10 +4772,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                 platform  = win.Result.Platform,
                 su_errore = win.Result.SuErrore,
             });
-            var resp = await http.PutAsync($"{WfApiBase}/api/workflows/{wf.Id}/steps/{step.Id}",
-                new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
-            if (resp.IsSuccessStatusCode)
-                await LoadWorkflowStepsAsync(wf.Id);
+            await LoadWorkflowStepsAsync(wf.Id);
         }
         catch (Exception ex)
         {
@@ -4846,17 +4808,12 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async Task SwapStepOrdineAsync(int wfId, WfStepRow a, WfStepRow b)
     {
-        using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
         // Usa ordine temporaneo 9999 per evitare il constraint UNIQUE(workflow_id, ordine)
-        string Put(WfStepRow st, int ord) => System.Text.Json.JsonSerializer.Serialize(new
-            { ordine = ord, nome = st.Nome, tipo = st.Tipo, parametri = st.Parametri, platform = st.Platform, su_errore = st.SuErrore });
-        var sc = new System.Net.Http.StringContent("", System.Text.Encoding.UTF8, "application/json");
-        sc = new(Put(a, 9999), System.Text.Encoding.UTF8, "application/json");
-        await http.PutAsync($"{WfApiBase}/api/workflows/{wfId}/steps/{a.Id}", sc);
-        sc = new(Put(b, a.Ordine), System.Text.Encoding.UTF8, "application/json");
-        await http.PutAsync($"{WfApiBase}/api/workflows/{wfId}/steps/{b.Id}", sc);
-        sc = new(Put(a, b.Ordine), System.Text.Encoding.UTF8, "application/json");
-        await http.PutAsync($"{WfApiBase}/api/workflows/{wfId}/steps/{a.Id}", sc);
+        object StepBody(WfStepRow st, int ord) => new
+            { ordine = ord, nome = st.Nome, tipo = st.Tipo, parametri = st.Parametri, platform = st.Platform, su_errore = st.SuErrore };
+        await _apiSvc!.PutWorkflowStepAsync(wfId, a.Id, StepBody(a, 9999));
+        await _apiSvc!.PutWorkflowStepAsync(wfId, b.Id, StepBody(b, a.Ordine));
+        await _apiSvc!.PutWorkflowStepAsync(wfId, a.Id, StepBody(a, b.Ordine));
         await LoadWorkflowStepsAsync(wfId);
     }
 
@@ -4872,8 +4829,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (LstWorkflows.SelectedItem is not WfRow wf) return;
         if (MessageBox.Show($"Eliminare lo step \"{step.Nome}\"?", "Conferma",
             MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-        using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        await http.DeleteAsync($"{WfApiBase}/api/workflows/{wf.Id}/steps/{step.Id}");
+        await _apiSvc!.DeleteWorkflowStepAsync(wf.Id, step.Id);
         await LoadWorkflowStepsAsync(wf.Id);
         wf.StepCount = _wfStepRows.Count;
         }
@@ -4886,16 +4842,9 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (win.ShowDialog() != true || string.IsNullOrEmpty(win.PcName) || win.WorkflowId <= 0) return;
         try
         {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-            var body = System.Text.Json.JsonSerializer.Serialize(new
+            await _apiSvc!.PostPcWorkflowAsync(new
                 { pc_name = win.PcName.ToUpperInvariant(), workflow_id = win.WorkflowId });
-            var resp = await http.PostAsync($"{WfApiBase}/api/pc-workflows",
-                new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
-            if (resp.IsSuccessStatusCode)
-                await LoadWorkflowAssignmentsAsync();
-            else
-                MessageBox.Show("Errore: workflow già assegnato a questo PC?", "NovaSCM",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            await LoadWorkflowAssignmentsAsync();
         }
         catch (Exception ex)
         {
@@ -4925,8 +4874,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         }
         if (MessageBox.Show($"Eliminare l'assegnazione {assign.PcName} → {assign.WorkflowNome}?",
             "Conferma", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
-        using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-        await http.DeleteAsync($"{WfApiBase}/api/pc-workflows/{assign.Id}");
+        await _apiSvc!.DeletePcWorkflowAsync(assign.Id);
         await LoadWorkflowAssignmentsAsync();
         }
         catch (Exception ex) { App.Log($"[BtnWfDeleteAssign_Click] {ex.Message}"); SetStatus($"❌ {ex.Message}"); }
@@ -6774,10 +6722,12 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (_pveHttp != null) return;
         var handler = new HttpClientHandler
         {
-            // Accetta self-signed (Proxmox usa cert auto-firmati) ma verifica l'hostname
-            ServerCertificateCustomValidationCallback = (_, _, _, errors) =>
+            // Accetta solo UntrustedRoot (Proxmox self-signed); blocca scaduti, revocati, hostname errato
+            ServerCertificateCustomValidationCallback = (_, _, chain, errors) =>
                 errors == System.Net.Security.SslPolicyErrors.None ||
-                errors == System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors
+                (errors == System.Net.Security.SslPolicyErrors.RemoteCertificateChainErrors &&
+                 chain?.ChainStatus.Length == 1 &&
+                 chain.ChainStatus[0].Status == System.Security.Cryptography.X509Certificates.X509ChainStatusFlags.UntrustedRoot)
         };
         _pveHttp = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
     }

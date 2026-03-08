@@ -1,4 +1,4 @@
-<!-- NovaSCM v1.5.0 -->
+<!-- NovaSCM v1.6.0 -->
 <Window x:Class="PolarisManager.UpdateToast"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -21,7 +21,7 @@
                 <TextBlock Text="Aggiornamento disponibile" FontSize="14" FontWeight="Bold"
                            Foreground="#fbbf24" VerticalAlignment="Center"/>
             </StackPanel>
-            <TextBlock x:Name="TxtVersion" Text="NovaSCM v1.5.0"
+            <TextBlock x:Name="TxtVersion" Text="NovaSCM v1.6.0"
                        Foreground="#e2e8f0" FontSize="13" Margin="0,0,0,4"/>
             <TextBlock x:Name="TxtNotes" Text="" Foreground="#94a3b8"
                        FontSize="12" Margin="0,0,0,12" TextWrapping="Wrap" MaxWidth="280"/>
