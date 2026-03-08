@@ -1,4 +1,4 @@
-// NovaSCM v1.5.0
+// NovaSCM v1.6.0
 using System.Windows;
 using System.Windows.Threading;
 
