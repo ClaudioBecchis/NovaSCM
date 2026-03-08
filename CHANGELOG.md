@@ -4,6 +4,51 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.4.0] - 2026-03-08
+
+### Nuove funzionalità
+
+- **UI-04**: Badge counters live nei nodi nav sidebar — mostra `[N]` per Workflow running e CR pending
+- **UI-07**: Sidebar collapse/expand con animazione fluida (pulsante ◀ nell'header)
+- **UI-03**: Fade-in animato al cambio tab (160ms)
+- **UI-02**: Toggle dark/light mode nelle Impostazioni tramite ModernWpf ThemeManager
+- **UI-05**: Indicatore live pulse per stato agent nel tab PC (pallino verde/grigio)
+- **UI-06**: Timeline orizzontale degli step nel tab Workflow (bubble numerate colorate per tipo step)
+- **FEAT-04**: Drag-and-drop per riordinare gli step del workflow con salvataggio automatico sull'API
+- **DX-01**: Config hot reload — FileSystemWatcher su `config.json`, ricarica senza riavvio con toast notifica
+- **DX-02**: Log viewer integrato — pannello espandibile nella status bar (click su `📋 Log`)
+- **PERF-03**: Cache HTTP con TTL (30-60s) e invalidazione automatica su POST/PUT/DELETE
+- **ARCH-01**: `NovaSCMApiService.cs` — classe centralizzata per tutte le chiamate HTTP verso l'API NovaSCM
+
+---
+
+## [1.3.0] - 2026-03-07
+
+### Nuove funzionalità
+
+- **FEAT-01**: Dashboard con 4 stat card in tempo reale (PC online, Workflow attivi, CR aperte, Device) + activity feed + auto-refresh 30s
+- **FEAT-02**: Sistema toast WPF nativo (`Notifier.cs`) senza dipendenze esterne — `WorkflowFailed()`, `PcOffline()`, `CertExpiringSoon()`
+- **FEAT-03**: Ricerca globale `Ctrl+K` — overlay con TextBox, ricerca su device/workflow/PC, navigazione diretta
+- **DX-03**: Shortcut tastiera — `Ctrl+K` ricerca, `F5`/`Ctrl+R` aggiorna, `Ctrl+N` nuova CR, `Ctrl+1-9` tab, `Escape` chiudi
+- **PERF-01**: DataGrid virtualizzazione su tutti i grid (`Recycling` mode)
+- **BUG-09**: Confronto versione con `System.Version.TryParse()` invece di `string.Compare`
+
+---
+
+## [1.2.0] - 2026-03-06
+
+### Sicurezza e correzioni
+
+- **BUG-01**: Autenticazione API con `hmac.compare_digest` (timing-safe)
+- **BUG-02**: Eliminata shell injection in `StepExecutor.cs` — uso di `ProcessStartInfo.ArgumentList`
+- **BUG-03/10**: SQLite WAL mode + `busy_timeout=5000` + 1 worker gunicorn
+- **BUG-06**: `EvaluateCondition()` per condizioni step (os=windows/linux, hostname=...)
+- **BUG-07**: Default `ApiUrl` non hardcoded in `AgentConfig.cs`
+- **BUG-08**: Timestamp server-side nei report step
+- **IMP-04/05**: Sanitizzazione package ID winget + logging Flask
+
+---
+
 ## [1.1.0] - 2026-03-07
 
 ### Nuove funzionalità
