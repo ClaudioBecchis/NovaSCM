@@ -22,6 +22,17 @@
 
 ---
 
+## 📋 Changelog rapido
+
+| Versione | Data | Note |
+|---|---|---|
+| **v1.6.1** | 2026-03-08 | 🔒 Security patch SEC-01: eliminata command injection in agent `run_cmd()` |
+| v1.6.0 | 2026-03-08 | Refactoring BUG-05/ARCH-01: static HttpClient, Flask init_db, SSL fix, try/catch |
+| v1.5.0 | 2026-03-08 | NovaSCMApiService centralizzato, cache API, workflow drag-and-drop |
+| v1.4.0 | 2026-03-07 | Tab Deploy OS, autounattend.xml builder, profili deploy |
+
+---
+
 ## 🚀 Quick Start
 
 ```powershell
