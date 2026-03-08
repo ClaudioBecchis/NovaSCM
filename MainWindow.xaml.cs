@@ -134,6 +134,16 @@ public class WfAssignRow : INotifyPropertyChanged
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(p));
 }
 
+// UI-06: step timeline view model
+public class WfTimelineItem
+{
+    public int    Ordine              { get; set; }
+    public string ShortNome           { get; set; } = "";
+    public string BubbleColor         { get; set; } = "#3B82F6";
+    public System.Windows.Visibility ConnectorVisibility { get; set; }
+        = System.Windows.Visibility.Collapsed;
+}
+
 // ── Deploy config ─────────────────────────────────────────────────────────────
 class DeployConfig
 {
@@ -196,6 +206,37 @@ public class CrRow
     public string LastSeen     { get; set; } = "";
 }
 
+// PERF-03: cache HTTP con TTL per evitare chiamate API ripetute
+public class ApiCache
+{
+    private readonly record struct Entry(string Json, DateTime Expires);
+    private readonly Dictionary<string, Entry> _cache = [];
+    private readonly int _maxEntries;
+
+    public ApiCache(int maxEntries = 64) => _maxEntries = maxEntries;
+
+    public bool TryGet(string url, out string json)
+    {
+        if (_cache.TryGetValue(url, out var e) && DateTime.UtcNow < e.Expires)
+        { json = e.Json; return true; }
+        json = "";
+        return false;
+    }
+
+    public void Set(string url, string json, TimeSpan ttl)
+    {
+        if (_cache.Count >= _maxEntries)
+        {
+            var oldest = _cache.MinBy(kv => kv.Value.Expires).Key;
+            _cache.Remove(oldest);
+        }
+        _cache[url] = new Entry(json, DateTime.UtcNow + ttl);
+    }
+
+    public void Invalidate(string url) => _cache.Remove(url);
+    public void InvalidateAll() => _cache.Clear();
+}
+
 public partial class MainWindow : Window
 {
     private static readonly string ConfigPath =
@@ -218,6 +259,12 @@ public partial class MainWindow : Window
     // FEAT-01: Dashboard timer
     private readonly System.Windows.Threading.DispatcherTimer _dashTimer = new()
         { Interval = TimeSpan.FromSeconds(30) };
+
+    // DX-01: config hot reload
+    private FileSystemWatcher? _configWatcher;
+
+    // PERF-03: API cache
+    private readonly ApiCache _apiCache = new();
 
     // FEAT-03: Search overlay record
     private record SearchResult(string Label, string Sub, int TabIndex, string Workspace = "asset");
@@ -270,6 +317,31 @@ public partial class MainWindow : Window
             try { _config = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath)) ?? new(); }
             catch { _config = new(); }
         ApplyConfigToUI();
+        InitConfigWatcher();
+    }
+
+    // DX-01: FileSystemWatcher per hot reload config
+    private void InitConfigWatcher()
+    {
+        _configWatcher?.Dispose();
+        var dir = Path.GetDirectoryName(ConfigPath);
+        if (dir == null || !Directory.Exists(dir)) return;
+        _configWatcher = new FileSystemWatcher(dir, Path.GetFileName(ConfigPath))
+        {
+            NotifyFilter      = NotifyFilters.LastWrite | NotifyFilters.Size,
+            EnableRaisingEvents = true
+        };
+        _configWatcher.Changed += (_, _) =>
+        {
+            Thread.Sleep(100); // debounce
+            Dispatcher.Invoke(() =>
+            {
+                LoadConfig();
+                // config ricaricata — mostra notifica
+                Notifier.Show("Config aggiornata", "config.json ricaricato automaticamente",
+                              Notifier.Level.Info, autoCloseSec: 4);
+            });
+        };
     }
 
     private void ApplyConfigToUI()
@@ -2645,8 +2717,13 @@ public partial class MainWindow : Window
         {
             try
             {
-                using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-                var json = await http.GetStringAsync(CrApiBase);
+                string json;
+                if (!_apiCache.TryGet(CrApiBase, out json))
+                {
+                    using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+                    json = await http.GetStringAsync(CrApiBase);
+                    _apiCache.Set(CrApiBase, json, TimeSpan.FromSeconds(60));
+                }
                 var doc  = System.Text.Json.JsonDocument.Parse(json);
                 foreach (var el in doc.RootElement.EnumerateArray())
                 {
@@ -2674,7 +2751,19 @@ public partial class MainWindow : Window
             TxtDashDevices.Text   = devices > 0 ? devices.ToString() : "—";
             DashFeed.ItemsSource  = feedItems.Take(12).ToList();
             TxtDashLastRefresh.Text = $"Aggiornato: {DateTime.Now:HH:mm:ss}";
+            UpdateNavBadges(wfRunning, crOpen);
         });
+    }
+
+    // UI-04: badge counters sui TreeViewItem della nav
+    private void UpdateNavBadges(int wfRunning, int crOpen)
+    {
+        TvItemWorkflow.Header  = wfRunning > 0
+            ? $"⚙️  Workflow  [{wfRunning}]"
+            : "⚙️  Workflow";
+        TvItemRichieste.Header = crOpen > 0
+            ? $"📋  Richieste CR  [{crOpen}]"
+            : "📋  Richieste CR";
     }
 
     private void BtnDashRefresh_Click(object s, RoutedEventArgs e)
@@ -2692,6 +2781,69 @@ public partial class MainWindow : Window
         MainTabs.SelectedIndex = 6;
         SwitchWorkspace("software");
         BtnWfNew_Click(s, e);
+    }
+
+    // ── DX-02: log viewer ─────────────────────────────────────────────────────
+    private bool _logVisible = false;
+    private const int LogPanelHeight = 160;
+
+    private void AppLog(string message)
+    {
+        var line = $"[{DateTime.Now:HH:mm:ss}]  {message}";
+        Dispatcher.Invoke(() =>
+        {
+            TxtLogViewer.AppendText(line + "\n");
+            TxtLogViewer.ScrollToEnd();
+        });
+    }
+
+    private void BtnToggleLog_Click(object s, System.Windows.Input.MouseButtonEventArgs e) => ToggleLog();
+    private void BtnCloseLog_Click(object s, RoutedEventArgs e) => ToggleLog(forceClose: true);
+    private void BtnClearLog_Click(object s, RoutedEventArgs e) => TxtLogViewer.Clear();
+
+    private void ToggleLog(bool forceClose = false)
+    {
+        _logVisible = forceClose ? false : !_logVisible;
+        var anim = new System.Windows.Media.Animation.DoubleAnimation
+        {
+            To       = _logVisible ? LogPanelHeight : 0,
+            Duration = TimeSpan.FromMilliseconds(200),
+            EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+        };
+        LogPanel.BeginAnimation(FrameworkElement.HeightProperty, anim);
+    }
+
+    // ── UI-02: dark/light mode toggle ────────────────────────────────────────
+    private bool _isDarkTheme = true;
+
+    private void BtnThemeToggle_Click(object s, RoutedEventArgs e)
+    {
+        _isDarkTheme = !_isDarkTheme;
+        ModernWpf.ThemeManager.Current.ApplicationTheme = _isDarkTheme
+            ? ModernWpf.ApplicationTheme.Dark
+            : ModernWpf.ApplicationTheme.Light;
+        BtnThemeToggle.Content = _isDarkTheme ? "☀️  Modalità chiara" : "🌙  Modalità scura";
+    }
+
+    // ── UI-07: sidebar collapse/expand ────────────────────────────────────────
+    private bool _navCollapsed = false;
+
+    private void BtnNavCollapse_Click(object s, RoutedEventArgs e) => ToggleSidebar();
+    private void NavExpandBtn_Click(object s, System.Windows.Input.MouseButtonEventArgs e) => ToggleSidebar();
+
+    private void ToggleSidebar()
+    {
+        _navCollapsed = !_navCollapsed;
+        var anim = new System.Windows.Media.Animation.DoubleAnimation
+        {
+            To           = _navCollapsed ? 0 : 236,
+            Duration     = TimeSpan.FromMilliseconds(180),
+            EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+        };
+        NavGrid.BeginAnimation(FrameworkElement.WidthProperty, anim);
+        NavExpandBtn.Visibility = _navCollapsed ? Visibility.Visible : Visibility.Collapsed;
     }
 
     // ── FEAT-03: Ricerca globale Ctrl+K ──────────────────────────────────────
@@ -2772,7 +2924,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.3.0";
+    private const string CurrentVersion = "1.4.0";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -3261,9 +3413,23 @@ public partial class MainWindow : Window
         LstCrPackages.ItemsSource = _crPackages;
     }
 
+    // UI-03: fade-in del contenuto al cambio tab
+    private void FadeInContent()
+    {
+        MainTabs.Opacity = 0;
+        var anim = new System.Windows.Media.Animation.DoubleAnimation(0, 1,
+            new Duration(TimeSpan.FromMilliseconds(160)))
+        {
+            EasingFunction = new System.Windows.Media.Animation.QuadraticEase
+                { EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut }
+        };
+        MainTabs.BeginAnimation(UIElement.OpacityProperty, anim);
+    }
+
     private async void MainTabs_SelectionChanged(object s, SelectionChangedEventArgs e)
     {
         if (e.Source != MainTabs) return;
+        FadeInContent();
         UpdateNavState(MainTabs.SelectedIndex);
         if (MainTabs.SelectedItem is not TabItem tab) return;
         var header = tab.Header?.ToString() ?? "";
@@ -3451,8 +3617,13 @@ public partial class MainWindow : Window
         {
             try
             {
-                using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-                var json = await http.GetStringAsync(CrApiBase);
+                string json;
+                if (!_apiCache.TryGet(CrApiBase, out json))
+                {
+                    using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+                    json = await http.GetStringAsync(CrApiBase);
+                    _apiCache.Set(CrApiBase, json, TimeSpan.FromSeconds(30));
+                }
                 var doc  = System.Text.Json.JsonDocument.Parse(json);
                 var rows = new List<CrRow>();
                 foreach (var el in doc.RootElement.EnumerateArray())
@@ -3528,6 +3699,7 @@ public partial class MainWindow : Window
             var body = System.Text.Json.JsonSerializer.Serialize(new { status });
             await http.PutAsync($"{CrApiBase}/{cr.Id}/status",
                 new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+            _apiCache.Invalidate(CrApiBase);
             await LoadCrListAsync();
         }
         catch (Exception ex)
@@ -3547,6 +3719,7 @@ public partial class MainWindow : Window
         {
             using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
             await http.DeleteAsync($"{CrApiBase}/{cr.Id}");
+            _apiCache.Invalidate(CrApiBase);
             await LoadCrListAsync();
         }
         catch (Exception ex)
@@ -4276,6 +4449,118 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             }
         }
         catch { /* ignora errori di rete durante il refresh */ }
+        RefreshWfTimeline();
+    }
+
+    // UI-06: aggiorna la timeline orizzontale degli step
+    private void RefreshWfTimeline()
+    {
+        var items = _wfStepRows
+            .OrderBy(s => s.Ordine)
+            .Select((s, idx) => new WfTimelineItem
+            {
+                Ordine    = s.Ordine,
+                ShortNome = s.Nome.Length > 8 ? s.Nome[..8] + "…" : s.Nome,
+                BubbleColor = s.Tipo switch
+                {
+                    var t when t.StartsWith("winget")   => "#7C3AED",
+                    var t when t.StartsWith("ps")       => "#1D4ED8",
+                    var t when t.StartsWith("shell")    => "#0F766E",
+                    var t when t.StartsWith("reboot")   => "#B45309",
+                    _                                   => "#3B82F6",
+                },
+                ConnectorVisibility = idx == 0
+                    ? System.Windows.Visibility.Collapsed
+                    : System.Windows.Visibility.Visible,
+            })
+            .ToList();
+        WfTimeline.ItemsSource = items;
+    }
+
+    // ── FEAT-04: Workflow drag-and-drop step reordering ───────────────────────
+    private WfStepRow? _draggedStep;
+    private System.Windows.Point _dragStartPoint;
+
+    private void GridWfSteps_PreviewMouseLeftButtonDown(object s, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _dragStartPoint = e.GetPosition(null);
+        var row = FindVisualParent<DataGridRow>((DependencyObject)e.OriginalSource);
+        _draggedStep = row?.Item as WfStepRow;
+    }
+
+    private void GridWfSteps_DragOver(object s, DragEventArgs e)
+    {
+        if (!e.Data.GetDataPresent(typeof(WfStepRow)))
+        { e.Effects = DragDropEffects.None; e.Handled = true; return; }
+        e.Effects = DragDropEffects.Move;
+        e.Handled = true;
+    }
+
+    private async void GridWfSteps_Drop(object s, DragEventArgs e)
+    {
+        if (_draggedStep == null || !e.Data.GetDataPresent(typeof(WfStepRow))) return;
+        var targetRow = FindVisualParent<DataGridRow>((DependencyObject)e.OriginalSource);
+        if (targetRow?.Item is not WfStepRow target || target == _draggedStep) { _draggedStep = null; return; }
+
+        // Riordina in locale
+        var from = _wfStepRows.IndexOf(_draggedStep);
+        var to   = _wfStepRows.IndexOf(target);
+        if (from < 0 || to < 0) { _draggedStep = null; return; }
+
+        _wfStepRows.Move(from, to);
+        // Ricalcola numeri d'ordine
+        for (int i = 0; i < _wfStepRows.Count; i++)
+            _wfStepRows[i].Ordine = i + 1;
+        RefreshWfTimeline();
+
+        // Salva il nuovo ordine sull'API
+        if (string.IsNullOrEmpty(WfApiBase) || _selectedWfId <= 0) { _draggedStep = null; return; }
+        try
+        {
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+            foreach (var step in _wfStepRows)
+            {
+                var body = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    nome      = step.Nome,
+                    tipo      = step.Tipo,
+                    parametri = step.Parametri,
+                    platform  = step.Platform,
+                    su_errore = step.SuErrore,
+                    ordine    = step.Ordine,
+                });
+                await http.PutAsync($"{WfApiBase}/api/workflows/{_selectedWfId}/steps/{step.Id}",
+                    new System.Net.Http.StringContent(body, System.Text.Encoding.UTF8, "application/json"));
+            }
+            TxtWfStatus.Text       = "✅  Ordine step salvato";
+            TxtWfStatus.Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(21, 128, 61));
+        }
+        catch { /* non critico — l'ordine locale rimane corretto */ }
+        _draggedStep = null;
+    }
+
+    private void GridWfSteps_PreviewMouseMove(object s, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_draggedStep == null || e.LeftButton != System.Windows.Input.MouseButtonState.Pressed) return;
+        var pos  = e.GetPosition(null);
+        var diff = _dragStartPoint - pos;
+        if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+            Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+        {
+            DragDrop.DoDragDrop(GridWfSteps, _draggedStep, DragDropEffects.Move);
+        }
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject
+    {
+        var parent = System.Windows.Media.VisualTreeHelper.GetParent(child);
+        while (parent != null)
+        {
+            if (parent is T typed) return typed;
+            parent = System.Windows.Media.VisualTreeHelper.GetParent(parent);
+        }
+        return null;
     }
 
     private async Task LoadWorkflowAssignmentsAsync()
