@@ -351,6 +351,39 @@
             </Border>
         </Grid>
 
+        <!-- ═══ LOG VIEWER (DX-02) ═══ -->
+        <Border x:Name="LogPanel" DockPanel.Dock="Bottom" Background="#0F172A"
+                BorderBrush="#1E3A5F" BorderThickness="0,1,0,0"
+                Height="0" MinHeight="0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="22"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0" Background="#1E2D45">
+                    <Grid>
+                        <TextBlock Text="📋  Log di sistema" Foreground="#94a3b8" FontSize="11"
+                                   FontWeight="SemiBold" VerticalAlignment="Center" Margin="8,0"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button Content="🗑️" ToolTip="Pulisci log" Background="Transparent"
+                                    BorderThickness="0" Foreground="#64748b" FontSize="11"
+                                    Padding="6,0" Cursor="Hand" Click="BtnClearLog_Click"/>
+                            <Button Content="✕" Background="Transparent" BorderThickness="0"
+                                    Foreground="#64748b" FontSize="11" Padding="6,0" Cursor="Hand"
+                                    Click="BtnCloseLog_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <TextBox x:Name="TxtLogViewer" Grid.Row="1"
+                         Background="#0A1628" Foreground="#7dd3fc"
+                         FontFamily="Consolas" FontSize="11"
+                         IsReadOnly="True" VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         BorderThickness="0" Padding="8,4"
+                         TextWrapping="NoWrap"/>
+            </Grid>
+        </Border>
+
         <!-- ═══ STATUS BAR ═══ -->
         <Border DockPanel.Dock="Bottom" Background="#E8EDF5" Height="24"
                 BorderBrush="#C8D0DC" BorderThickness="0,1,0,0">
@@ -366,6 +399,10 @@
                 <TextBlock Text="3/4 PC" Foreground="#7c3aed" FontSize="11"/>
                 <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
                 <TextBlock x:Name="StatusBarMsg" Text="Pronto" Foreground="#64748b" FontSize="11"/>
+                <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
+                <TextBlock x:Name="BtnToggleLog" Text="📋 Log" Foreground="#1D4ED8" FontSize="11"
+                           Cursor="Hand" ToolTip="Mostra/nascondi log di sistema"
+                           MouseDown="BtnToggleLog_Click"/>
             </StackPanel>
         </Border>
 
@@ -392,19 +429,40 @@
             </Grid>
         </Border>
 
+        <!-- Pulsante espandi sidebar (UI-07) — visibile solo quando nav è collassata -->
+        <Border x:Name="NavExpandBtn" DockPanel.Dock="Left" Width="18" Background="#1F3864"
+                Visibility="Collapsed" Cursor="Hand" MouseDown="NavExpandBtn_Click"
+                ToolTip="Espandi sidebar">
+            <TextBlock Text="▶" Foreground="White" FontSize="9"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+
         <!-- ═══ LEFT NAV (SCCM Console style) ═══ -->
-        <Grid DockPanel.Dock="Left" Width="236">
+        <Grid x:Name="NavGrid" DockPanel.Dock="Left" Width="236" MinWidth="0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="28"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="64"/>
             </Grid.RowDefinitions>
 
-            <!-- Workspace header -->
+            <!-- Workspace header con pulsante collapse (UI-07) -->
             <Border Grid.Row="0" Background="#1F3864">
-                <TextBlock x:Name="TxtWsHeader" Text="Asset e Conformità"
-                           Foreground="White" FontSize="12" FontWeight="SemiBold"
-                           VerticalAlignment="Center" Margin="10,0"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="28"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="TxtWsHeader" Text="Asset e Conformità"
+                               Grid.Column="0"
+                               Foreground="White" FontSize="12" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="10,0"/>
+                    <Button x:Name="BtnNavCollapse" Grid.Column="1"
+                            Content="◀" ToolTip="Comprimi/espandi sidebar"
+                            Background="Transparent" BorderThickness="0"
+                            Foreground="White" FontSize="10" Cursor="Hand"
+                            VerticalAlignment="Center" HorizontalAlignment="Center"
+                            Click="BtnNavCollapse_Click"/>
+                </Grid>
             </Border>
 
             <!-- TreeView navigation -->
@@ -490,14 +548,14 @@
                     <TreeViewItem Header="📦  Applicazioni"   Tag="2" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="⚙️  OPSI"           Tag="3" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="💿  Deploy OS"      Tag="5" Padding="4,3" Selected="NavTree_ItemSelected"/>
-                    <TreeViewItem Header="⚙️  Workflow"       Tag="6" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem x:Name="TvItemWorkflow" Header="⚙️  Workflow"       Tag="6" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="📜  Script Library" Tag="9" Padding="4,3" Selected="NavTree_ItemSelected"/>
                 </TreeViewItem>
 
                 <!-- Workspace: Monitoraggio -->
                 <TreeViewItem x:Name="TvGroupMonitor" IsExpanded="True" Padding="4,4"
                               Header="📊  Monitoraggio" Visibility="Collapsed">
-                    <TreeViewItem Header="📋  Richieste CR"   Tag="7" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem x:Name="TvItemRichieste" Header="📋  Richieste CR"   Tag="7" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="🖥️  Console SCCM"   Tag="8" Padding="4,3" Selected="NavTree_ItemSelected"/>
                 </TreeViewItem>
 
@@ -544,7 +602,7 @@
                     SelectionChanged="MainTabs_SelectionChanged">
             <TabControl.Template>
                 <ControlTemplate TargetType="TabControl">
-                    <ContentPresenter ContentSource="SelectedContent"/>
+                    <ContentPresenter x:Name="MainTabContent" ContentSource="SelectedContent"/>
                 </ControlTemplate>
             </TabControl.Template>
 
@@ -1121,7 +1179,28 @@
                             <DataGridTextColumn Header="CPU"     Binding="{Binding Cpu}"    Width="70"/>
                             <DataGridTextColumn Header="RAM"     Binding="{Binding Ram}"    Width="100"/>
                             <DataGridTextColumn Header="Stato"   Binding="{Binding Status}" Width="90"/>
-                            <DataGridTextColumn Header="Agent"   Binding="{Binding Agent}"  Width="70"/>
+                            <!-- UI-05: live pulse agent indicator -->
+                            <DataGridTemplateColumn Header="Agent" Width="80">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Ellipse Width="8" Height="8" Margin="0,0,5,0">
+                                                <Ellipse.Style>
+                                                    <Style TargetType="Ellipse">
+                                                        <Setter Property="Fill" Value="#94a3b8"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Agent}" Value="✅ Attivo">
+                                                                <Setter Property="Fill" Value="#22c55e"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Ellipse.Style>
+                                            </Ellipse>
+                                            <TextBlock Text="{Binding Agent}" VerticalAlignment="Center" FontSize="11"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
                         </DataGrid.Columns>
                     </DataGrid>
 
@@ -1507,6 +1586,8 @@
                             <Grid Grid.Row="0">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto"/>
+                                    <!-- UI-06: step timeline orizzontale -->
+                                    <RowDefinition Height="Auto"/>
                                     <RowDefinition Height="*"/>
                                 </Grid.RowDefinitions>
                                 <Border Grid.Row="0" Background="#EDF0F5" Padding="10,5">
@@ -1521,10 +1602,56 @@
                                         <Button Content="🗑"                 Style="{StaticResource BtnRed}"   Click="BtnWfDeleteStep_Click" Padding="10,6"/>
                                     </StackPanel>
                                 </Border>
-                                <DataGrid x:Name="GridWfSteps" Grid.Row="1"
+                                <!-- UI-06: Step timeline orizzontale -->
+                                <Border Grid.Row="1" Background="#F8FAFF" BorderBrush="#E2E8F0"
+                                        BorderThickness="0,0,0,1" Padding="10,8" Height="72">
+                                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Hidden">
+                                        <ItemsControl x:Name="WfTimeline">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal"/>
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <!-- Linea connettore (nascosta per primo elemento) -->
+                                                        <Rectangle Width="24" Height="2" Fill="#CBD5E1"
+                                                                   VerticalAlignment="Center"
+                                                                   Visibility="{Binding ConnectorVisibility}"/>
+                                                        <!-- Step bubble -->
+                                                        <StackPanel Width="64" HorizontalAlignment="Center">
+                                                            <Border Width="28" Height="28" CornerRadius="14"
+                                                                    HorizontalAlignment="Center"
+                                                                    Background="{Binding BubbleColor}">
+                                                                <TextBlock Text="{Binding Ordine}"
+                                                                           Foreground="White" FontSize="11"
+                                                                           FontWeight="SemiBold"
+                                                                           HorizontalAlignment="Center"
+                                                                           VerticalAlignment="Center"/>
+                                                            </Border>
+                                                            <TextBlock Text="{Binding ShortNome}"
+                                                                       FontSize="9" Foreground="#475569"
+                                                                       HorizontalAlignment="Center"
+                                                                       TextWrapping="Wrap" TextAlignment="Center"
+                                                                       MaxWidth="64" Margin="0,2,0,0"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </Border>
+                                <DataGrid x:Name="GridWfSteps" Grid.Row="2"
                                           AutoGenerateColumns="False"
                                           SelectionMode="Single" IsReadOnly="True"
-                                          CanUserAddRows="False" CanUserDeleteRows="False">
+                                          CanUserAddRows="False" CanUserDeleteRows="False"
+                                          AllowDrop="True"
+                                          PreviewMouseLeftButtonDown="GridWfSteps_PreviewMouseLeftButtonDown"
+                                          PreviewMouseMove="GridWfSteps_PreviewMouseMove"
+                                          Drop="GridWfSteps_Drop"
+                                          DragOver="GridWfSteps_DragOver">
                                     <DataGrid.Columns>
                                         <DataGridTextColumn Header="#"        Binding="{Binding Ordine}"   Width="44"/>
                                         <DataGridTextColumn Header="Nome"     Binding="{Binding Nome}"     Width="*"/>
@@ -2589,6 +2716,17 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         <TextBlock Text="URL API NovaSCM (tab Richieste)" Style="{StaticResource SettingsLabel}"/>
                         <TextBox x:Name="TxtNovaSCMApiUrl" Style="{StaticResource SettingsBox}"
                                  ToolTip="Es: http://192.168.20.110:9091/api/cr"/>
+
+                        <!-- UI-02: Aspetto -->
+                        <TextBlock Text="🎨 Aspetto" Style="{StaticResource GroupTitle}"/>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,8">
+                            <TextBlock Text="Tema dell'interfaccia:" Style="{StaticResource SettingsLabel}"
+                                       Margin="0,0,12,0" VerticalAlignment="Center"/>
+                            <Button x:Name="BtnThemeToggle" Content="☀️  Modalità chiara"
+                                    Style="{StaticResource BtnBlue}" Padding="10,5"
+                                    Click="BtnThemeToggle_Click"
+                                    ToolTip="Alterna tra tema scuro e chiaro"/>
+                        </StackPanel>
 
                         <!-- Pulsanti -->
                         <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
