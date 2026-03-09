@@ -4,6 +4,15 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.6] - 2026-03-09
+
+### Bugfix
+
+- **BUG**: Auto-update da tab About non installava la nuova versione — il codice scaricava l'installer Inno Setup (`NovaSCM-vX.X.X-Setup.exe`) ma tentava di copiarlo sopra l'exe corrente, poi lo rilanciava come app; ora rileva correttamente i file con "Setup" nel nome e li esegue con `/VERYSILENT /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /SP- /SUPPRESSMSGBOXES` (Inno Setup silent install); il path portable (`.exe` senza "Setup") mantiene il vecchio approccio copy+bat
+- **BUG**: `BtnCheckUpdate_Click` restituiva subito con messaggio di errore se l'URL API NovaSCM non era configurato — rimosso il guard errato (gli aggiornamenti provengono da GitHub, non dall'API)
+
+---
+
 ## [1.6.5] - 2026-03-09
 
 ### Bugfix

@@ -3013,7 +3013,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.6.5";
+    private const string CurrentVersion = "1.6.6";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -3112,14 +3112,6 @@ public partial class MainWindow : Window
         {
             TxtUpdateStatus.Text       = "⏳  Controllo in corso...";
             TxtUpdateStatus.Foreground = System.Windows.Media.Brushes.Gray;
-
-            if (string.IsNullOrEmpty(_config.NovaSCMApiUrl))
-            {
-                TxtUpdateStatus.Text       = "⚙️  Configura l'URL API NovaSCM nelle Impostazioni per ricevere aggiornamenti automatici";
-                TxtUpdateStatus.Foreground = System.Windows.Media.Brushes.Gold;
-                return;
-            }
-
             await CheckForUpdatesAsync(silent: false);
         }
         catch (Exception ex) { App.Log($"[BtnCheckUpdate_Click] {ex}"); }
@@ -3136,33 +3128,51 @@ public partial class MainWindow : Window
 
         try
         {
-            var tmpExe    = Path.Combine(Path.GetTempPath(), "NovaSCM_update.exe");
-            var currentExe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule!.FileName;
+            // Determina se l'asset è un installer Inno Setup (nome contiene "Setup")
+            bool isInstaller = _updateDownloadUrl.Contains("Setup", StringComparison.OrdinalIgnoreCase);
+            var  tmpFile     = Path.Combine(Path.GetTempPath(),
+                                            isInstaller ? "NovaSCM_setup.exe" : "NovaSCM_update.exe");
 
-            // Scarica nuovo exe
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMinutes(3) };
+            // Scarica
+            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+            http.DefaultRequestHeaders.Add("User-Agent", $"NovaSCM/{CurrentVersion}");
             var bytes = await http.GetByteArrayAsync(_updateDownloadUrl);
-            await File.WriteAllBytesAsync(tmpExe, bytes);
+            await File.WriteAllBytesAsync(tmpFile, bytes);
 
-            // Script bat: aspetta uscita processo, copia con retry, rilancia
-            var batPath = Path.Combine(Path.GetTempPath(), "novascm_updater.bat");
-            var batContent = $"@echo off\r\n" +
-                             $"ping 127.0.0.1 -n 4 > nul\r\n" +
-                             $":retry\r\n" +
-                             $"copy /Y \"{tmpExe}\" \"{currentExe}\" > nul 2>&1\r\n" +
-                             $"if errorlevel 1 ( ping 127.0.0.1 -n 3 > nul & goto retry )\r\n" +
-                             $"start \"\" \"{currentExe}\"\r\n" +
-                             $"del \"%~f0\"\r\n";
-            await File.WriteAllTextAsync(batPath, batContent, System.Text.Encoding.ASCII);
-
-            var updaterInfo = new ProcessStartInfo("cmd.exe")
+            if (isInstaller)
             {
-                UseShellExecute = true,
-                WindowStyle     = ProcessWindowStyle.Hidden
-            };
-            updaterInfo.ArgumentList.Add("/C");
-            updaterInfo.ArgumentList.Add(batPath);
-            Process.Start(updaterInfo);
+                // Inno Setup: avvia silenzioso — chiude l'app corrente e la rilancia automaticamente
+                var si = new ProcessStartInfo(tmpFile) { UseShellExecute = true };
+                si.ArgumentList.Add("/VERYSILENT");
+                si.ArgumentList.Add("/CLOSEAPPLICATIONS");
+                si.ArgumentList.Add("/RESTARTAPPLICATIONS");
+                si.ArgumentList.Add("/SP-");
+                si.ArgumentList.Add("/SUPPRESSMSGBOXES");
+                Process.Start(si);
+            }
+            else
+            {
+                // Portable exe: script bat copia con retry e rilancia
+                var currentExe = Environment.ProcessPath ?? Process.GetCurrentProcess().MainModule!.FileName;
+                var batPath    = Path.Combine(Path.GetTempPath(), "novascm_updater.bat");
+                var batContent = $"@echo off\r\n" +
+                                 $"ping 127.0.0.1 -n 4 > nul\r\n" +
+                                 $":retry\r\n" +
+                                 $"copy /Y \"{tmpFile}\" \"{currentExe}\" > nul 2>&1\r\n" +
+                                 $"if errorlevel 1 ( ping 127.0.0.1 -n 3 > nul & goto retry )\r\n" +
+                                 $"start \"\" \"{currentExe}\"\r\n" +
+                                 $"del \"%~f0\"\r\n";
+                await File.WriteAllTextAsync(batPath, batContent, System.Text.Encoding.ASCII);
+
+                var updaterInfo = new ProcessStartInfo("cmd.exe")
+                {
+                    UseShellExecute = true,
+                    WindowStyle     = ProcessWindowStyle.Hidden
+                };
+                updaterInfo.ArgumentList.Add("/C");
+                updaterInfo.ArgumentList.Add(batPath);
+                Process.Start(updaterInfo);
+            }
 
             Application.Current.Shutdown();
         }

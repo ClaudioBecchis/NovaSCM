@@ -26,7 +26,8 @@
 
 | Versione | Data | Note |
 |---|---|---|
-| **v1.6.5** | 2026-03-09 | Fix crash WorkflowStepWindow (NullRef in CmbTipo_SelectionChanged) |
+| **v1.6.6** | 2026-03-09 | Fix auto-update da About (installer Inno Setup rilevato e avviato silenzioso) |
+| v1.6.5 | 2026-03-09 | Fix crash WorkflowStepWindow (NullRef in CmbTipo_SelectionChanged) |
 | v1.6.4 | 2026-03-09 | null-guard API completo (11 handler) + comando POSIX thermal_zone |
 | v1.6.3 | 2026-03-09 | 🔒 DPAPI per credenziali in config.json + fix SEC-03 scp/ssh + null-guard API |
 | v1.6.2 | 2026-03-08 | 🔒 Security patch SEC-02: eliminata argument injection in UI (`ProcessStartInfo.ArgumentList`) |
