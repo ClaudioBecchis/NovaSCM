@@ -8,6 +8,11 @@ All notable changes to NovaSCM are documented here.
 
 ### Feature
 
+- **Deploy Floor**: nuova sezione `section='floor'` — vista grid/lista di tutti i PC in deploy
+  - Card PC con badge LED, step track (riga pallini), step corrente
+  - Side panel con pipeline grafica + log stream live
+  - Filtri rapidi per stato, toggle Grid/Lista
+  - Aggiornamento automatico ogni 5s via polling esistente
 - **UI redesign enterprise "Deploy War Room"**: nuovo `server/web/index.html` completo
   - Font IBM Plex Sans (UI) + DM Mono (hostname/codice/timestamp)
   - Palette `#080b12` industriale con CSS variables complete

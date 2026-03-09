@@ -26,7 +26,7 @@
 
 | Versione | Data | Note |
 |---|---|---|
-| **v1.8.0** | 2026-03-09 | ✨ UI redesign enterprise "Deploy War Room": IBM Plex Sans+DM Mono, LED animati, pipeline grafica, toast, sidebar ●/○ |
+| **v1.8.0** | 2026-03-09 | ✨ UI redesign "Deploy War Room" + sezione Deploy Floor (grid/lista PC, step track, side panel log live) |
 | v1.7.9 | 2026-03-09 | 🔒 Round 6: join_pass/admin_pass nascosti da API JSON + chmod 0o600 .api_key + windows_update skipped |
 | v1.7.8 | 2026-03-09 | 🐛 Round 5: api_key in installer + NOVASCM_PUBLIC_URL + set -euo pipefail + windows_update agent Python |
 | v1.7.7 | 2026-03-09 | ✨ CI/CD + secret bootstrap + Redis rate limit + JSON log + paginazione steps + xUnit .NET + AGENT_VER da file |
