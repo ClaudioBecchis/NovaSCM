@@ -4,6 +4,18 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.1] - 2026-03-09
+
+### Sicurezza
+
+- **BUG-NEW**: Validazione IP/hostname in `BtnRunScriptOnPc_Click` — il valore di `TxtScriptTarget.Text` veniva inserito senza validazione nella stringa PowerShell `Invoke-Command -ComputerName '{ip}'`; aggiunta validazione con `IPAddress.TryParse` + regex `^[a-zA-Z0-9\-\.]+$`; input non conformi restituiscono errore immediato senza esecuzione
+
+### Qualità
+
+- **INFO**: Rimosso il costruttore legacy `ProcessStartInfo(exe, args)` in 3 punti: `explorer.exe` per apertura cartella (usa `FileName`+`Arguments`), `powershell.exe` in `BtnRunScriptOnPc_Click` e `BtnRunScriptLocal_Click` (usa `ArgumentList`); questo elimina il rischio di argument splitting su path con spazi
+
+---
+
 ## [1.7.0] - 2026-03-09
 
 ### Sicurezza
