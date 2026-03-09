@@ -29,10 +29,13 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Escludi la sottocartella NovaSCMAgent (progetto separato Worker Service) -->
+    <!-- Escludi sottocartelle progetti separati -->
     <Compile Remove="NovaSCMAgent\**" />
     <EmbeddedResource Remove="NovaSCMAgent\**" />
     <None Remove="NovaSCMAgent\**" />
+    <Compile Remove="NovaSCMAgent.Tests\**" />
+    <EmbeddedResource Remove="NovaSCMAgent.Tests\**" />
+    <None Remove="NovaSCMAgent.Tests\**" />
   </ItemGroup>
 
 </Project>

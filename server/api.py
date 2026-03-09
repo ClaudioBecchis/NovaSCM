@@ -578,6 +578,25 @@ def report_step(pc_name):
         conn.commit()
     return jsonify({"ok": True, "step": step, "status": status})
 
+@app.route("/api/cr/by-name/<pc_name>/steps", methods=["GET"])
+@require_auth
+def get_steps_by_name(pc_name):
+    """Restituisce CR + steps per hostname — usato da deploy-client.html sul PC client."""
+    with get_db_ctx() as conn:
+        cr = conn.execute("SELECT * FROM cr WHERE pc_name=?",
+                          (pc_name.upper().strip(),)).fetchone()
+        if not cr:
+            return jsonify({"error": "CR non trovato"}), 404
+        steps = conn.execute(
+            "SELECT step_name, status, timestamp FROM cr_steps WHERE cr_id=? ORDER BY id ASC",
+            (cr["id"],)).fetchall()
+    return jsonify({
+        "cr_id":    cr["id"],
+        "pc_name":  cr["pc_name"],
+        "status":   cr["status"],
+        "steps":    [dict(s) for s in steps],
+    })
+
 @app.route("/api/cr/<int:cr_id>/steps", methods=["GET"])
 @require_auth
 def get_steps(cr_id):
@@ -1179,6 +1198,13 @@ def ui_index():
         "</head>",
         f'<meta name="x-api-key" content="{API_KEY}">\n</head>'
     )
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+@app.route("/deploy-client")
+def ui_deploy_client():
+    html_path = os.path.join(WEB_DIR, "deploy-client.html")
+    with open(html_path, encoding="utf-8") as f:
+        html = f.read()
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 @app.route("/web/<path:path>")
