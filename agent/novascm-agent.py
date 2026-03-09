@@ -316,6 +316,13 @@ def execute_step(step):
         log.info(f"  MSG: {text}")
         return True, text
 
+    elif tipo == "windows_update":
+        # I-2: windows_update è implementato solo nell'agent .NET (Windows)
+        # Su Linux restituisce skipped (None) per coerenza con StepExecutor.cs
+        if not IS_WINDOWS:
+            return None, "Skipped: windows_update è supportato solo su Windows (agent .NET)"
+        return False, "windows_update non supportato dall'agent Python su Windows — usa l'agent .NET"
+
     else:
         return False, f"Tipo step sconosciuto: {tipo}"
 

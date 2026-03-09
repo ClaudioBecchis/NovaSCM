@@ -1,10 +1,11 @@
 #!/bin/bash
 # NovaSCM Agent Installer — Linux (Debian/Ubuntu)
-# Uso: sudo bash install-linux.sh --api-url http://YOUR-SERVER-IP:9091
+# Uso: sudo bash install-linux.sh --api-url http://YOUR-SERVER-IP:9091 --api-key CHIAVE
 
-set -e
+set -euo pipefail
 
 API_URL="http://YOUR-SERVER-IP:9091"
+API_KEY=""
 PC_NAME=$(hostname | tr '[:lower:]' '[:upper:]')
 POLL_SEC=60
 AGENT_DIR="/opt/novascm-agent"
@@ -17,6 +18,7 @@ SVC_NAME="novascm-agent"
 while [[ $# -gt 0 ]]; do
     case $1 in
         --api-url)  API_URL="$2";  shift 2 ;;
+        --api-key)  API_KEY="$2";  shift 2 ;;
         --pc-name)  PC_NAME="$2";  shift 2 ;;
         --poll-sec) POLL_SEC="$2"; shift 2 ;;
         *) shift ;;
@@ -67,6 +69,7 @@ log "Scrivo config: $CONFIG_DIR/agent.json"
 cat > "$CONFIG_DIR/agent.json" << EOF
 {
   "api_url":  "$API_URL",
+  "api_key":  "$API_KEY",
   "pc_name":  "$PC_NAME",
   "poll_sec": $POLL_SEC
 }
