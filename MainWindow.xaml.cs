@@ -1611,15 +1611,15 @@ public partial class MainWindow : Window
                 File.WriteAllText(OuiDbPath, (isJson ? "JSON\n" : "TXT\n") + content);
             }
 
-            _ouiDb = ParseOuiFile(OuiDbPath);
+            _ouiDb = ParseOuiFile();
             App.Log($"[OUI] Database caricato: {_ouiDb.Count} record");
         }
         catch (Exception ex) { App.Log($"[OUI] Errore: {ex.Message}"); }
     }
 
-    private static Dictionary<string, string> ParseOuiFile(string path)
+    private static Dictionary<string, string> ParseOuiFile()
     {
-        var lines  = File.ReadAllLines(path);
+        var lines  = File.ReadAllLines(OuiDbPath);
         var isJson = lines.Length > 0 && lines[0].Trim() == "JSON";
         var db     = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
