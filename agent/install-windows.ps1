@@ -3,9 +3,9 @@
 # Uso: install-windows.ps1 -ApiUrl "http://192.168.20.110:9091" -PcName "NOME-PC"
 
 param(
-    [string]$ApiUrl  = "http://192.168.20.110:9091",
+    [string]$ApiUrl  = "http://YOUR-SERVER-IP:9091",
     [string]$PcName  = $env:COMPUTERNAME,
-    [string]$PollSec = "60"
+    [int]$PollSec    = 60
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,6 +40,7 @@ Log "Scrivo config: $ConfigFile"
 } | ConvertTo-Json | Set-Content -Path $ConfigFile -Encoding UTF8
 
 # ── 5. Scarica NSSM (Non-Sucking Service Manager) ────────────────────────────
+$NssmExe = "$AgentDir\nssm.exe"
 if (-not (Test-Path $NssmExe)) {
     Log "Scarico NSSM..."
     try {

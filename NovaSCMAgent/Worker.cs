@@ -31,7 +31,8 @@ public class Worker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken ct)
     {
-        _log.LogInformation("NovaSCM Agent v1.0.0 avviato — OS: {Os}", Environment.OSVersion);
+        var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
+        _log.LogInformation("NovaSCM Agent v{Version} avviato — OS: {Os}", version, Environment.OSVersion);
 
         while (!ct.IsCancellationRequested)
         {
@@ -42,7 +43,7 @@ public class Worker : BackgroundService
             {
                 var wf = await _api.GetWorkflowAsync(cfg.ApiUrl, cfg.PcName, ct, cfg.ApiKey);
 
-                if (wf != null && wf["error"] is null)
+                if (wf != null && wf.ContainsKey("workflow_nome") && wf["workflow_nome"] != null)
                 {
                     var nome = wf["workflow_nome"]?.GetValue<string>() ?? "?";
                     _log.LogInformation("Workflow trovato: '{Nome}'", nome);

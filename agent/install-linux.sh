@@ -62,6 +62,13 @@ cat > "$CONFIG_DIR/agent.json" << EOF
 EOF
 
 # ── 6. Crea systemd service ───────────────────────────────────────────────────
+# Crea utente dedicato se non esiste
+if ! id "novascm" &>/dev/null; then
+    log "Creo utente novascm..."
+    useradd --system --no-create-home --shell /usr/sbin/nologin novascm
+fi
+chown -R novascm:novascm "$AGENT_DIR" "$STATE_DIR" "$LOG_DIR"
+
 log "Creo systemd service $SVC_NAME..."
 cat > "/etc/systemd/system/$SVC_NAME.service" << EOF
 [Unit]
@@ -71,6 +78,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+User=novascm
+Group=novascm
 ExecStart=$PYTHON $AGENT_DIR/novascm-agent.py
 WorkingDirectory=$AGENT_DIR
 Restart=always
@@ -78,6 +87,10 @@ RestartSec=30
 StandardOutput=append:$LOG_DIR/agent.log
 StandardError=append:$LOG_DIR/agent.log
 Environment=PYTHONUNBUFFERED=1
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=$STATE_DIR $LOG_DIR
 
 [Install]
 WantedBy=multi-user.target

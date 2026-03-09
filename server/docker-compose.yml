@@ -9,8 +9,15 @@ services:
     environment:
       NOVASCM_DB: /data/novascm.db
       PORT: 9091
-      NOVASCM_API_KEY: "cambia-questa-chiave-in-produzione"
+      NOVASCM_API_KEY: ${NOVASCM_API_KEY}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.50'
+        reservations:
+          memory: 64m
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9091/health')"]
       interval: 30s

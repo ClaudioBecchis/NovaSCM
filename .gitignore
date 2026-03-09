@@ -39,8 +39,15 @@ NovaSCMAgent/obj/
 # Installer binaries (troppo grandi per git, usa GitHub Releases)
 installer/*.exe
 
-# Secrets / config locale (se aggiunto in futuro)
+# Secrets / config locale
 appsettings.local.json
 config.local.json
 .env
+server/.env
 config.json
+
+# Publish output specifico (binari compilati)
+publish_v2/
+publish_release/
+publish_small/
+NovaSCM-v*.zip

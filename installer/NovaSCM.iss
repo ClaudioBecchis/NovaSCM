@@ -1,13 +1,13 @@
 ; NovaSCM Inno Setup Script
 ; Compila con: "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" NovaSCM.iss
-; Output: C:\Temp\NovaSCM_installer\NovaSCM-v1.4.0-Setup.exe
+; Output: NovaSCM-v{#AppVersion}-Setup.exe
 
 #define AppName "NovaSCM"
 #define AppVersion "1.7.1"
 #define AppPublisher "Claudio Becchis"
 #define AppURL "https://polariscore.it/novascm"
 #define AppExeName "NovaSCM.exe"
-#define SourceDir "C:\Temp\NovaSCM_v1.7.1"
+#define SourceDir "..\publish_v2"
 
 [Setup]
 AppId={{A3F2E1D0-9B4C-4E7A-8F3D-2C1A6B5E9D08}
@@ -21,9 +21,9 @@ DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppName}
 AllowNoIcons=yes
 LicenseFile=
-OutputDir=C:\Temp\NovaSCM_installer
+OutputDir=.\Output
 OutputBaseFilename=NovaSCM-v{#AppVersion}-Setup
-SetupIconFile=C:\Users\Black\source\PolarisManager\Assets\novascm.ico
+SetupIconFile=..\Assets\novascm.ico
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
