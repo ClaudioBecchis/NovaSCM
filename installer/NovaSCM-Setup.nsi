@@ -9,7 +9,7 @@
 ; ─────────────────────────────────────────────────────────────────────────────
 
 !define APP_NAME     "NovaSCM"
-!define APP_VERSION  "1.0.0"
+!define APP_VERSION  "1.7.1"
 !define APP_PUBLISHER "Claudio Becchis"
 !define APP_EXE      "NovaSCM.exe"
 !define INSTALL_DIR  "$LOCALAPPDATA\Programs\${APP_NAME}"
@@ -87,7 +87,7 @@ Section "Uninstall"
     Delete "$INSTDIR\${APP_EXE}"
     Delete "$INSTDIR\Uninstall.exe"
     ; Delete "$INSTDIR\novascm.ico"
-    RMDir  "$INSTDIR"
+    RMDir /r "$INSTDIR"
 
     ; Rimuovi shortcuts
     Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
