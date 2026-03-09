@@ -26,7 +26,8 @@
 
 | Versione | Data | Note |
 |---|---|---|
-| **v1.7.6** | 2026-03-09 | 🐛 agent resume pw_id check + WindowsUpdate @catArgs + SHA256 installer PS1/SH |
+| **v1.7.7** | 2026-03-09 | ✨ CI/CD + secret bootstrap + Redis rate limit + JSON log + paginazione steps + xUnit .NET + AGENT_VER da file |
+| v1.7.6 | 2026-03-09 | 🐛 agent resume pw_id check + WindowsUpdate @catArgs + SHA256 installer PS1/SH |
 | v1.7.5 | 2026-03-09 | 🐛 /health senza auth (fix Docker healthcheck loop) + 78/78 test passing + using HttpResponse + DownloadExeAsync |
 | v1.7.4 | 2026-03-09 | 🔒 C-7 SHA256 verifica agente + M-2 /health path DB + M-7 indice status + I-2 AgentVer da Assembly |
 | v1.7.3 | 2026-03-09 | 🔒 SEC-1/2/3 + 10 bug fix: XML injection, pipe-to-shell, thread-safety HttpClient, resume pw_id, DB indici, ApiBase URI |
