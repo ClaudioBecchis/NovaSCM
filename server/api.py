@@ -171,6 +171,7 @@ def init_db():
         _idx = [
             ("idx_cr_pc_name",            "CREATE INDEX IF NOT EXISTS idx_cr_pc_name ON cr(pc_name)"),
             ("idx_pw_pc_name",            "CREATE INDEX IF NOT EXISTS idx_pw_pc_name ON pc_workflows(pc_name)"),
+            ("idx_pw_status",             "CREATE INDEX IF NOT EXISTS idx_pw_status ON pc_workflows(status)"),
             ("idx_pws_pc_workflow_id",    "CREATE INDEX IF NOT EXISTS idx_pws_pc_workflow_id ON pc_workflow_steps(pc_workflow_id)"),
         ]
         for _name, _sql in _idx:
@@ -935,6 +936,23 @@ def download_setup():
                      download_name="NovaSCM-Setup.exe",
                      mimetype="application/octet-stream")
 
+@app.route("/api/download/agent.sha256", methods=["GET"])
+@require_auth
+def download_agent_sha256():
+    """Restituisce l'hash SHA256 del file agente corrente (per verifica integrità)."""
+    import hashlib
+    ua      = request.headers.get("User-Agent", "").lower()
+    is_linux = "linux" in ua or request.args.get("os") == "linux"
+    fname   = "NovaSCMAgent-linux" if is_linux else "NovaSCMAgent.exe"
+    fpath   = os.path.join(os.path.dirname(DB), fname)
+    if not os.path.exists(fpath):
+        return jsonify({"error": f"{fname} non disponibile"}), 404
+    h = hashlib.sha256()
+    with open(fpath, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return Response(h.hexdigest(), mimetype="text/plain")
+
 @app.route("/api/download/agent", methods=["GET"])
 @require_auth
 def download_agent():
@@ -954,18 +972,23 @@ def download_agent():
 def download_agent_installer_ps1():
     """Genera install-windows.ps1 con API URL pre-configurato."""
     api_url = request.host_url.rstrip("/")
-    # SEC-2: scarica lo script in un file temporaneo ed esegui da file — no Invoke-Expression
+    # SEC-2 + C-7: scarica in file temp, verifica SHA256, poi esegui — no Invoke-Expression
     ps1 = f"""# NovaSCM Agent Installer — generato automaticamente
 $ApiUrl = "{api_url}"
 $PcName = $env:COMPUTERNAME
-$TmpFile = Join-Path $env:TEMP "NovaSCMAgentInstall_$([System.IO.Path]::GetRandomFileName()).ps1"
+$TmpAgent = Join-Path $env:TEMP "NovaSCMAgent_$([System.IO.Path]::GetRandomFileName()).exe"
 try {{
-    Invoke-WebRequest -Uri "$ApiUrl/api/download/agent-install-full.ps1" -OutFile $TmpFile -UseBasicParsing
-    if (Test-Path $TmpFile) {{
-        & powershell.exe -ExecutionPolicy Bypass -NonInteractive -File $TmpFile -ApiUrl $ApiUrl
+    Invoke-WebRequest -Uri "$ApiUrl/api/download/agent" -OutFile $TmpAgent -UseBasicParsing
+    $Expected = (Invoke-WebRequest -Uri "$ApiUrl/api/download/agent.sha256" -UseBasicParsing).Content.Trim()
+    $Actual   = (Get-FileHash $TmpAgent -Algorithm SHA256).Hash
+    if ($Actual -ieq $Expected) {{
+        Start-Process $TmpAgent -ArgumentList "--install --api-url $ApiUrl" -Wait -NoNewWindow
+    }} else {{
+        Write-Error "Hash mismatch: atteso $Expected, ottenuto $Actual"
+        exit 1
     }}
 }} finally {{
-    if (Test-Path $TmpFile) {{ Remove-Item -Force $TmpFile }}
+    if (Test-Path $TmpAgent) {{ Remove-Item -Force $TmpAgent }}
 }}
 """
     return Response(ps1, mimetype="text/plain",
@@ -976,15 +999,21 @@ try {{
 def download_agent_installer_sh():
     """Genera install-linux.sh con API URL pre-configurato."""
     api_url = request.host_url.rstrip("/")
-    # SEC-2: scarica in file temporaneo ed esegui — no pipe a bash
+    # SEC-2 + C-7: scarica agente in file temp, verifica SHA256, poi installa — no pipe a bash
     sh = f"""#!/bin/bash
 # NovaSCM Agent Installer — generato automaticamente
 set -euo pipefail
-TMPFILE=$(mktemp /tmp/novascm-install-XXXXXX.sh)
-trap 'rm -f "$TMPFILE"' EXIT
-curl -fsSL "{api_url}/api/download/agent-install-full.sh" -o "$TMPFILE"
-chmod +x "$TMPFILE"
-sudo bash "$TMPFILE" --api-url "{api_url}"
+TMPAGENT=$(mktemp /tmp/novascm-agent-XXXXXX)
+trap 'rm -f "$TMPAGENT"' EXIT
+curl -fsSL "{api_url}/api/download/agent?os=linux" -o "$TMPAGENT"
+EXPECTED=$(curl -fsSL "{api_url}/api/download/agent.sha256?os=linux")
+ACTUAL=$(sha256sum "$TMPAGENT" | awk '{{print $1}}')
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+    echo "Hash mismatch: atteso $EXPECTED, ottenuto $ACTUAL" >&2
+    exit 1
+fi
+chmod +x "$TMPAGENT"
+sudo "$TMPAGENT" --install --api-url "{api_url}"
 """
     return Response(sh, mimetype="text/plain",
                     headers={"Content-Disposition": "attachment; filename=agent-install.sh"})
@@ -1006,7 +1035,7 @@ def ui_static(path):
 @app.route("/health", methods=["GET"])
 @require_auth
 def health():
-    return jsonify({"status": "ok", "db": DB})
+    return jsonify({"status": "ok"})
 
 # ── Avvio ─────────────────────────────────────────────────────────────────────
 init_db()
