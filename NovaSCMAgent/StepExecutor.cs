@@ -184,17 +184,59 @@ public class StepExecutor
         """;
 
         _log.LogInformation("  Windows Update — categoria={Cat} exclude_drivers={Ed}", category, excludeDrivers);
-        return await Run("powershell.exe",
-            $"-NonInteractive -ExecutionPolicy Bypass -Command \"{script.Replace("\"", "\\\"")}\"",
-            ct: ct);
+        
+        var psi = new ProcessStartInfo("powershell.exe")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError  = true,
+            UseShellExecute        = false,
+            CreateNoWindow         = true,
+        };
+        psi.ArgumentList.Add("-NonInteractive");
+        psi.ArgumentList.Add("-ExecutionPolicy");
+        psi.ArgumentList.Add("Bypass");
+        psi.ArgumentList.Add("-Command");
+        psi.ArgumentList.Add(script);
+
+        try
+        {
+            using var proc = new Process { StartInfo = psi };
+            var sbOut = new System.Text.StringBuilder();
+            var sbErr = new System.Text.StringBuilder();
+            proc.OutputDataReceived += (_, e) => { if (e.Data != null) sbOut.AppendLine(e.Data); };
+            proc.ErrorDataReceived  += (_, e) => { if (e.Data != null) sbErr.AppendLine(e.Data); };
+            proc.Start();
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(StepTimeoutSec));
+            await proc.WaitForExitAsync(cts.Token);
+            var output = (sbOut.ToString() + sbErr.ToString()).Trim();
+            return new(proc.ExitCode == 0, output);
+        }
+        catch (OperationCanceledException) { return new(false, $"Timeout dopo {StepTimeoutSec}s"); }
+        catch (Exception ex)               { return new(false, ex.Message); }
     }
 
     private StepResult Reboot(JsonObject p)
     {
         var delay = p["delay"]?.GetValue<int>() ?? 5;
         _log.LogInformation("  Riavvio programmato tra {Delay}s", delay);
-        if (IsWindows) Process.Start("shutdown", $"/r /t {delay}");
-        else           Process.Start("shutdown", $"-r +{Math.Max(1, delay / 60)}");
+        if (IsWindows)
+        {
+            var psi = new ProcessStartInfo("shutdown");
+            psi.ArgumentList.Add("/r");
+            psi.ArgumentList.Add("/t");
+            psi.ArgumentList.Add(delay.ToString());
+            Process.Start(psi);
+        }
+        else
+        {
+            var psi = new ProcessStartInfo("shutdown");
+            psi.ArgumentList.Add("-r");
+            psi.ArgumentList.Add($"+{Math.Max(1, delay / 60)}");
+            Process.Start(psi);
+        }
         return new(true, $"Riavvio programmato tra {delay}s");
     }
 
@@ -245,19 +287,14 @@ public class StepExecutor
         catch (Exception ex)               { return new(false, ex.Message); }
     }
 
-    private async Task<StepResult> Run(string cmd, string? args = null,
+    private async Task<StepResult> Run(string cmd,
                                        Dictionary<string, string>? env = null,
                                        CancellationToken ct = default)
     {
-        // Se args è null, usa shell
-        string exe, arguments;
-        if (args is null)
-        {
-            (exe, arguments) = IsWindows
-                ? ("cmd.exe",  $"/c {cmd}")
-                : ("bash",     $"-c \"{cmd.Replace("\"", "\\\"")}\"");
-        }
-        else { exe = cmd; arguments = args; }
+        // Usa shell per eseguire il comando
+        var (exe, arguments) = IsWindows
+            ? ("cmd.exe",  $"/c {cmd}")
+            : ("bash",     $"-c \"{cmd.Replace("\"", "\\\"")}\"");
 
         var psi = new ProcessStartInfo(exe, arguments)
         {
