@@ -4,6 +4,14 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.5] - 2026-03-09
+
+### Bugfix
+
+- **BUG**: `WorkflowStepWindow` — `NullReferenceException` in `CmbTipo_SelectionChanged` alla riga 76 — l'evento scattava durante `InitializeComponent()` prima che `TxtParametri` fosse inizializzato; aggiunto guard `if (TxtParametri == null) return` (fix issue #5 e #6)
+
+---
+
 ## [1.6.4] - 2026-03-09
 
 ### Qualità (v5 analysis report)
