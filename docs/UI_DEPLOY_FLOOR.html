@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovaSCM — Deploy Floor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#06080f;color:#b8c4e0;font-family:'IBM Plex Sans',sans-serif;font-size:13px;overflow:hidden}
+
+:root{
+  --bg:#06080f;
+  --s1:#0a0d18;
+  --s2:#0e1220;
+  --s3:#131828;
+  --s4:#191f30;
+  --bd:#1a2035;
+  --bd2:#22304a;
+  --txt:#b8c4e0;
+  --hi:#dde8f8;
+  --lo:#3a4460;
+  --dim:#1e2540;
+  --ok:#00d97e;   --ok2:rgba(0,217,126,.12);   --ok3:rgba(0,217,126,.06);
+  --run:#4d9fff;  --run2:rgba(77,159,255,.12);  --run3:rgba(77,159,255,.06);
+  --warn:#f5a623; --warn2:rgba(245,166,35,.12); --warn3:rgba(245,166,35,.06);
+  --err:#ff4757;  --err2:rgba(255,71,87,.12);   --err3:rgba(255,71,87,.06);
+  --skip:#2a3350;
+  --r:4px; --r2:8px;
+}
+
+/* ─── LAYOUT ─── */
+.shell{display:flex;flex-direction:column;height:100vh}
+
+/* ─── HEADER ─── */
+.hdr{
+  height:44px;background:var(--s1);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;flex-shrink:0;position:relative;z-index:10;
+}
+.hdr::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(255,255,255,.006) 3px,rgba(255,255,255,.006) 4px);
+}
+.logo{display:flex;align-items:baseline;gap:2px}
+.logo-n{font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--run);letter-spacing:-.5px}
+.logo-s{font-family:'IBM Plex Sans',sans-serif;font-size:12px;color:var(--lo);margin-left:1px}
+.hdr-center{display:flex;align-items:center;gap:18px}
+.hdr-title{font-family:'DM Mono',monospace;font-size:11px;color:var(--lo);text-transform:uppercase;letter-spacing:2px}
+.hdr-right{display:flex;align-items:center;gap:14px}
+.live-pill{
+  display:flex;align-items:center;gap:6px;padding:3px 9px;
+  background:var(--ok3);border:1px solid rgba(0,217,126,.2);border-radius:20px;
+}
+.live-dot{width:5px;height:5px;border-radius:50%;background:var(--ok);animation:blink 1.8s ease-in-out infinite}
+.live-txt{font-family:'DM Mono',monospace;font-size:9.5px;color:var(--ok);text-transform:uppercase;letter-spacing:1px}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+.hdr-stat{font-family:'DM Mono',monospace;font-size:10.5px;color:var(--lo)}
+.hdr-stat span{color:var(--hi);margin-left:4px}
+.hdr-clock{font-family:'DM Mono',monospace;font-size:11px;color:var(--lo)}
+
+/* ─── TOOLBAR ─── */
+.toolbar{
+  height:38px;background:var(--s2);border-bottom:1px solid var(--bd);
+  display:flex;align-items:center;gap:0;padding:0 20px;flex-shrink:0;
+}
+.tb-btn{
+  height:38px;display:flex;align-items:center;gap:6px;padding:0 14px;
+  font-family:'DM Mono',monospace;font-size:10px;text-transform:uppercase;
+  letter-spacing:1px;color:var(--lo);cursor:pointer;border-right:1px solid var(--bd);
+  transition:all .12s;position:relative;
+}
+.tb-btn:first-child{border-left:1px solid var(--bd)}
+.tb-btn:hover{color:var(--txt);background:var(--s3)}
+.tb-btn.active{color:var(--run)}
+.tb-btn.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--run)}
+.tb-dot{width:5px;height:5px;border-radius:50%}
+.tb-sep{flex:1}
+.tb-filter{
+  display:flex;align-items:center;gap:6px;
+  font-family:'DM Mono',monospace;font-size:10px;color:var(--lo);
+}
+.filter-chip{
+  padding:2px 8px;border-radius:2px;cursor:pointer;
+  border:1px solid var(--bd);background:transparent;color:var(--lo);
+  font-family:'DM Mono',monospace;font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;
+  transition:all .12s;
+}
+.filter-chip.on{background:var(--run2);border-color:rgba(77,159,255,.3);color:var(--run)}
+.filter-chip:hover:not(.on){background:var(--s4);color:var(--txt)}
+
+/* ─── MAIN AREA ─── */
+.main{flex:1;display:flex;overflow:hidden}
+
+/* ─── DEPLOY GRID ─── */
+.grid-wrap{flex:1;overflow-y:auto;padding:16px;display:grid;align-content:start;gap:12px}
+.grid-wrap.view-grid{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.grid-wrap.view-list{grid-template-columns:1fr}
+
+/* ─── PC CARD ─── */
+.pc-card{
+  background:var(--s2);border:1px solid var(--bd);border-radius:var(--r2);
+  overflow:hidden;cursor:pointer;transition:border-color .15s,transform .1s;
+  position:relative;
+}
+.pc-card:hover{border-color:var(--bd2);transform:translateY(-1px)}
+.pc-card.selected{border-color:var(--run);box-shadow:0 0 0 1px rgba(77,159,255,.15)}
+.pc-card.st-running{border-left:3px solid var(--run)}
+.pc-card.st-completed{border-left:3px solid var(--ok)}
+.pc-card.st-failed{border-left:3px solid var(--err)}
+.pc-card.st-pending{border-left:3px solid var(--warn)}
+
+/* card header */
+.card-top{
+  padding:11px 13px 9px;
+  display:flex;align-items:flex-start;justify-content:space-between;
+}
+.card-host{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--hi);line-height:1}
+.card-wf{font-size:11px;color:var(--lo);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+.card-badge{flex-shrink:0;margin-left:8px}
+
+/* progress section */
+.card-prog{padding:0 13px 10px}
+.prog-bar{height:3px;background:var(--bd);border-radius:2px;overflow:hidden;margin-bottom:5px}
+.prog-fill{height:100%;border-radius:2px;transition:width .6s ease}
+.prog-run{background:linear-gradient(90deg,var(--run),rgba(77,159,255,.4));background-size:200%;animation:shimmer 2s linear infinite}
+.prog-ok {background:var(--ok)}
+.prog-err{background:var(--err)}
+.prog-warn{background:var(--warn)}
+@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+.card-meta{
+  display:flex;align-items:center;justify-content:space-between;
+  font-family:'DM Mono',monospace;font-size:10px;color:var(--lo);
+}
+.card-pct{color:var(--run)}
+.card-pct.ok{color:var(--ok)}
+.card-pct.err{color:var(--err)}
+
+/* step track mini */
+.card-steps{padding:0 13px 10px;display:flex;gap:3px}
+.step-dot{
+  flex:1;height:4px;border-radius:2px;
+  transition:background .3s;
+}
+.step-dot.done   {background:var(--ok)}
+.step-dot.running{background:var(--run);animation:pulse-bar 1.2s ease-in-out infinite}
+.step-dot.error  {background:var(--err)}
+.step-dot.skipped{background:var(--skip)}
+.step-dot.pending{background:var(--dim)}
+@keyframes pulse-bar{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* current step */
+.card-cur{
+  padding:7px 13px;border-top:1px solid var(--bd);
+  font-family:'DM Mono',monospace;font-size:10.5px;
+  display:flex;align-items:center;gap:7px;
+  background:var(--s1);
+}
+.cur-icon{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px}
+.cur-icon.run{background:var(--run2);border:1px solid rgba(77,159,255,.3);color:var(--run);animation:spin-glow 2s linear infinite}
+.cur-icon.ok{background:var(--ok2);border:1px solid rgba(0,217,126,.3);color:var(--ok)}
+.cur-icon.err{background:var(--err2);border:1px solid rgba(255,71,87,.3);color:var(--err)}
+.cur-icon.pend{background:var(--s4);border:1px solid var(--bd);color:var(--lo)}
+@keyframes spin-glow{0%,100%{box-shadow:0 0 0 0 rgba(77,159,255,.3)}50%{box-shadow:0 0 0 3px rgba(77,159,255,0)}}
+.cur-name{color:var(--txt);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cur-time{color:var(--lo);flex-shrink:0}
+
+/* ─── LIST VIEW CARD ─── */
+.view-list .pc-card .card-top{padding:9px 13px}
+.view-list .pc-card .card-prog{padding-bottom:7px}
+.view-list .pc-card .card-steps{padding-bottom:7px}
+
+/* ─── SIDE PANEL ─── */
+.side{
+  width:360px;min-width:360px;background:var(--s1);
+  border-left:1px solid var(--bd);display:flex;flex-direction:column;
+  transition:width .2s ease;
+}
+.side.collapsed{width:0;min-width:0;overflow:hidden}
+
+.side-head{
+  padding:13px 16px;border-bottom:1px solid var(--bd);flex-shrink:0;
+  display:flex;align-items:flex-start;justify-content:space-between;
+}
+.side-hostname{font-family:'DM Mono',monospace;font-size:16px;font-weight:500;color:var(--hi)}
+.side-wf{font-size:11.5px;color:var(--lo);margin-top:2px}
+.side-close{
+  width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+  background:var(--s3);border:1px solid var(--bd);border-radius:var(--r);
+  cursor:pointer;font-size:11px;color:var(--lo);transition:all .12s;flex-shrink:0;
+}
+.side-close:hover{background:var(--s4);color:var(--txt)}
+
+/* side meta bar */
+.side-meta{
+  padding:8px 16px;border-bottom:1px solid var(--bd);flex-shrink:0;
+  display:flex;align-items:center;gap:0;
+}
+.meta-item{
+  flex:1;padding:0 8px;border-right:1px solid var(--bd);
+  font-family:'DM Mono',monospace;font-size:9px;color:var(--lo);
+  text-transform:uppercase;letter-spacing:.8px;
+}
+.meta-item:first-child{padding-left:0}
+.meta-item:last-child{border-right:none}
+.meta-val{font-size:11.5px;color:var(--txt);margin-top:2px;display:block;letter-spacing:0;text-transform:none}
+
+/* side progress */
+.side-prog{padding:12px 16px;border-bottom:1px solid var(--bd);flex-shrink:0}
+.sp-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.sp-label{font-family:'DM Mono',monospace;font-size:9.5px;color:var(--lo);text-transform:uppercase;letter-spacing:1px}
+.sp-pct{font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--run)}
+.sp-bar{height:4px;background:var(--bd);border-radius:2px;overflow:hidden}
+.sp-fill{height:100%;border-radius:2px}
+
+/* pipeline full */
+.side-pipeline{padding:12px 16px;border-bottom:1px solid var(--bd);flex-shrink:0;overflow-x:auto}
+.pipeline-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--lo);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px}
+.pl{display:flex;align-items:flex-start;gap:0}
+.pl-node{display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;width:46px}
+.pl-c{
+  width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-family:'DM Mono',monospace;font-size:10px;font-weight:500;border:2px solid;
+}
+.pl-c.done   {background:rgba(0,217,126,.15);border-color:var(--ok);color:var(--ok)}
+.pl-c.running{background:rgba(77,159,255,.15);border-color:var(--run);color:var(--run);animation:pulse-c 1.4s ease-in-out infinite}
+.pl-c.pending{background:var(--s3);border-color:var(--bd);color:var(--lo)}
+.pl-c.error  {background:rgba(255,71,87,.15);border-color:var(--err);color:var(--err)}
+.pl-c.skipped{background:rgba(42,51,80,.3);border-color:var(--skip);color:var(--lo)}
+.pl-n{font-family:'DM Mono',monospace;font-size:8px;color:var(--lo);text-align:center;max-width:44px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:uppercase}
+.pl-t{font-size:7.5px;color:var(--dim);text-align:center;max-width:44px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pl-line{width:20px;height:2px;align-self:center;margin-bottom:26px;flex-shrink:0}
+.pl-line.done{background:var(--ok)}
+.pl-line.pending{background:var(--bd)}
+.pl-line.error{background:var(--err)}
+@keyframes pulse-c{0%,100%{box-shadow:0 0 0 0 rgba(77,159,255,.4)}50%{box-shadow:0 0 0 4px rgba(77,159,255,0)}}
+
+/* log stream */
+.side-log{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.log-head{padding:8px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.log-title{font-family:'DM Mono',monospace;font-size:9px;color:var(--lo);text-transform:uppercase;letter-spacing:1.5px}
+.log-clear{font-family:'DM Mono',monospace;font-size:9px;color:var(--lo);cursor:pointer;transition:color .12s}
+.log-clear:hover{color:var(--txt)}
+.log-body{flex:1;overflow-y:auto;padding:10px 14px;font-family:'DM Mono',monospace;font-size:10.5px;line-height:1.7}
+.log-line{display:flex;gap:10px;align-items:baseline}
+.log-ts{color:var(--dim);flex-shrink:0;font-size:9.5px}
+.log-ok  {color:var(--ok)}
+.log-err {color:var(--err)}
+.log-warn{color:var(--warn)}
+.log-run {color:var(--run)}
+.log-dim {color:var(--lo)}
+.log-new{animation:log-appear .25s ease}
+@keyframes log-appear{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:none}}
+
+/* ─── BADGE ─── */
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:2px 7px;border-radius:3px;
+  font-family:'DM Mono',monospace;font-size:9.5px;font-weight:500;
+  text-transform:uppercase;letter-spacing:.3px;
+}
+.b-ok  {background:var(--ok2);color:var(--ok);border:1px solid rgba(0,217,126,.2)}
+.b-run {background:var(--run2);color:var(--run);border:1px solid rgba(77,159,255,.2)}
+.b-warn{background:var(--warn2);color:var(--warn);border:1px solid rgba(245,166,35,.2)}
+.b-err {background:var(--err2);color:var(--err);border:1px solid rgba(255,71,87,.2)}
+.b-pend{background:var(--s4);color:var(--lo);border:1px solid var(--bd)}
+
+/* ─── LED ─── */
+.led{width:6px;height:6px;border-radius:50%;display:inline-block;flex-shrink:0}
+.led-ok {background:var(--ok);box-shadow:0 0 5px var(--ok)}
+.led-run{background:var(--run);box-shadow:0 0 5px var(--run);animation:blink 1.4s ease-in-out infinite}
+.led-err{background:var(--err);box-shadow:0 0 5px var(--err)}
+.led-warn{background:var(--warn);box-shadow:0 0 4px var(--warn)}
+
+/* ─── SCROLLBAR ─── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:2px}
+
+/* ─── EMPTY STATE ─── */
+.empty-side{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1.5px;
+}
+.empty-icon{font-size:32px;opacity:.3;filter:grayscale(1)}
+
+/* ─── FOOTER STATUS BAR ─── */
+.ftr{
+  height:26px;background:var(--s1);border-top:1px solid var(--bd);
+  display:flex;align-items:center;padding:0 16px;gap:20px;flex-shrink:0;
+}
+.ftr-item{font-family:'DM Mono',monospace;font-size:9.5px;color:var(--lo);display:flex;align-items:center;gap:5px}
+.ftr-item span{color:var(--txt)}
+.ftr-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+
+/* ─── OVERLAY GRID LINES ─── */
+.grid-wrap::before{
+  content:'';position:fixed;inset:0;pointer-events:none;
+  background-image:linear-gradient(var(--bd) 1px,transparent 1px),linear-gradient(90deg,var(--bd) 1px,transparent 1px);
+  background-size:32px 32px;opacity:.25;z-index:0;
+}
+.pc-card{position:relative;z-index:1}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── HEADER ── -->
+  <header class="hdr">
+    <div class="logo">
+      <span class="logo-n">NOVA</span><span class="logo-s">SCM</span>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--lo);margin-left:10px;letter-spacing:1.5px;text-transform:uppercase">/ Deploy Floor</span>
+    </div>
+    <div class="hdr-center">
+      <div class="live-pill"><span class="live-dot"></span><span class="live-txt">Live</span></div>
+      <div class="hdr-stat">Attivi<span id="cnt-run">3</span></div>
+      <div class="hdr-stat">Completati<span id="cnt-ok" style="color:var(--ok)">5</span></div>
+      <div class="hdr-stat">Falliti<span id="cnt-err" style="color:var(--err)">1</span></div>
+      <div class="hdr-stat">In attesa<span id="cnt-pend" style="color:var(--warn)">2</span></div>
+    </div>
+    <div class="hdr-right">
+      <div class="hdr-clock" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- ── TOOLBAR ── -->
+  <div class="toolbar">
+    <div class="tb-btn active" onclick="setView('grid',this)">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="0" y="0" width="5" height="5" rx="1"/><rect x="7" y="0" width="5" height="5" rx="1"/><rect x="0" y="7" width="5" height="5" rx="1"/><rect x="7" y="7" width="5" height="5" rx="1"/></svg>
+      Grid
+    </div>
+    <div class="tb-btn" onclick="setView('list',this)">
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><rect x="0" y="1" width="12" height="2" rx="1"/><rect x="0" y="5" width="12" height="2" rx="1"/><rect x="0" y="9" width="12" height="2" rx="1"/></svg>
+      Lista
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-filter">
+      <span style="margin-right:4px;font-size:9px;letter-spacing:1px;text-transform:uppercase">Filtro:</span>
+      <span class="filter-chip on" data-f="all" onclick="setFilter('all',this)">Tutti</span>
+      <span class="filter-chip" data-f="running" onclick="setFilter('running',this)">Running</span>
+      <span class="filter-chip" data-f="pending" onclick="setFilter('pending',this)">Pending</span>
+      <span class="filter-chip" data-f="completed" onclick="setFilter('completed',this)">Done</span>
+      <span class="filter-chip" data-f="failed" onclick="setFilter('failed',this)">Error</span>
+    </div>
+  </div>
+
+  <!-- ── MAIN ── -->
+  <div class="main">
+
+    <!-- GRID -->
+    <div class="grid-wrap view-grid" id="grid"></div>
+
+    <!-- SIDE PANEL -->
+    <div class="side collapsed" id="side">
+      <div id="side-empty" class="empty-side">
+        <div class="empty-icon">⬡</div>
+        <div>Seleziona un PC</div>
+      </div>
+      <div id="side-content" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+        <div class="side-head">
+          <div>
+            <div class="side-hostname" id="s-host">—</div>
+            <div class="side-wf" id="s-wf">—</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div id="s-badge"></div>
+            <div class="side-close" onclick="closePanel()">✕</div>
+          </div>
+        </div>
+
+        <div class="side-meta">
+          <div class="meta-item">OS<span class="meta-val" id="s-os">—</span></div>
+          <div class="meta-item">Workflow<span class="meta-val" id="s-wf2">—</span></div>
+          <div class="meta-item">Avviato<span class="meta-val" id="s-started">—</span></div>
+          <div class="meta-item">Last seen<span class="meta-val" id="s-seen">—</span></div>
+        </div>
+
+        <div class="side-prog">
+          <div class="sp-row">
+            <span class="sp-label">Progresso</span>
+            <span class="sp-pct" id="s-pct">0%</span>
+          </div>
+          <div class="sp-bar"><div class="sp-fill prog-run" id="s-bar" style="width:0%"></div></div>
+        </div>
+
+        <div class="side-pipeline">
+          <div class="pipeline-lbl">Pipeline</div>
+          <div class="pl" id="s-pipeline"></div>
+        </div>
+
+        <div class="side-log">
+          <div class="log-head">
+            <span class="log-title">Log Agent</span>
+            <span class="log-clear" onclick="clearLog()">Pulisci</span>
+          </div>
+          <div class="log-body" id="s-log"></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <footer class="ftr">
+    <div class="ftr-item"><span class="led led-run"></span> Polling ogni 5s</div>
+    <div class="ftr-item">Server<span>192.168.20.110:9091</span></div>
+    <div class="ftr-item">DB<span>/data/novascm.db</span></div>
+    <div class="ftr-right">
+      <div class="ftr-item">v<span>1.7.8</span></div>
+      <div class="ftr-item"><span class="led led-ok"></span> <span style="color:var(--ok)">Operational</span></div>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────────────────────────
+const STEP_TYPES = ['winget_install','ps_script','shell_script','windows_update','reg_set','file_copy','reboot','apt_install','systemd_service'];
+const WF_NAMES   = ['Deploy Base Win 11','Domain Join + SW Pack','Dev Workstation','Server Hardening','Office 365 Setup'];
+const OS_NAMES   = ['Windows 11 Pro','Windows 10 Pro','Windows 11 Enterprise','Ubuntu 22.04 LTS'];
+
+const PCS = [
+  { id:1, host:'WKS-MKTG-042',   wf:'Deploy Base Win 11',   os:'Windows 11 Pro',       status:'running',  prog:68, step:6, steps:9, curStep:'Domain Join',       tipo:'ps_script',  started:'14m fa', seen:'2s fa'  },
+  { id:2, host:'SRV-DOMJOIN-11', wf:'Domain Join + SW Pack', os:'Windows 11 Enterprise',status:'running',  prog:33, step:3, steps:9, curStep:'Windows Update',     tipo:'windows_update',started:'22m fa',seen:'7s fa'  },
+  { id:3, host:'DEVWS-CLAUDIO',  wf:'Dev Workstation',       os:'Windows 11 Pro',       status:'running',  prog:89, step:8, steps:9, curStep:'Configura Firewall', tipo:'ps_script',  started:'38m fa', seen:'1s fa'  },
+  { id:4, host:'WKS-HR-22',      wf:'Deploy Base Win 11',   os:'Windows 11 Pro',       status:'completed',prog:100,step:9, steps:9, curStep:'Completato',         tipo:'—',           started:'3h fa',  seen:'3h fa'  },
+  { id:5, host:'SRV-FILE-01',    wf:'Server Hardening',      os:'Windows Server 2022',  status:'completed',prog:100,step:7, steps:7, curStep:'Completato',         tipo:'—',           started:'5h fa',  seen:'5h fa'  },
+  { id:6, host:'NOTEBOOK-07',    wf:'Deploy Base Win 11',   os:'Windows 10 Pro',       status:'failed',   prog:44, step:4, steps:9, curStep:'Installa Chrome',    tipo:'winget_install',started:'2h fa', seen:'2h fa'  },
+  { id:7, host:'WKS-FINANCE-03', wf:'Office 365 Setup',      os:'Windows 11 Pro',       status:'pending',  prog:0,  step:0, steps:6, curStep:'In attesa agent',    tipo:'—',           started:'—',      seen:'—'      },
+  { id:8, host:'NOTEBOOK-SARA',  wf:'Domain Join + SW Pack', os:'Windows 11 Enterprise',status:'pending',  prog:0,  step:0, steps:9, curStep:'In attesa agent',    tipo:'—',           started:'—',      seen:'—'      },
+  { id:9, host:'WKS-MKTG-019',   wf:'Deploy Base Win 11',   os:'Windows 11 Pro',       status:'completed',prog:100,step:9, steps:9, curStep:'Completato',         tipo:'—',           started:'6h fa',  seen:'6h fa'  },
+  { id:10,host:'DEVWS-MARCO',    wf:'Dev Workstation',       os:'Ubuntu 22.04 LTS',     status:'completed',prog:100,step:12,steps:12,curStep:'Completato',         tipo:'—',           started:'1h fa',  seen:'1h fa'  },
+  { id:11,host:'SRV-BACKUP-02',  wf:'Server Hardening',      os:'Windows Server 2022',  status:'completed',prog:100,step:7, steps:7, curStep:'Completato',         tipo:'—',           started:'4h fa',  seen:'4h fa'  },
+];
+
+// Build full step list per PC
+function buildSteps(pc) {
+  const s = [];
+  for (let i=1; i<=pc.steps; i++) {
+    let status = 'pending';
+    if (i < pc.step)  status = 'done';
+    if (i === pc.step && pc.status === 'running') status = 'running';
+    if (i === pc.step && pc.status === 'failed')  status = 'error';
+    if (i === pc.step && pc.status === 'completed') status = 'done';
+    if (pc.status === 'completed') status = 'done';
+    s.push({ ord:i, nome:'Step '+i, tipo:STEP_TYPES[i%STEP_TYPES.length], status });
+  }
+  return s;
+}
+
+// Logs per PC
+const PC_LOGS = {};
+PCS.forEach(pc => {
+  const logs = [];
+  const base = Date.now() - (pc.status==='completed'?3600000:600000);
+  if (pc.status !== 'pending') {
+    logs.push({ts:base,       cls:'log-dim', msg:'Agent connesso · ' + pc.host});
+    logs.push({ts:base+5000,  cls:'log-run', msg:'Avvio workflow: ' + pc.wf});
+    for (let i=1; i<Math.min(pc.step, pc.steps); i++) {
+      logs.push({ts:base+i*30000, cls:'log-ok',  msg:`[step ${i}] ${STEP_TYPES[i%STEP_TYPES.length]} → ok`});
+    }
+    if (pc.status==='running') {
+      logs.push({ts:Date.now()-15000, cls:'log-run', msg:`[step ${pc.step}] Avvio ${pc.tipo}...`});
+      logs.push({ts:Date.now()-8000,  cls:'log-dim', msg:`[step ${pc.step}] Esecuzione in corso...`});
+    } else if (pc.status==='completed') {
+      logs.push({ts:base+pc.steps*30000,cls:'log-ok', msg:'Workflow completato con successo ✓'});
+    } else if (pc.status==='failed') {
+      logs.push({ts:Date.now()-7200000, cls:'log-err', msg:`[step ${pc.step}] ERRORE: exit code 1`});
+      logs.push({ts:Date.now()-7199000, cls:'log-err', msg:'Workflow interrotto — su_errore=stop'});
+    }
+  }
+  PC_LOGS[pc.id] = logs;
+});
+
+// ─── STATE ───────────────────────────────────────────────────────────────
+let view    = 'grid';
+let filter  = 'all';
+let selId   = null;
+
+// ─── RENDER ──────────────────────────────────────────────────────────────
+function statusClass(s) {
+  return {running:'b-run',completed:'b-ok',failed:'b-err',pending:'b-warn'}[s] || 'b-pend';
+}
+function statusLabel(s) {
+  return {running:'Running',completed:'Done',failed:'Failed',pending:'Pending'}[s] || s;
+}
+function statusLedClass(s) {
+  return {running:'led-run',completed:'led-ok',failed:'led-err',pending:'led-warn'}[s] || '';
+}
+function progClass(s) {
+  return {running:'prog-run',completed:'prog-ok',failed:'prog-err',pending:'prog-warn'}[s] || 'prog-warn';
+}
+function pctColor(s) {
+  return {running:'',completed:'ok',failed:'err',pending:''}[s] || '';
+}
+function curIconClass(s) {
+  return {running:'run',completed:'ok',failed:'err',pending:'pend'}[s] || 'pend';
+}
+
+function renderCard(pc) {
+  const steps = buildSteps(pc);
+  const dots  = steps.map(s => `<div class="step-dot ${s.status}"></div>`).join('');
+  const curIcon = curIconClass(pc.status);
+  const iconChar = {run:'▶',ok:'✓',err:'✕',pend:'○'}[curIcon];
+
+  return `
+<div class="pc-card st-${pc.status}${selId===pc.id?' selected':''}" onclick="selectPc(${pc.id})">
+  <div class="card-top">
+    <div>
+      <div class="card-host">${pc.host}</div>
+      <div class="card-wf">${pc.wf}</div>
+    </div>
+    <div class="card-badge">
+      <span class="badge ${statusClass(pc.status)}">
+        <span class="led ${statusLedClass(pc.status)}"></span>
+        ${statusLabel(pc.status)}
+      </span>
+    </div>
+  </div>
+  <div class="card-prog">
+    <div class="prog-bar">
+      <div class="prog-fill ${progClass(pc.status)}" style="width:${pc.prog}%"></div>
+    </div>
+    <div class="card-meta">
+      <span class="card-pct ${pctColor(pc.status)}">${pc.prog}%</span>
+      <span>${pc.status!=='pending'?`step ${pc.step}/${pc.steps}`:'—'}</span>
+      <span>${pc.seen}</span>
+    </div>
+  </div>
+  <div class="card-steps">${dots}</div>
+  <div class="card-cur">
+    <div class="cur-icon ${curIcon}">${iconChar}</div>
+    <div class="cur-name">${pc.curStep}</div>
+    <div class="cur-time">${pc.status==='running'?pc.tipo:''}</div>
+  </div>
+</div>`;
+}
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  const filtered = filter === 'all' ? PCS : PCS.filter(p => p.status === filter);
+  grid.innerHTML = filtered.map(renderCard).join('');
+}
+
+// ─── SIDE PANEL ──────────────────────────────────────────────────────────
+function selectPc(id) {
+  selId = selId === id ? null : id;
+  if (!selId) { closePanel(); return; }
+  renderGrid();
+  openPanel(PCS.find(p => p.id === id));
+}
+
+function openPanel(pc) {
+  const side = document.getElementById('side');
+  side.classList.remove('collapsed');
+  document.getElementById('side-empty').style.display = 'none';
+  const sc = document.getElementById('side-content');
+  sc.style.display = 'flex';
+
+  // header
+  document.getElementById('s-host').textContent = pc.host;
+  document.getElementById('s-wf').textContent   = pc.wf;
+  document.getElementById('s-badge').innerHTML  =
+    `<span class="badge ${statusClass(pc.status)}"><span class="led ${statusLedClass(pc.status)}"></span>${statusLabel(pc.status)}</span>`;
+
+  // meta
+  document.getElementById('s-os').textContent      = pc.os;
+  document.getElementById('s-wf2').textContent     = pc.wf.split(' ').slice(0,2).join(' ');
+  document.getElementById('s-started').textContent = pc.started;
+  document.getElementById('s-seen').textContent    = pc.seen;
+
+  // progress
+  const pct = pc.prog;
+  document.getElementById('s-pct').textContent = pct + '%';
+  document.getElementById('s-pct').style.color = pc.status==='completed'?'var(--ok)':pc.status==='failed'?'var(--err)':'var(--run)';
+  const bar = document.getElementById('s-bar');
+  bar.style.width = pct + '%';
+  bar.className = 'sp-fill ' + progClass(pc.status);
+
+  // pipeline
+  renderPipeline(pc);
+
+  // log
+  renderLog(pc);
+}
+
+function renderPipeline(pc) {
+  const steps = buildSteps(pc);
+  const container = document.getElementById('s-pipeline');
+  let html = '';
+  steps.forEach((s, i) => {
+    const lineClass = s.status==='done'?'done':s.status==='error'?'error':'pending';
+    html += `<div style="display:flex;align-items:flex-start">
+      <div class="pl-node">
+        <div class="pl-c ${s.status}">${s.ord}</div>
+        <div class="pl-n">${truncate(s.nome,8)}</div>
+        <div class="pl-t">${s.tipo}</div>
+      </div>`;
+    if (i < steps.length-1) html += `<div class="pl-line ${lineClass}"></div>`;
+    html += `</div>`;
+  });
+  container.innerHTML = html;
+}
+
+function renderLog(pc) {
+  const logEl = document.getElementById('s-log');
+  const logs  = PC_LOGS[pc.id] || [];
+  logEl.innerHTML = logs.map(l => `
+    <div class="log-line">
+      <span class="log-ts">${fmtTs(l.ts)}</span>
+      <span class="${l.cls}">${escHtml(l.msg)}</span>
+    </div>`).join('');
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function closePanel() {
+  selId = null;
+  document.getElementById('side').classList.add('collapsed');
+  document.getElementById('side-content').style.display = 'none';
+  document.getElementById('side-empty').style.display   = 'flex';
+  renderGrid();
+}
+
+function clearLog() {
+  document.getElementById('s-log').innerHTML = '';
+}
+
+// ─── VIEW / FILTER ────────────────────────────────────────────────────────
+function setView(v, el) {
+  view = v;
+  const grid = document.getElementById('grid');
+  grid.className = 'grid-wrap view-' + v;
+  document.querySelectorAll('.tb-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderGrid();
+}
+
+function setFilter(f, el) {
+  filter = f;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('on'));
+  el.classList.add('on');
+  renderGrid();
+}
+
+// ─── SIMULATION ───────────────────────────────────────────────────────────
+let tick = 0;
+function simulate() {
+  tick++;
+  PCS.forEach(pc => {
+    if (pc.status !== 'running') return;
+    // progress creep
+    if (tick % 3 === 0) {
+      pc.prog = Math.min(100, pc.prog + (Math.random() > .7 ? 1 : 0));
+    }
+    // update last seen
+    pc.seen = Math.floor(Math.random()*12)+'s fa';
+    // occasional log entry
+    if (tick % 8 === 0) {
+      const msgs = [
+        {cls:'log-dim', msg:`Heartbeat · step ${pc.step} in corso...`},
+        {cls:'log-run', msg:`[${pc.tipo}] esecuzione: ${Math.floor(Math.random()*100)}%`},
+        {cls:'log-dim', msg:`Waiting for response...`},
+      ];
+      const entry = msgs[Math.floor(Math.random()*msgs.length)];
+      PC_LOGS[pc.id].push({ts:Date.now(), ...entry});
+      if (PC_LOGS[pc.id].length > 80) PC_LOGS[pc.id].shift();
+    }
+    // step completion
+    if (pc.prog > (pc.step / pc.steps * 100 + 12)) {
+      if (pc.step < pc.steps) {
+        PC_LOGS[pc.id].push({ts:Date.now(), cls:'log-ok', msg:`[step ${pc.step}] ${pc.tipo} → completato ✓`});
+        pc.step++;
+        pc.curStep = 'Step ' + pc.step;
+        pc.tipo    = STEP_TYPES[pc.step % STEP_TYPES.length];
+        PC_LOGS[pc.id].push({ts:Date.now()+100, cls:'log-run', msg:`[step ${pc.step}] Avvio ${pc.tipo}...`});
+      }
+    }
+    // completion
+    if (pc.prog >= 100 && pc.step >= pc.steps) {
+      pc.status   = 'completed';
+      pc.prog     = 100;
+      pc.curStep  = 'Completato';
+      pc.tipo     = '—';
+      pc.seen     = '0s fa';
+      PC_LOGS[pc.id].push({ts:Date.now(), cls:'log-ok', msg:'Workflow completato con successo ✓'});
+      updateCounters();
+    }
+  });
+
+  renderGrid();
+  if (selId) {
+    const pc = PCS.find(p => p.id === selId);
+    if (pc) {
+      document.getElementById('s-pct').textContent   = pc.prog + '%';
+      document.getElementById('s-bar').style.width   = pc.prog + '%';
+      document.getElementById('s-seen').textContent  = pc.seen;
+      renderPipeline(pc);
+      // live log scroll
+      const logEl = document.getElementById('s-log');
+      const logs  = PC_LOGS[pc.id] || [];
+      const lines = logEl.querySelectorAll('.log-line');
+      if (lines.length < logs.length) {
+        const newLine = document.createElement('div');
+        newLine.className = 'log-line log-new';
+        const last = logs[logs.length-1];
+        newLine.innerHTML = `<span class="log-ts">${fmtTs(last.ts)}</span><span class="${last.cls}">${escHtml(last.msg)}</span>`;
+        logEl.appendChild(newLine);
+        if (logEl.children.length > 80) logEl.removeChild(logEl.firstChild);
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+    }
+  }
+}
+
+function updateCounters() {
+  document.getElementById('cnt-run').textContent  = PCS.filter(p=>p.status==='running').length;
+  document.getElementById('cnt-ok').textContent   = PCS.filter(p=>p.status==='completed').length;
+  document.getElementById('cnt-err').textContent  = PCS.filter(p=>p.status==='failed').length;
+  document.getElementById('cnt-pend').textContent = PCS.filter(p=>p.status==='pending').length;
+}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────
+function fmtTs(ms) {
+  return new Date(ms).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+function truncate(s, n) { return s.length>n ? s.slice(0,n)+'…' : s; }
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function updateClock() {
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('it-IT');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────
+renderGrid();
+updateCounters();
+updateClock();
+setInterval(simulate, 1200);
+setInterval(updateClock, 1000);
+</script>
+</body>
+</html>
