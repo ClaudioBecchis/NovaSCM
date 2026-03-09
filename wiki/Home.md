@@ -26,7 +26,8 @@
 
 | Versione | Data | Note |
 |---|---|---|
-| **v1.7.2** | 2026-03-09 | 🔧 13 fix: agent/server/installer + Deploy timer fasi + bcdedit boot priority + pulizia repo |
+| **v1.7.3** | 2026-03-09 | 🔒 SEC-1/2/3 + 10 bug fix: XML injection, pipe-to-shell, thread-safety HttpClient, resume pw_id, DB indici, ApiBase URI |
+| v1.7.2 | 2026-03-09 | 🔧 13 fix: agent/server/installer + Deploy timer fasi + bcdedit boot priority + pulizia repo |
 | v1.7.1 | 2026-03-09 | 🔒 BUG-NEW: validazione IP in RunScriptOnPc + INFO: ProcessStartInfo→ArgumentList (3 punti) |
 | v1.7.0 | 2026-03-09 | 🔒 SEC-06: fix path traversal in file_copy (StepExecutor + agent Python) |
 | v1.6.9 | 2026-03-09 | Fix freeze tab PC Gestiti (PerformanceCounter + NetworkInterfaces su background) + auto-report crash GitHub |

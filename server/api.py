@@ -5,6 +5,7 @@ DB:    /data/novascm.db (configurabile con NOVASCM_DB env var)
 """
 from flask import Flask, request, jsonify, Response, send_from_directory
 import sqlite3, json, datetime, os, functools, hmac, logging, re
+from xml.sax.saxutils import escape as _xe
 from contextlib import contextmanager
 try:
     from flask_limiter import Limiter
@@ -23,7 +24,7 @@ if _limiter_available:
         get_remote_address,
         app=app,
         default_limits=["300 per minute", "3000 per hour"],
-        storage_uri="memory://",
+        storage_uri=os.environ.get("NOVASCM_RATE_LIMIT_STORAGE", "memory://"),
     )
 else:
     # Stub no-op quando flask-limiter non è installato
@@ -166,6 +167,15 @@ def init_db():
             )
         """)
         conn.commit()
+        # Indici per query frequenti
+        _idx = [
+            ("idx_cr_pc_name",            "CREATE INDEX IF NOT EXISTS idx_cr_pc_name ON cr(pc_name)"),
+            ("idx_pw_pc_name",            "CREATE INDEX IF NOT EXISTS idx_pw_pc_name ON pc_workflows(pc_name)"),
+            ("idx_pws_pc_workflow_id",    "CREATE INDEX IF NOT EXISTS idx_pws_pc_workflow_id ON pc_workflow_steps(pc_workflow_id)"),
+        ]
+        for _name, _sql in _idx:
+            conn.execute(_sql)
+        conn.commit()
         # Migrazioni colonne (DB esistenti)
         migrations = [
             ("cr", "last_seen",   "TEXT"),
@@ -177,8 +187,9 @@ def init_db():
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
                 conn.commit()
-            except Exception:
-                pass
+            except sqlite3.OperationalError as e:
+                if "duplicate column name" not in str(e).lower():
+                    log.warning("Migrazione %s.%s: %s", table, col, e)
 
 def row_to_dict(row):
     d = dict(row)
@@ -298,7 +309,15 @@ def get_autounattend(pc_name):
         for p in pkgs if p and _safe_pkg(p)
     ) if pkgs else "# Nessun software configurato"
 
-    odj_blob   = (d.get("odj_blob") or "").strip()
+    # SEC-1: escape di tutti i valori interpolati nel XML
+    xpc_name   = _xe(d.get("pc_name") or "")
+    xadmin_pw  = _xe(d.get("admin_pass") or "")
+    xdc_ip     = _xe(d.get("dc_ip") or "")
+    xdomain    = _xe(d.get("domain") or "")
+    xjoin_user = _xe(d.get("join_user") or "")
+    xjoin_pass = _xe(d.get("join_pass") or "")
+    odj_blob   = _xe((d.get("odj_blob") or "").strip())
+
     has_domain = bool(d.get("domain") and d.get("dc_ip") and d.get("join_user"))
     run_sync = ""
     odj_component = ""
@@ -318,12 +337,12 @@ def get_autounattend(pc_name):
       <RunSynchronousCommands wcm:action="add">
         <RunSynchronousCommand wcm:action="add">
           <Order>1</Order>
-          <Path>powershell.exe -NonInteractive -Command "for($i=0;$i-lt30;$i++){{$n=Get-NetAdapter|?{{$_.Status-eq'Up'-and$_.HardwareInterface}}|Select -First 1;if($n){{Set-DnsClientServerAddress -InterfaceIndex $n.InterfaceIndex -ServerAddresses '{d['dc_ip']}';break}};Start-Sleep 2}}"</Path>
+          <Path>powershell.exe -NonInteractive -Command "for($i=0;$i-lt30;$i++){{$n=Get-NetAdapter|?{{$_.Status-eq'Up'-and$_.HardwareInterface}}|Select -First 1;if($n){{Set-DnsClientServerAddress -InterfaceIndex $n.InterfaceIndex -ServerAddresses '{xdc_ip}';break}};Start-Sleep 2}}"</Path>
           <Description>Attendi rete e imposta DNS DC</Description>
         </RunSynchronousCommand>
         <RunSynchronousCommand wcm:action="add">
           <Order>2</Order>
-          <Path>powershell.exe -NonInteractive -Command "Add-Computer -DomainName '{d['domain']}' -Credential (New-Object PSCredential('{d['domain']}\\{d['join_user']}',(ConvertTo-SecureString '{d['join_pass']}' -AsPlainText -Force))) -Force -ErrorAction SilentlyContinue"</Path>
+          <Path>powershell.exe -NonInteractive -Command "Add-Computer -DomainName '{xdomain}' -Credential (New-Object PSCredential('{xdomain}\\{xjoin_user}',(ConvertTo-SecureString '{xjoin_pass}' -AsPlainText -Force))) -Force -ErrorAction SilentlyContinue"</Path>
           <Description>Join dominio AD</Description>
         </RunSynchronousCommand>
       </RunSynchronousCommands>"""
@@ -378,7 +397,7 @@ def get_autounattend(pc_name):
     <component name="Microsoft-Windows-Shell-Setup"
                processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
                language="neutral" versionScope="nonSxS">
-      <ComputerName>{d['pc_name']}</ComputerName>
+      <ComputerName>{xpc_name}</ComputerName>
       <TimeZone>W. Europe Standard Time</TimeZone>
       <RegisteredOrganization>NovaSCM</RegisteredOrganization>{run_sync}
     </component>
@@ -406,14 +425,14 @@ def get_autounattend(pc_name):
             <Name>Administrator</Name>
             <Group>Administrators</Group>
             <Password>
-              <Value>{d['admin_pass']}</Value>
+              <Value>{xadmin_pw}</Value>
               <PlainText>true</PlainText>
             </Password>
           </LocalAccount>
         </LocalAccounts>
       </UserAccounts>
       <AutoLogon>
-        <Password><Value>{d['admin_pass']}</Value><PlainText>true</PlainText></Password>
+        <Password><Value>{xadmin_pw}</Value><PlainText>true</PlainText></Password>
         <Enabled>true</Enabled><LogonCount>1</LogonCount>
         <Username>Administrator</Username>
       </AutoLogon>
@@ -433,7 +452,7 @@ def get_autounattend(pc_name):
   </settings>
 
 </unattend>
-<!-- Generato da NovaSCM API — CR #{d['id']} — {d['pc_name']} -->"""
+<!-- Generato da NovaSCM API — CR #{d['id']} — {_xe(d['pc_name'])} -->"""
 
     return Response(xml, mimetype="application/xml",
                     headers={"Content-Disposition": "attachment; filename=autounattend.xml"})
@@ -553,6 +572,8 @@ def get_workflow(wf_id):
 @require_auth
 def update_workflow(wf_id):
     data = request.get_json(force=True)
+    if not data.get("nome", "").strip():
+        return jsonify({"error": "Campo obbligatorio: nome"}), 400
     now  = datetime.datetime.now().isoformat()
     with get_db_ctx() as conn:
         conn.execute(
@@ -630,6 +651,13 @@ def add_step(wf_id):
 @require_auth
 def update_step(wf_id, step_id):
     data = request.get_json(force=True)
+    tipi_validi = (
+        "shell_script", "file_copy", "reboot", "message",
+        "winget_install", "ps_script", "reg_set", "windows_update",
+        "apt_install", "snap_install", "systemd_service",
+    )
+    if data.get("tipo") and data["tipo"] not in tipi_validi:
+        return jsonify({"error": f"tipo non valido. Valori: {tipi_validi}"}), 400
     parametri = data.get("parametri", {})
     if isinstance(parametri, dict):
         parametri = json.dumps(parametri)
@@ -845,7 +873,7 @@ def report_wf_step(pc_name):
         ).fetchone()[0]
         done = conn.execute("""
             SELECT COUNT(*) FROM pc_workflow_steps
-            WHERE pc_workflow_id=? AND status IN ('done','skipped')
+            WHERE pc_workflow_id=? AND status IN ('done','skipped','error')
         """, (pw_id,)).fetchone()[0]
         if total > 0 and done >= total:
             conn.execute("UPDATE pc_workflows SET status='completed', completed_at=? WHERE id=?",
@@ -926,10 +954,19 @@ def download_agent():
 def download_agent_installer_ps1():
     """Genera install-windows.ps1 con API URL pre-configurato."""
     api_url = request.host_url.rstrip("/")
+    # SEC-2: scarica lo script in un file temporaneo ed esegui da file — no Invoke-Expression
     ps1 = f"""# NovaSCM Agent Installer — generato automaticamente
 $ApiUrl = "{api_url}"
 $PcName = $env:COMPUTERNAME
-Invoke-Expression (Invoke-WebRequest -Uri "$ApiUrl/api/download/agent-install-full.ps1" -UseBasicParsing).Content
+$TmpFile = Join-Path $env:TEMP "NovaSCMAgentInstall_$([System.IO.Path]::GetRandomFileName()).ps1"
+try {{
+    Invoke-WebRequest -Uri "$ApiUrl/api/download/agent-install-full.ps1" -OutFile $TmpFile -UseBasicParsing
+    if (Test-Path $TmpFile) {{
+        & powershell.exe -ExecutionPolicy Bypass -NonInteractive -File $TmpFile -ApiUrl $ApiUrl
+    }}
+}} finally {{
+    if (Test-Path $TmpFile) {{ Remove-Item -Force $TmpFile }}
+}}
 """
     return Response(ps1, mimetype="text/plain",
                     headers={"Content-Disposition": "attachment; filename=agent-install.ps1"})
@@ -939,9 +976,15 @@ Invoke-Expression (Invoke-WebRequest -Uri "$ApiUrl/api/download/agent-install-fu
 def download_agent_installer_sh():
     """Genera install-linux.sh con API URL pre-configurato."""
     api_url = request.host_url.rstrip("/")
+    # SEC-2: scarica in file temporaneo ed esegui — no pipe a bash
     sh = f"""#!/bin/bash
 # NovaSCM Agent Installer — generato automaticamente
-curl -fsSL "{api_url}/api/download/agent-install-full.sh" | sudo bash -s -- --api-url "{api_url}"
+set -euo pipefail
+TMPFILE=$(mktemp /tmp/novascm-install-XXXXXX.sh)
+trap 'rm -f "$TMPFILE"' EXIT
+curl -fsSL "{api_url}/api/download/agent-install-full.sh" -o "$TMPFILE"
+chmod +x "$TMPFILE"
+sudo bash "$TMPFILE" --api-url "{api_url}"
 """
     return Response(sh, mimetype="text/plain",
                     headers={"Content-Disposition": "attachment; filename=agent-install.sh"})
@@ -961,6 +1004,7 @@ def ui_static(path):
 # ── Health check ──────────────────────────────────────────────────────────────
 
 @app.route("/health", methods=["GET"])
+@require_auth
 def health():
     return jsonify({"status": "ok", "db": DB})
 

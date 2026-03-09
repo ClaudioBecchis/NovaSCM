@@ -13,7 +13,15 @@ public class NovaSCMApiService(string baseUrl, string apiKey = "", ApiCache? cac
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(12) };
     private readonly ApiCache _cache = cache ?? new ApiCache();
     private string CrBase  => baseUrl.TrimEnd('/');                          // include /api/cr
-    private string ApiBase => baseUrl.TrimEnd('/').Replace("/api/cr", "");   // radice server
+    // BUG-9: usa Uri per estrarre l'origine senza dipendere dalla stringa "/api/cr"
+    private string ApiBase
+    {
+        get
+        {
+            try { var u = new Uri(baseUrl.TrimEnd('/')); return $"{u.Scheme}://{u.Authority}"; }
+            catch { return baseUrl.TrimEnd('/').Replace("/api/cr", ""); }
+        }
+    }
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(baseUrl);
 
@@ -34,7 +42,15 @@ public class NovaSCMApiService(string baseUrl, string apiKey = "", ApiCache? cac
     private async Task<string> SendAsync(HttpMethod method, string url, HttpContent? body = null)
     {
         var resp = await _http.SendAsync(Req(method, url, body));
-        resp.EnsureSuccessStatusCode();
+        // BUG-10: EnsureSuccessStatusCode lancia HttpRequestException — includiamo body dell'errore
+        if (!resp.IsSuccessStatusCode)
+        {
+            var err = await resp.Content.ReadAsStringAsync();
+            var snippet = err.Length > 300 ? err[..300] : err;
+            throw new HttpRequestException(
+                $"{(int)resp.StatusCode} {resp.ReasonPhrase}: {snippet}",
+                null, resp.StatusCode);
+        }
         return await resp.Content.ReadAsStringAsync();
     }
 
