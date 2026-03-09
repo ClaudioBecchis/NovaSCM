@@ -8,6 +8,7 @@
     <RootNamespace>NovaSCMAgent</RootNamespace>
     <Version>1.0.0</Version>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <ItemGroup>
