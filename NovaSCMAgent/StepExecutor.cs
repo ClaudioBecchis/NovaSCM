@@ -134,9 +134,21 @@ public class StepExecutor
         var dst = p["dst"]?.GetValue<string>() ?? "";
         if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(dst))
             return Task.FromResult(new StepResult(false, "Parametri 'src' e 'dst' obbligatori"));
+
+        // SEC: path traversal — normalizza i path e blocca '..' e componenti pericolosi
+        try { src = Path.GetFullPath(src); dst = Path.GetFullPath(dst); }
+        catch { return Task.FromResult(new StepResult(false, "Path non valido")); }
+
+        // Blocca esplicitamente path che dopo normalizzazione salgono fuori dalle radici consentite
+        static bool IsSafe(string path) =>
+            !path.Contains("..", StringComparison.Ordinal) &&
+            !path.Contains('\0');
+
+        if (!IsSafe(src) || !IsSafe(dst))
+            return Task.FromResult(new StepResult(false, "Path non consentito (path traversal)"));
+
         try
         {
-            // SEC: File.Copy puro .NET — nessuna shell, nessun rischio injection su src/dst
             Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
             File.Copy(src, dst, overwrite: true);
             return Task.FromResult(new StepResult(true, $"Copiato: {src} → {dst}"));

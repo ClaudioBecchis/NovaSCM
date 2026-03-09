@@ -262,6 +262,11 @@ def execute_step(step):
         dst = parametri.get("dst", "")
         if not src or not dst:
             return False, "Parametri 'src' e 'dst' obbligatori"
+        # SEC: path traversal — normalizza e blocca '..' e null byte
+        src = os.path.normpath(os.path.abspath(src))
+        dst = os.path.normpath(os.path.abspath(dst))
+        if ".." in src or ".." in dst or "\0" in src or "\0" in dst:
+            return False, "Path non consentito (path traversal)"
         try:
             shutil.copy2(src, dst)
             return True, f"Copiato: {src} → {dst}"

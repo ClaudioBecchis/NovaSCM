@@ -4,6 +4,14 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.0] - 2026-03-09
+
+### Sicurezza
+
+- **SEC-06**: Path traversal in `file_copy` step — `src`/`dst` provenienti dall'API potevano contenere `../` per uscire dalla directory e sovrascrivere file arbitrari; fix in `NovaSCMAgent/StepExecutor.cs`: `Path.GetFullPath()` normalizza il path prima dell'uso + blocco esplicito di `..` e `\0`; stessa fix applicata a `agent/novascm-agent.py` (`os.path.normpath` + `os.path.abspath` + check `..`/null byte)
+
+---
+
 ## [1.6.9] - 2026-03-09
 
 ### Bugfix
