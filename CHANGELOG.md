@@ -4,6 +4,20 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.9] - 2026-03-09
+
+### Bug fix (Round 6)
+
+- **M-1**: `row_to_dict()` ora filtra `join_pass` e `admin_pass` da tutte le risposte JSON; `get_autounattend()` usa `include_sensitive=True` (unico endpoint che ne ha bisogno)
+- **I-1**: `.api_key` generato con permessi `0o600` (solo owner)
+- **I-2**: `windows_update` nell'agent Python restituisce `None` (skipped) su entrambe le piattaforme, non `False` (error) su Windows
+
+### Test
+
+- 81/81 ✅ (+2: `test_get_cr_does_not_expose_passwords`, `test_list_cr_does_not_expose_passwords`)
+
+---
+
 ## [1.7.8] - 2026-03-09
 
 ### Bug fix (Round 5)
