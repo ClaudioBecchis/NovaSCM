@@ -4,6 +4,15 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.4] - 2026-03-09
+
+### Qualità (v5 analysis report)
+
+- **NEW-E (completo)**: Aggiunto `EnsureApiConfigured()` a tutti gli 11 handler rimanenti — `MenuCrDebug`, `UpdateCrStatusAsync`, `MenuCrDelete`, `MenuCrDownloadXml`, `MenuCrGenUsb`, `BtnWfAddStep`, `BtnWfEditStep`, `SwapStepOrdineAsync`, `BtnWfDeleteStep`, `BtnWfAssign`, `BtnWfDeleteAssign`
+- **SEC-03b**: Rimossa bash process substitution nel fallback temperature Proxmox — `paste <(cat ...)` → `for z in /sys/class/thermal/...` (POSIX-compatibile, funziona con dash/ash/sh)
+
+---
+
 ## [1.6.3] - 2026-03-09
 
 ### Sicurezza e qualità (v4 analysis report)
