@@ -3008,7 +3008,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.7.1";
+    private const string CurrentVersion = "1.7.2";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
