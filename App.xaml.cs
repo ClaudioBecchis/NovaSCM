@@ -18,7 +18,7 @@ public partial class App : Application
                      "PolarisManager", "debug.log");
 
     private const string GitHubIssuesUrl = "https://github.com/ClaudioBecchis/NovaSCM/issues/new";
-    private const string AppVersion      = "1.6.8";
+    private const string AppVersion      = "1.6.9";
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
@@ -160,20 +160,29 @@ public partial class App : Application
             BorderBrush = WpfBrushes.Transparent,
             Cursor     = System.Windows.Input.Cursors.Hand,
         };
-        btnGithub.Click += (_, _) =>
-        {
-            var os      = Environment.OSVersion.ToString();
-            var body    = WebUtility.UrlEncode(
-                $"**NovaSCM v{AppVersion}** — {os}\n\n" +
-                $"**Errore:** {message}\n\n" +
-                $"**Stack trace:**\n```\n{stack}\n```\n\n" +
+        // Costruisce l'URL GitHub pre-compilato
+        static string BuildGitHubUrl(string appVer, string msg, string st) {
+            var os   = Environment.OSVersion.ToString();
+            var body = WebUtility.UrlEncode(
+                $"**NovaSCM v{appVer}** — {os}\n\n" +
+                $"**Errore:** {msg}\n\n" +
+                $"**Stack trace:**\n```\n{st}\n```\n\n" +
                 $"**Log:** `{LogPath}`\n\n" +
                 $"**Passi per riprodurre:**\n1. \n2. \n3. \n\n" +
                 $"**Comportamento atteso:**\n\n**Comportamento effettivo:**\n");
-            var issueTitle = WebUtility.UrlEncode($"[Bug] {message.Split('\n')[0].Truncate(80)}");
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(
-                $"{GitHubIssuesUrl}?title={issueTitle}&body={body}&labels=bug")
-                { UseShellExecute = true });
+            var title = WebUtility.UrlEncode($"[Bug] {msg.Split('\n')[0].Truncate(80)}");
+            return $"{GitHubIssuesUrl}?title={title}&body={body}&labels=bug";
+        }
+        var ghUrl = BuildGitHubUrl(AppVersion, message, stack);
+
+        // Auto-apre il browser immediatamente (anche senza clic utente)
+        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ghUrl) { UseShellExecute = true }); }
+        catch { }
+
+        btnGithub.Click += (_, _) =>
+        {
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(ghUrl) { UseShellExecute = true }); }
+            catch { }
         };
 
         var btnCopy = new Button

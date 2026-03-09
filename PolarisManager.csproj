@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>NovaSCM</AssemblyName>
     <Product>NovaSCM</Product>
-    <Version>1.6.8</Version>
+    <Version>1.6.9</Version>
     <ApplicationIcon>Assets\novascm.ico</ApplicationIcon>
   </PropertyGroup>
 

@@ -4,6 +4,15 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.9] - 2026-03-09
+
+### Bugfix
+
+- **BUG**: Tab "🖥️ PC Gestiti" congelava l'UI — `new PerformanceCounter(...)` (blocca il thread UI per secondi al primo accesso WMI) e `NetworkInterface.GetAllNetworkInterfaces()` (operazione lenta chiamata ogni 1.5s sul thread UI) entrambi spostati su background thread (`Task.Run`); il gauge NET ora usa un valore cached aggiornato ogni ~30s in background invece di interrogare le interfacce di rete a ogni tick
+- **UX**: Crash dialog apre automaticamente il browser su GitHub Issues al momento della comparsa (senza richiedere clic utente) — il report viene inviato anche se l'utente chiude il dialog o se non interagisce
+
+---
+
 ## [1.6.8] - 2026-03-09
 
 ### Sicurezza
