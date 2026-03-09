@@ -4,9 +4,15 @@ Porta: 9091 (configurabile con PORT env var)
 DB:    /data/novascm.db (configurabile con NOVASCM_DB env var)
 """
 from flask import Flask, request, jsonify, Response, send_from_directory
-import sqlite3, json, datetime, os, functools, hmac, logging, re
+import sqlite3, json, datetime, os, functools, hmac, logging, re, secrets
 from xml.sax.saxutils import escape as _xe
 from contextlib import contextmanager
+
+try:
+    from pythonjsonlogger import jsonlogger as _jsonlogger
+    _json_log_available = True
+except ImportError:
+    _json_log_available = False
 try:
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
@@ -45,8 +51,36 @@ logging.basicConfig(
 )
 log = logging.getLogger("novascm-api")
 
+if os.environ.get("NOVASCM_LOG_JSON", "").lower() in ("1", "true", "yes"):
+    if _json_log_available:
+        _handler = logging.StreamHandler()
+        _handler.setFormatter(_jsonlogger.JsonFormatter(
+            "%(asctime)s %(name)s %(levelname)s %(message)s"
+        ))
+        logging.getLogger().handlers = [_handler]
+    else:
+        log.warning("NOVASCM_LOG_JSON=1 ma python-json-logger non installato — logging testuale attivo")
+
 # ── Autenticazione API Key ────────────────────────────────────────────────────
 API_KEY = os.environ.get("NOVASCM_API_KEY", "")
+
+# Secret bootstrap: se l'env var è assente, usa /data/.api_key (o genera una nuova chiave)
+if not API_KEY:
+    _key_file = os.path.join(os.path.dirname(os.environ.get("NOVASCM_DB", "/data/novascm.db")), ".api_key")
+    if os.path.isfile(_key_file):
+        with open(_key_file) as _f:
+            API_KEY = _f.read().strip()
+        log.info("NOVASCM_API_KEY caricata da %s", _key_file)
+    else:
+        API_KEY = secrets.token_hex(32)
+        try:
+            os.makedirs(os.path.dirname(_key_file), exist_ok=True)
+            with open(_key_file, "w") as _f:
+                _f.write(API_KEY)
+            log.warning("NOVASCM_API_KEY non impostata — generata e salvata in %s", _key_file)
+        except OSError:
+            log.warning("NOVASCM_API_KEY non impostata — generata in memoria (non persistita)")
+        log.warning("API Key generata: %s", API_KEY)
 
 def require_auth(fn):
     """Decorator: richiede header X-Api-Key corrispondente a NOVASCM_API_KEY."""
@@ -271,23 +305,23 @@ def update_status(cr_id):
         return jsonify({"error": "Stato non valido"}), 400
     now = datetime.datetime.now().isoformat() if status == "completed" else None
     with get_db_ctx() as conn:
-        conn.execute("UPDATE cr SET status=?, completed_at=? WHERE id=?",
-                     (status, now, cr_id))
+        rowcount = conn.execute("UPDATE cr SET status=?, completed_at=? WHERE id=?",
+                                (status, now, cr_id)).rowcount
+        if rowcount == 0:
+            return jsonify({"error": "Non trovato"}), 404
         conn.commit()
         row = conn.execute("SELECT * FROM cr WHERE id=?", (cr_id,)).fetchone()
-    if not row:
-        return jsonify({"error": "Non trovato"}), 404
     return jsonify(row_to_dict(row))
 
 @app.route("/api/cr/<int:cr_id>", methods=["DELETE"])
 @require_auth
 def delete_cr(cr_id):
     with get_db_ctx() as conn:
-        affected = conn.execute("DELETE FROM cr WHERE id=?", (cr_id,)).rowcount
-        conn.execute("DELETE FROM cr_steps WHERE cr_id=?", (cr_id,))
+        if not conn.execute("SELECT 1 FROM cr WHERE id=?", (cr_id,)).fetchone():
+            return jsonify({"error": "Non trovato"}), 404
+        conn.execute("DELETE FROM cr_steps WHERE cr_id=?", (cr_id,))  # figli prima
+        conn.execute("DELETE FROM cr WHERE id=?", (cr_id,))
         conn.commit()
-    if affected == 0:
-        return jsonify({"error": "Non trovato"}), 404
     return jsonify({"ok": True})
 
 # ── Autounattend.xml generato dal server ──────────────────────────────────────
@@ -521,11 +555,22 @@ def report_step(pc_name):
 @app.route("/api/cr/<int:cr_id>/steps", methods=["GET"])
 @require_auth
 def get_steps(cr_id):
+    page     = max(1, request.args.get("page",     1,   type=int))
+    per_page = min(500, max(1, request.args.get("per_page", 100, type=int)))
+    offset   = (page - 1) * per_page
     with get_db_ctx() as conn:
-        rows = conn.execute(
-            "SELECT step_name, status, timestamp FROM cr_steps WHERE cr_id=? ORDER BY id ASC",
-            (cr_id,)).fetchall()
-    return jsonify([dict(r) for r in rows])
+        total = conn.execute(
+            "SELECT COUNT(*) FROM cr_steps WHERE cr_id=?", (cr_id,)).fetchone()[0]
+        rows  = conn.execute(
+            "SELECT step_name, status, timestamp FROM cr_steps WHERE cr_id=? "
+            "ORDER BY id ASC LIMIT ? OFFSET ?",
+            (cr_id, per_page, offset)).fetchall()
+    return jsonify({
+        "page":     page,
+        "per_page": per_page,
+        "total":    total,
+        "items":    [dict(r) for r in rows],
+    })
 
 # ── Workflow Engine — Workflow CRUD ───────────────────────────────────────────
 

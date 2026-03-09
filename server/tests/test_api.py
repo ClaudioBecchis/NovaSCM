@@ -551,8 +551,22 @@ class TestCrSteps:
                     content_type="application/json")
         r = client.get(f"/api/cr/{cr_id}/steps", headers=AUTH)
         assert r.status_code == 200
-        steps = r.get_json()
-        assert any(s["step_name"] == "winget_install" for s in steps)
+        data = r.get_json()
+        assert "items" in data and "total" in data and "page" in data
+        assert any(s["step_name"] == "winget_install" for s in data["items"])
+
+    def test_get_steps_pagination(self, client):
+        cr_id = _create_cr(client, pc_name="STEPS-PAGED").get_json()["id"]
+        for i in range(5):
+            client.post("/api/cr/by-name/STEPS-PAGED/step", headers=AUTH,
+                        data=json.dumps({"step": f"step_{i}", "status": "done"}),
+                        content_type="application/json")
+        r = client.get(f"/api/cr/{cr_id}/steps?page=1&per_page=2", headers=AUTH)
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["total"] == 5
+        assert data["per_page"] == 2
+        assert len(data["items"]) == 2
 
     def test_report_step_nonexistent_cr_returns_404(self, client):
         r = client.post("/api/cr/by-name/GHOST-PC/step", headers=AUTH,

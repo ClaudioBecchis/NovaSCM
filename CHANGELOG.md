@@ -4,6 +4,30 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.7] - 2026-03-09
+
+### Nuove funzionalità
+
+- **CI/CD**: aggiunto `.github/workflows/test.yml` — pytest + xUnit su ogni push a `main`
+- **Secret bootstrap**: se `NOVASCM_API_KEY` non è impostata, il server genera automaticamente una chiave sicura e la salva in `/data/.api_key`
+- **Rate limiter Redis**: `docker-compose.yml` aggiornato con servizio `redis:7-alpine` e `NOVASCM_RATE_LIMIT_STORAGE=redis://redis:6379/0`
+- **Logging JSON**: supporto opzionale `python-json-logger` via `NOVASCM_LOG_JSON=1`
+- **Paginazione steps**: `GET /api/cr/<id>/steps` supporta `?page=&per_page=` (default 100, max 500); risposta: `{"page","per_page","total","items"}`
+- **Test .NET**: nuovo progetto xUnit `NovaSCMAgent.Tests/` con 8 test per `StepExecutor` e `Worker`
+- **AGENT_VER dinamica**: `agent/novascm-agent.py` legge la versione da `agent/version.txt` invece di hardcoded
+- **`requirements.txt`**: aggiunto `python-json-logger==3.3.0`
+
+### Bug fix
+
+- **`delete_cr`**: eliminazione figli (`cr_steps`) ora avviene prima del padre (`cr`) — ordine FK corretto
+- **`update_status`**: verifica `rowcount` prima del commit; restituisce 404 senza fare UPDATE inutile se CR non esiste
+
+### Test
+
+- 79/79 ✅ (78 precedenti + 1 nuovo: `test_get_steps_pagination`)
+
+---
+
 ## [1.7.6] - 2026-03-09
 
 ### Bug fix

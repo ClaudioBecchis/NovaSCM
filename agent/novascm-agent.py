@@ -20,7 +20,17 @@ from urllib.parse import urlencode, urlparse
 # ── Costanti ──────────────────────────────────────────────────────────────────
 IS_WINDOWS = platform.system() == "Windows"
 IS_LINUX   = platform.system() == "Linux"
-AGENT_VER  = "1.0.0"
+
+def _read_agent_ver() -> str:
+    """Legge la versione da agent/version.txt accanto a questo script."""
+    try:
+        ver_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.txt")
+        with open(ver_file) as _f:
+            return _f.read().strip()
+    except OSError:
+        return "1.0.0"
+
+AGENT_VER = _read_agent_ver()
 POLL_SEC   = 60          # polling ogni 60 secondi
 STEP_TIMEOUT = 600       # timeout massimo per step (10 min)
 
