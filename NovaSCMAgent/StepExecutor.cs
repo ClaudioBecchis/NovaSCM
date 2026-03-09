@@ -63,15 +63,21 @@ public class StepExecutor
     {
         var pkg = p["package"]?.GetValue<string>() ?? "";
         if (string.IsNullOrEmpty(pkg)) return new(false, "Parametro 'package' mancante");
-        return await Run($"apt-get install -y {pkg}", env: new() { ["DEBIAN_FRONTEND"] = "noninteractive" }, ct: ct);
+        // SEC: ArgumentList — nessuna interpolazione shell con pkg controllato dall'API
+        return await RunArgs(["apt-get", "install", "-y", pkg],
+            env: new() { ["DEBIAN_FRONTEND"] = "noninteractive" }, ct: ct);
     }
 
     private async Task<StepResult> SnapInstall(JsonObject p, CancellationToken ct)
     {
         var pkg     = p["package"]?.GetValue<string>() ?? "";
-        var classic = p["classic"]?.GetValue<bool>() == true ? "--classic" : "";
+        var classic = p["classic"]?.GetValue<bool>() == true;
         if (string.IsNullOrEmpty(pkg)) return new(false, "Parametro 'package' mancante");
-        return await Run($"snap install {pkg} {classic}".Trim(), ct: ct);
+        // SEC: ArgumentList — nessuna interpolazione shell con pkg controllato dall'API
+        var argv = classic
+            ? new[] { "snap", "install", pkg, "--classic" }
+            : new[] { "snap", "install", pkg };
+        return await RunArgs(argv, ct: ct);
     }
 
     private async Task<StepResult> PsScript(JsonObject p, CancellationToken ct)
@@ -122,16 +128,23 @@ public class StepExecutor
         return await RunArgs(["systemctl", action, name], ct: ct);
     }
 
-    private async Task<StepResult> FileCopy(JsonObject p, CancellationToken ct)
+    private Task<StepResult> FileCopy(JsonObject p, CancellationToken ct)
     {
         var src = p["src"]?.GetValue<string>() ?? "";
         var dst = p["dst"]?.GetValue<string>() ?? "";
         if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(dst))
-            return new(false, "Parametri 'src' e 'dst' obbligatori");
-        return IsWindows
-            ? await Run($"copy /Y \"{src}\" \"{dst}\"", ct: ct)
-            : await Run($"cp -f \"{src}\" \"{dst}\"",   ct: ct);
+            return Task.FromResult(new StepResult(false, "Parametri 'src' e 'dst' obbligatori"));
+        try
+        {
+            // SEC: File.Copy puro .NET — nessuna shell, nessun rischio injection su src/dst
+            Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
+            File.Copy(src, dst, overwrite: true);
+            return Task.FromResult(new StepResult(true, $"Copiato: {src} → {dst}"));
+        }
+        catch (Exception ex) { return Task.FromResult(new StepResult(false, ex.Message)); }
     }
+
+    private static readonly HashSet<string> _validWuCategories = ["all", "security", "critical"];
 
     private async Task<StepResult> WindowsUpdate(JsonObject p, CancellationToken ct)
     {
@@ -144,6 +157,9 @@ public class StepExecutor
         var category       = p["category"]?.GetValue<string>()       ?? "all";
         var excludeDrivers = p["exclude_drivers"]?.GetValue<bool>()   ?? false;
         var rebootAfter    = p["reboot_after"]?.GetValue<bool>()      ?? false;
+        // SEC: whitelist — category viene interpolato nel PS script
+        if (!_validWuCategories.Contains(category))
+            return new(false, $"Categoria aggiornamenti non valida: {category}");
 
         // Script PowerShell che usa PSWindowsUpdate
         // Installa il modulo se mancante, poi scarica e installa gli aggiornamenti
@@ -184,17 +200,29 @@ public class StepExecutor
         """;
 
         _log.LogInformation("  Windows Update — categoria={Cat} exclude_drivers={Ed}", category, excludeDrivers);
-        return await Run("powershell.exe",
-            $"-NonInteractive -ExecutionPolicy Bypass -Command \"{script.Replace("\"", "\\\"")}\"",
-            ct: ct);
+        // SEC: ArgumentList — script passato come argomento separato a -Command
+        return await RunArgs(["powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+                              "-Command", script], ct: ct);
     }
 
     private StepResult Reboot(JsonObject p)
     {
         var delay = p["delay"]?.GetValue<int>() ?? 5;
         _log.LogInformation("  Riavvio programmato tra {Delay}s", delay);
-        if (IsWindows) Process.Start("shutdown", $"/r /t {delay}");
-        else           Process.Start("shutdown", $"-r +{Math.Max(1, delay / 60)}");
+        // SEC: ArgumentList — delay è già int, ma allineato al pattern standard
+        var psi = new ProcessStartInfo("shutdown") { UseShellExecute = false };
+        if (IsWindows)
+        {
+            psi.ArgumentList.Add("/r");
+            psi.ArgumentList.Add("/t");
+            psi.ArgumentList.Add(delay.ToString());
+        }
+        else
+        {
+            psi.ArgumentList.Add("-r");
+            psi.ArgumentList.Add($"+{Math.Max(1, delay / 60)}");
+        }
+        Process.Start(psi);
         return new(true, $"Riavvio programmato tra {delay}s");
     }
 
