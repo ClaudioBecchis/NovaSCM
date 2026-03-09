@@ -20,7 +20,7 @@ L'API sarà disponibile su `http://localhost:9091`.
 ## Avvio senza Docker (Python)
 
 ```bash
-pip install flask gunicorn
+pip install "flask>=3.1.3" gunicorn
 NOVASCM_DB=/percorso/novascm.db python api.py
 ```
 
