@@ -2,83 +2,28 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="NovaSCM — Configurazione in corso"
-        WindowStyle="None"
-        WindowState="Maximized"
-        ResizeMode="NoResize"
-        Background="{StaticResource BrushBg}"
-        Foreground="{StaticResource BrushTxt}"
-        Cursor="None"
-        Topmost="True">
+        WindowStyle="None" WindowState="Maximized" ResizeMode="NoResize"
+        Background="{StaticResource BrushBg}" Foreground="{StaticResource BrushTxt}"
+        Cursor="None" Topmost="True">
 
   <Window.Resources>
-    <!-- Stile testo mono -->
-    <Style x:Key="Mono" TargetType="TextBlock">
-      <Setter Property="FontFamily" Value="Consolas, Courier New"/>
-      <Setter Property="Foreground"  Value="{StaticResource BrushMuted}"/>
-    </Style>
-    <Style x:Key="MonoHi" TargetType="TextBlock" BasedOn="{StaticResource Mono}">
-      <Setter Property="Foreground" Value="{StaticResource BrushHi}"/>
-    </Style>
-    <Style x:Key="MonoRun" TargetType="TextBlock" BasedOn="{StaticResource Mono}">
-      <Setter Property="Foreground" Value="{StaticResource BrushRun}"/>
-    </Style>
-    <Style x:Key="MonoOk" TargetType="TextBlock" BasedOn="{StaticResource Mono}">
-      <Setter Property="Foreground" Value="{StaticResource BrushOk}"/>
-    </Style>
-    <Style x:Key="MonoErr" TargetType="TextBlock" BasedOn="{StaticResource Mono}">
-      <Setter Property="Foreground" Value="{StaticResource BrushErr}"/>
-    </Style>
-
-    <!-- Separatore sottile -->
-    <Style x:Key="Sep" TargetType="Border">
-      <Setter Property="Background" Value="{StaticResource BrushBdim}"/>
-      <Setter Property="Width"      Value="1"/>
-    </Style>
-    <Style x:Key="SepH" TargetType="Border">
-      <Setter Property="Background" Value="{StaticResource BrushBdim}"/>
-      <Setter Property="Height"     Value="1"/>
-    </Style>
-
-    <!-- ScrollBar sottile invisibile -->
-    <Style TargetType="ScrollBar">
-      <Setter Property="Width"   Value="3"/>
-      <Setter Property="Opacity" Value=".35"/>
-    </Style>
-
-    <!-- ListBox step: nessun bordo/selezione -->
-    <Style x:Key="StepList" TargetType="ListBox">
-      <Setter Property="Background"             Value="Transparent"/>
-      <Setter Property="BorderThickness"        Value="0"/>
-      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-      <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
-      <Setter Property="ItemContainerStyle">
-        <Setter.Value>
-          <Style TargetType="ListBoxItem">
-            <Setter Property="Padding"          Value="0"/>
-            <Setter Property="Background"       Value="Transparent"/>
-            <Setter Property="BorderThickness"  Value="0"/>
-            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="Focusable"        Value="False"/>
-            <Style.Triggers>
-              <Trigger Property="IsSelected" Value="True">
-                <Setter Property="Background" Value="Transparent"/>
-              </Trigger>
-            </Style.Triggers>
-          </Style>
-        </Setter.Value>
-      </Setter>
-    </Style>
+    <Style x:Key="Mono"     TargetType="TextBlock"><Setter Property="FontFamily" Value="Consolas, Courier New"/><Setter Property="Foreground" Value="{StaticResource BrushMuted}"/></Style>
+    <Style x:Key="MonoHi"   TargetType="TextBlock" BasedOn="{StaticResource Mono}"><Setter Property="Foreground" Value="{StaticResource BrushHi}"/></Style>
+    <Style x:Key="MonoRun"  TargetType="TextBlock" BasedOn="{StaticResource Mono}"><Setter Property="Foreground" Value="{StaticResource BrushRun}"/></Style>
+    <Style x:Key="MonoOk"   TargetType="TextBlock" BasedOn="{StaticResource Mono}"><Setter Property="Foreground" Value="{StaticResource BrushOk}"/></Style>
+    <Style x:Key="MonoErr"  TargetType="TextBlock" BasedOn="{StaticResource Mono}"><Setter Property="Foreground" Value="{StaticResource BrushErr}"/></Style>
+    <Style x:Key="MonoWarn" TargetType="TextBlock" BasedOn="{StaticResource Mono}"><Setter Property="Foreground" Value="{StaticResource BrushWarn}"/></Style>
+    <Style x:Key="SepH" TargetType="Border"><Setter Property="Background" Value="{StaticResource BrushBdim}"/><Setter Property="Height" Value="1"/></Style>
+    <Style x:Key="SepV" TargetType="Border"><Setter Property="Background" Value="{StaticResource BrushBdim}"/><Setter Property="Width"  Value="1"/></Style>
+    <Style TargetType="ScrollBar"><Setter Property="Width" Value="3"/><Setter Property="Opacity" Value=".3"/></Style>
   </Window.Resources>
 
   <Grid>
-    <!-- ── SFONDO: griglia puntini ── -->
-    <Canvas x:Name="BgCanvas" IsHitTestVisible="False">
-      <Rectangle Canvas.Left="0" Canvas.Top="0"
-                 Width="4000" Height="3000"
-                 Opacity=".04">
+    <!-- BG grid -->
+    <Canvas IsHitTestVisible="False">
+      <Rectangle Canvas.Left="0" Canvas.Top="0" Width="4000" Height="3000" Opacity=".04">
         <Rectangle.Fill>
-          <DrawingBrush TileMode="Tile"
-                        Viewport="0,0,56,56" ViewportUnits="Absolute">
+          <DrawingBrush TileMode="Tile" Viewport="0,0,56,56" ViewportUnits="Absolute">
             <DrawingBrush.Drawing>
               <GeometryDrawing Brush="#4D9FFF">
                 <GeometryDrawing.Geometry>
@@ -94,138 +39,148 @@
       </Rectangle>
     </Canvas>
 
-    <!-- ── LAYOUT PRINCIPALE ── -->
-    <Grid x:Name="MainLayout">
+    <Grid>
       <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>  <!-- header -->
-        <RowDefinition Height="1"/>     <!-- sep -->
-        <RowDefinition Height="*"/>     <!-- corpo -->
-        <RowDefinition Height="1"/>     <!-- sep -->
-        <RowDefinition Height="Auto"/>  <!-- footer -->
+        <RowDefinition Height="Auto"/> <!-- 0 header -->
+        <RowDefinition Height="1"/>    <!-- 1 sep -->
+        <RowDefinition Height="Auto"/> <!-- 2 hw strip -->
+        <RowDefinition Height="1"/>    <!-- 3 sep -->
+        <RowDefinition Height="*"/>    <!-- 4 corpo -->
+        <RowDefinition Height="Auto"/> <!-- 5 log -->
+        <RowDefinition Height="1"/>    <!-- 6 sep -->
+        <RowDefinition Height="Auto"/> <!-- 7 footer -->
       </Grid.RowDefinitions>
 
-      <!-- ════ HEADER ════ -->
-      <Grid Grid.Row="0" Margin="48,22,48,18">
+      <!-- ── HEADER ── -->
+      <Grid Grid.Row="0" Margin="28,14,28,12">
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto"/>
-          <ColumnDefinition Width="*"/>
-          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-
-        <!-- Logo -->
         <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-          <Border Width="40" Height="40" CornerRadius="9"
-                  Background="{StaticResource BrushRunDim}"
-                  BorderBrush="#554D9FFF" BorderThickness="1.5"
-                  Margin="0,0,12,0">
-            <TextBlock Text="N" Style="{StaticResource MonoRun}"
-                       FontSize="17" FontWeight="SemiBold"
+          <Border Width="34" Height="34" CornerRadius="8" Background="{StaticResource BrushRunDim}"
+                  BorderBrush="#554D9FFF" BorderThickness="1.5" Margin="0,0,10,0">
+            <TextBlock Text="N" Style="{StaticResource MonoRun}" FontSize="14" FontWeight="SemiBold"
                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
           </Border>
           <StackPanel VerticalAlignment="Center">
-            <TextBlock Text="NOVASCM" Style="{StaticResource MonoHi}"
-                       FontSize="13" FontWeight="SemiBold" LetterSpacing="3"/>
-            <TextBlock Text="DEPLOYMENT AGENT" Style="{StaticResource Mono}"
-                       FontSize="8" Margin="0,2,0,0"/>
+            <TextBlock Text="NOVASCM" Style="{StaticResource MonoHi}" FontSize="12" FontWeight="SemiBold"/>
+            <TextBlock Text="DEPLOYMENT AGENT" Style="{StaticResource Mono}" FontSize="7" Margin="0,2,0,0"/>
           </StackPanel>
         </StackPanel>
-
-        <!-- PC hostname centrato -->
         <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
           <TextBlock x:Name="TxtHostname" Text="WKS-MKTG-042"
-                     Style="{StaticResource MonoHi}"
-                     FontSize="28" FontWeight="SemiBold"
-                     HorizontalAlignment="Center"/>
-          <TextBlock x:Name="TxtDomain" Text="polariscore.local"
-                     Style="{StaticResource Mono}"
-                     FontSize="11" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                     Style="{StaticResource MonoHi}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+          <TextBlock x:Name="TxtDomain"   Text="polariscore.local"
+                     Style="{StaticResource Mono}" FontSize="10" HorizontalAlignment="Center" Margin="0,3,0,0"/>
         </StackPanel>
-
-        <!-- Workflow badge + orologio -->
         <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
-          <Border CornerRadius="4" Padding="10,4" Background="{StaticResource BrushRunDim}"
-                  BorderBrush="#334D9FFF" BorderThickness="1" Margin="0,0,0,6">
+          <Border CornerRadius="4" Padding="10,3" Background="{StaticResource BrushRunDim}"
+                  BorderBrush="#334D9FFF" BorderThickness="1" Margin="0,0,0,5">
             <StackPanel Orientation="Horizontal">
-              <!-- LED pulse -->
-              <Ellipse x:Name="LedDot" Width="6" Height="6"
-                       Fill="{StaticResource BrushRun}"
-                       VerticalAlignment="Center" Margin="0,0,7,0">
-                <Ellipse.Effect>
-                  <DropShadowEffect Color="#4D9FFF" BlurRadius="6" ShadowDepth="0"/>
-                </Ellipse.Effect>
+              <Ellipse Width="5" Height="5" Fill="{StaticResource BrushRun}" VerticalAlignment="Center" Margin="0,0,7,0">
+                <Ellipse.Effect><DropShadowEffect Color="#4D9FFF" BlurRadius="5" ShadowDepth="0"/></Ellipse.Effect>
               </Ellipse>
               <TextBlock x:Name="TxtWfName" Text="Deploy Base Win 11"
-                         Style="{StaticResource MonoRun}"
-                         FontSize="10" VerticalAlignment="Center"/>
+                         Style="{StaticResource MonoRun}" FontSize="9" VerticalAlignment="Center"/>
             </StackPanel>
           </Border>
-          <TextBlock x:Name="TxtClock" Text="--:--:--"
-                     Style="{StaticResource Mono}" FontSize="11"
-                     HorizontalAlignment="Right"/>
+          <TextBlock x:Name="TxtClock" Text="--:--:--" Style="{StaticResource Mono}" FontSize="10" HorizontalAlignment="Right"/>
         </StackPanel>
       </Grid>
 
       <Border Grid.Row="1" Style="{StaticResource SepH}"/>
 
-      <!-- ════ CORPO (due colonne) ════ -->
+      <!-- ── HW STRIP ── -->
       <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>   <ColumnDefinition Width="1"/>
+          <ColumnDefinition Width="*"/>   <ColumnDefinition Width="1"/>
+          <ColumnDefinition Width="*"/>   <ColumnDefinition Width="1"/>
+          <ColumnDefinition Width="1.4*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Margin="28,9,20,9">
+          <TextBlock Text="🖥" FontSize="13" Opacity=".5" VerticalAlignment="Center" Margin="0,0,10,0"/>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock x:Name="HwCpu" Text="rilevamento…" Style="{StaticResource MonoHi}" FontSize="11"/>
+            <TextBlock Text="MODELLO CPU" Style="{StaticResource Mono}" FontSize="7" Margin="0,2,0,0"/>
+          </StackPanel>
+        </StackPanel>
+        <Border Grid.Column="1" Style="{StaticResource SepV}" Margin="0,6"/>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="20,9,20,9">
+          <TextBlock Text="💾" FontSize="13" Opacity=".5" VerticalAlignment="Center" Margin="0,0,10,0"/>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock x:Name="HwRam" Text="rilevamento…" Style="{StaticResource MonoHi}" FontSize="11"/>
+            <TextBlock Text="RAM" Style="{StaticResource Mono}" FontSize="7" Margin="0,2,0,0"/>
+          </StackPanel>
+        </StackPanel>
+        <Border Grid.Column="3" Style="{StaticResource SepV}" Margin="0,6"/>
+
+        <StackPanel Grid.Column="4" Orientation="Horizontal" Margin="20,9,20,9">
+          <TextBlock Text="💿" FontSize="13" Opacity=".5" VerticalAlignment="Center" Margin="0,0,10,0"/>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock x:Name="HwDisk" Text="rilevamento…" Style="{StaticResource MonoHi}" FontSize="11"/>
+            <TextBlock Text="DISCO" Style="{StaticResource Mono}" FontSize="7" Margin="0,2,0,0"/>
+          </StackPanel>
+        </StackPanel>
+        <Border Grid.Column="5" Style="{StaticResource SepV}" Margin="0,6"/>
+
+        <StackPanel Grid.Column="6" Orientation="Horizontal" Margin="20,9,28,9">
+          <TextBlock Text="🌐" FontSize="13" Opacity=".5" VerticalAlignment="Center" Margin="0,0,10,0"/>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock x:Name="HwMac" Text="rilevamento…" Style="{StaticResource MonoHi}" FontSize="11"/>
+            <TextBlock x:Name="HwIp"  Text="—"            Style="{StaticResource MonoRun}" FontSize="10" Margin="0,2,0,0"/>
+            <TextBlock Text="RETE — MAC / IP" Style="{StaticResource Mono}" FontSize="7" Margin="0,2,0,0"/>
+          </StackPanel>
+        </StackPanel>
+      </Grid>
+
+      <Border Grid.Row="3" Style="{StaticResource SepH}"/>
+
+      <!-- ── CORPO ── -->
+      <Grid Grid.Row="4">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="*"/>
           <ColumnDefinition Width="1"/>
-          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="340"/>
         </Grid.ColumnDefinitions>
 
-        <!-- ── COLONNA SINISTRA ── -->
-        <StackPanel Grid.Column="0" Margin="48,32,40,28" VerticalAlignment="Top">
+        <!-- Sinistra -->
+        <StackPanel Grid.Column="0" Margin="28,16,24,10" VerticalAlignment="Top">
 
-          <!-- Ring + label step corrente -->
-          <StackPanel Orientation="Horizontal" Margin="0,0,0,28">
-            <!-- Ring SVG-style in WPF -->
-            <Grid Width="100" Height="100" Margin="0,0,24,0">
-              <!-- Traccia -->
-              <Ellipse Width="90" Height="90"
-                       Stroke="#1A3060" StrokeThickness="5" Fill="Transparent"/>
-              <!-- Arco progresso -->
-              <Canvas Width="100" Height="100" x:Name="RingCanvas">
+          <!-- Ring + cur step -->
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+            <Grid Width="90" Height="90" Margin="0,0,20,0">
+              <Ellipse Width="80" Height="80" Stroke="#1A3060" StrokeThickness="5" Fill="Transparent"/>
+              <Canvas Width="90" Height="90" x:Name="RingCanvas">
                 <Path x:Name="RingArc" Stroke="{StaticResource BrushRun}"
-                      StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                      Fill="Transparent"/>
+                      StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Fill="Transparent"/>
               </Canvas>
-              <!-- Percentuale centrale -->
               <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock x:Name="TxtPct" Text="0%"
-                           Style="{StaticResource MonoHi}"
-                           FontSize="22" FontWeight="SemiBold"
-                           HorizontalAlignment="Center"/>
-                <TextBlock Text="completato" Style="{StaticResource Mono}"
-                           FontSize="8" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                <TextBlock x:Name="TxtPct" Text="0%" Style="{StaticResource MonoHi}"
+                           FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                <TextBlock Text="completato" Style="{StaticResource Mono}" FontSize="7"
+                           HorizontalAlignment="Center" Margin="0,2,0,0"/>
               </StackPanel>
             </Grid>
-
-            <!-- Info step corrente -->
-            <StackPanel VerticalAlignment="Center" MaxWidth="280">
+            <StackPanel VerticalAlignment="Center">
               <TextBlock x:Name="TxtCurName" Text="Avvio in corso…"
-                         Foreground="{StaticResource BrushHi}"
-                         FontSize="18" FontWeight="Light" TextWrapping="Wrap"/>
+                         Foreground="{StaticResource BrushHi}" FontSize="16" FontWeight="Light"
+                         TextWrapping="Wrap" MaxWidth="300"/>
               <TextBlock x:Name="TxtCurTipo" Text="inizializzazione"
-                         Style="{StaticResource MonoRun}"
-                         FontSize="11" Margin="0,6,0,0"/>
+                         Style="{StaticResource MonoRun}" FontSize="10" Margin="0,5,0,0"/>
             </StackPanel>
           </StackPanel>
 
-          <!-- Barra progresso lineare -->
-          <Grid Margin="0,0,0,6">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBlock Text="Progresso workflow" Style="{StaticResource Mono}" FontSize="10"/>
-            <TextBlock x:Name="TxtBarLabel" Grid.Column="1" Text="step 0 / 0"
-                       Style="{StaticResource Mono}" FontSize="10"/>
+          <!-- Barra -->
+          <Grid Margin="0,0,0,5">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+            <TextBlock Text="Progresso" Style="{StaticResource Mono}" FontSize="9"/>
+            <TextBlock x:Name="TxtBarLabel" Grid.Column="1" Text="step 0 / 0" Style="{StaticResource Mono}" FontSize="9"/>
           </Grid>
-          <Border CornerRadius="3" Background="#0D1A33" Height="5" Margin="0,0,0,24">
-            <Border x:Name="BarFill" HorizontalAlignment="Left" Width="0"
-                    CornerRadius="3" Height="5">
+          <Border CornerRadius="3" Background="#0D1A33" Height="4" Margin="0,0,0,14">
+            <Border x:Name="BarFill" HorizontalAlignment="Left" Width="0" CornerRadius="3" Height="4">
               <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
                   <GradientStop Color="#2A6FFF" Offset="0"/>
@@ -235,73 +190,50 @@
             </Border>
           </Border>
 
-          <!-- Stats row -->
-          <Grid Margin="0,0,0,24">
+          <!-- Stats: completati / rimanenti / stima / trascorso -->
+          <Grid Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="1"/>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="1"/>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="1"/>
+              <ColumnDefinition Width="*"/><ColumnDefinition Width="1"/>
+              <ColumnDefinition Width="*"/><ColumnDefinition Width="1"/>
+              <ColumnDefinition Width="*"/><ColumnDefinition Width="1"/>
               <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
-            <!-- Completati -->
             <StackPanel Grid.Column="0" HorizontalAlignment="Center">
-              <TextBlock x:Name="StatDone" Text="0"
-                         Style="{StaticResource MonoRun}"
-                         FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-              <TextBlock Text="COMPLETATI" Style="{StaticResource Mono}"
-                         FontSize="8" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+              <TextBlock x:Name="StatDone" Text="0" Style="{StaticResource MonoRun}"
+                         FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+              <TextBlock Text="COMPLETATI" Style="{StaticResource Mono}" FontSize="7" HorizontalAlignment="Center" Margin="0,2,0,0"/>
             </StackPanel>
-            <Border Grid.Column="1" Style="{StaticResource Sep}" Margin="0,6"/>
-            <!-- Rimanenti -->
+            <Border Grid.Column="1" Style="{StaticResource SepV}" Margin="0,4"/>
             <StackPanel Grid.Column="2" HorizontalAlignment="Center">
-              <TextBlock x:Name="StatRem" Text="0"
-                         Style="{StaticResource MonoHi}"
-                         FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-              <TextBlock Text="RIMANENTI" Style="{StaticResource Mono}"
-                         FontSize="8" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+              <TextBlock x:Name="StatRem" Text="0" Style="{StaticResource MonoHi}"
+                         FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+              <TextBlock Text="RIMANENTI" Style="{StaticResource Mono}" FontSize="7" HorizontalAlignment="Center" Margin="0,2,0,0"/>
             </StackPanel>
-            <Border Grid.Column="3" Style="{StaticResource Sep}" Margin="0,6"/>
-            <!-- Totale -->
+            <Border Grid.Column="3" Style="{StaticResource SepV}" Margin="0,4"/>
             <StackPanel Grid.Column="4" HorizontalAlignment="Center">
-              <TextBlock x:Name="StatTot" Text="0"
-                         Style="{StaticResource MonoHi}"
-                         FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-              <TextBlock Text="TOTALE" Style="{StaticResource Mono}"
-                         FontSize="8" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+              <TextBlock x:Name="StatEta" Text="—" Style="{StaticResource MonoWarn}"
+                         FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+              <TextBlock Text="STIMA FIN." Style="{StaticResource Mono}" FontSize="7" HorizontalAlignment="Center" Margin="0,2,0,0"/>
             </StackPanel>
-            <Border Grid.Column="5" Style="{StaticResource Sep}" Margin="0,6"/>
-            <!-- Elapsed -->
+            <Border Grid.Column="5" Style="{StaticResource SepV}" Margin="0,4"/>
             <StackPanel Grid.Column="6" HorizontalAlignment="Center">
-              <TextBlock x:Name="StatEla" Text="—"
-                         Style="{StaticResource MonoHi}"
-                         FontSize="26" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-              <TextBlock Text="TRASCORSO" Style="{StaticResource Mono}"
-                         FontSize="8" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+              <TextBlock x:Name="StatEla" Text="—" Style="{StaticResource MonoHi}"
+                         FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+              <TextBlock Text="TRASCORSO" Style="{StaticResource Mono}" FontSize="7" HorizontalAlignment="Center" Margin="0,2,0,0"/>
             </StackPanel>
           </Grid>
 
-          <!-- Box step attivo in evidenza -->
-          <Border x:Name="CurBox" CornerRadius="8" Padding="16,12"
-                  Background="{StaticResource BrushRunDim}"
+          <!-- Cur box -->
+          <Border CornerRadius="7" Padding="12,9" Background="{StaticResource BrushRunDim}"
                   BorderBrush="#334D9FFF" BorderThickness="1">
             <Grid>
               <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
               </Grid.ColumnDefinitions>
-              <!-- Spinner (ruota) -->
-              <Border x:Name="CurSpinner" Grid.Column="0"
-                      Width="32" Height="32" CornerRadius="16"
-                      BorderBrush="#4D9FFF" BorderThickness="2"
-                      Background="Transparent" Margin="0,0,14,0"
-                      VerticalAlignment="Center">
-                <Border.RenderTransform>
-                  <RotateTransform x:Name="SpinnerRot" CenterX="16" CenterY="16"/>
-                </Border.RenderTransform>
+              <Border x:Name="CurSpinner" Grid.Column="0" Width="26" Height="26" CornerRadius="13"
+                      BorderBrush="{StaticResource BrushRun}" BorderThickness="2"
+                      Margin="0,0,12,0" VerticalAlignment="Center">
+                <Border.RenderTransform><RotateTransform x:Name="SpinnerRot" CenterX="13" CenterY="13"/></Border.RenderTransform>
                 <Border.Triggers>
                   <EventTrigger RoutedEvent="Loaded">
                     <BeginStoryboard>
@@ -316,100 +248,64 @@
               </Border>
               <StackPanel Grid.Column="1" VerticalAlignment="Center">
                 <TextBlock x:Name="CurBoxName" Text="In attesa dell'agente…"
-                           Foreground="{StaticResource BrushHi}"
-                           FontSize="14" FontWeight="Medium" TextWrapping="Wrap"/>
+                           Foreground="{StaticResource BrushHi}" FontSize="13" FontWeight="Medium" TextWrapping="Wrap"/>
                 <TextBlock x:Name="CurBoxTipo" Text="—"
-                           Style="{StaticResource Mono}" FontSize="10" Margin="0,4,0,0"/>
+                           Style="{StaticResource Mono}" FontSize="9" Margin="0,3,0,0"/>
               </StackPanel>
-              <TextBlock x:Name="CurBoxTime" Grid.Column="2"
-                         Text="—" Style="{StaticResource MonoRun}"
-                         FontSize="14" VerticalAlignment="Center" Margin="12,0,0,0"/>
+              <TextBlock x:Name="CurBoxTime" Grid.Column="2" Text="—"
+                         Style="{StaticResource MonoRun}" FontSize="13" VerticalAlignment="Center" Margin="10,0,0,0"/>
             </Grid>
           </Border>
-
         </StackPanel>
 
-        <Border Grid.Column="1" Style="{StaticResource Sep}"/>
+        <Border Grid.Column="1" Style="{StaticResource SepV}"/>
 
-        <!-- ── COLONNA DESTRA: pipeline completa ── -->
-        <Grid Grid.Column="2" Margin="40,24,48,20">
+        <!-- Destra: pipeline 340px -->
+        <Grid Grid.Column="2" Margin="16,14,16,10">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
           </Grid.RowDefinitions>
-
-          <!-- Header pipeline -->
-          <Grid Grid.Row="0" Margin="0,0,0,14">
-            <TextBlock Text="PIPELINE DI INSTALLAZIONE"
-                       Style="{StaticResource Mono}" FontSize="9" LetterSpacing="2"
-                       VerticalAlignment="Center"/>
-            <TextBlock x:Name="TxtStepCount" Text="— step"
-                       Style="{StaticResource Mono}" FontSize="9"
-                       HorizontalAlignment="Right" VerticalAlignment="Center"/>
+          <Grid Grid.Row="0" Margin="0,0,0,10">
+            <TextBlock Text="PIPELINE" Style="{StaticResource Mono}" FontSize="8" VerticalAlignment="Center"/>
+            <TextBlock x:Name="TxtStepCount" Text="— step" Style="{StaticResource Mono}"
+                       FontSize="8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
           </Grid>
-
-          <!-- Lista step scrollabile -->
           <ScrollViewer Grid.Row="1" x:Name="StepScroller"
-                        VerticalScrollBarVisibility="Auto"
-                        HorizontalScrollBarVisibility="Disabled">
+                        VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <ItemsControl x:Name="StepList" HorizontalContentAlignment="Stretch">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
-                  <Grid x:Name="StepRow" Margin="0">
-                    <!-- Connettore verticale -->
-                    <Rectangle x:Name="Connector"
-                               Width="2" HorizontalAlignment="Left"
-                               Margin="10,28,0,0" VerticalAlignment="Stretch"
+                  <Grid Margin="0,1">
+                    <Rectangle x:Name="Connector" Width="2" HorizontalAlignment="Left"
+                               Margin="9,24,0,0" VerticalAlignment="Stretch"
                                Fill="{StaticResource BrushBdim}"/>
-                    <Grid Margin="0,4,0,0">
+                    <Grid Margin="0,2">
                       <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="32"/>
+                        <ColumnDefinition Width="26"/>
                         <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="48"/>
+                        <ColumnDefinition Width="44"/>
                       </Grid.ColumnDefinitions>
-                      <!-- Cerchio stato -->
-                      <Border x:Name="Circle" Grid.Column="0"
-                              Width="22" Height="22" CornerRadius="11"
-                              Background="{StaticResource BrushBdim}"
-                              BorderBrush="{StaticResource BrushDim}" BorderThickness="1.5"
-                              HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,4,0,0">
-                        <TextBlock x:Name="CircleText"
-                                   Text="{Binding StepNum}"
-                                   Style="{StaticResource Mono}" FontSize="9"
+                      <Border x:Name="Circle" Grid.Column="0" Width="18" Height="18" CornerRadius="9"
+                              Background="{StaticResource BrushBdim}" BorderBrush="{StaticResource BrushDim}"
+                              BorderThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="0,3,0,0">
+                        <TextBlock x:Name="CircleText" Text="{Binding StepNum}"
+                                   Style="{StaticResource Mono}" FontSize="8"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                       </Border>
-                      <!-- Nome + tipo -->
-                      <StackPanel Grid.Column="1" Margin="10,4,8,8">
+                      <StackPanel Grid.Column="1" Margin="8,3,6,6">
                         <TextBlock x:Name="StepName" Text="{Binding Nome}"
                                    Foreground="{StaticResource BrushMuted}"
-                                   FontSize="12.5" TextWrapping="NoWrap"
-                                   TextTrimming="CharacterEllipsis"/>
+                                   FontSize="11" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
                         <TextBlock x:Name="StepTipo" Text="{Binding Tipo}"
-                                   Style="{StaticResource Mono}" FontSize="9.5" Margin="0,2,0,0"/>
+                                   Style="{StaticResource Mono}" FontSize="8" Margin="0,2,0,0"/>
+                        <TextBlock x:Name="StepEst" Text="{Binding EstLabel}"
+                                   Style="{StaticResource Mono}" FontSize="7.5" Opacity=".5" Margin="0,1,0,0"/>
                       </StackPanel>
-                      <!-- Tempo / stato -->
-                      <TextBlock x:Name="StepTime" Grid.Column="2"
-                                 Text="{Binding TimeLabel}"
-                                 Style="{StaticResource Mono}" FontSize="10"
-                                 VerticalAlignment="Top" Margin="0,6,0,0"
-                                 HorizontalAlignment="Right"/>
+                      <TextBlock x:Name="StepTime" Grid.Column="2" Text="{Binding TimeLabel}"
+                                 Style="{StaticResource Mono}" FontSize="9"
+                                 VerticalAlignment="Top" HorizontalAlignment="Right" Margin="0,5,0,0"/>
                     </Grid>
-                    <!-- Trigger per colorare in base allo Status -->
-                    <Grid.Style>
-                      <Style TargetType="Grid"/>
-                    </Grid.Style>
-                    <Grid.Triggers>
-                      <EventTrigger RoutedEvent="Loaded">
-                        <BeginStoryboard>
-                          <Storyboard>
-                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="Circle"
-                                                           Storyboard.TargetProperty="(Border.BorderBrush)"
-                                                           Duration="0">
-                            </ObjectAnimationUsingKeyFrames>
-                          </Storyboard>
-                        </BeginStoryboard>
-                      </EventTrigger>
-                    </Grid.Triggers>
                   </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
@@ -418,90 +314,139 @@
         </Grid>
       </Grid>
 
-      <Border Grid.Row="3" Style="{StaticResource SepH}"/>
+      <!-- ── LOG BOX ── -->
+      <Grid Grid.Row="5" Margin="28,4,28,10">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="85"/>
+        </Grid.RowDefinitions>
+        <Grid Grid.Row="0" Margin="0,0,0,5">
+          <StackPanel Orientation="Horizontal">
+            <Ellipse Width="5" Height="5" Fill="{StaticResource BrushRun}" VerticalAlignment="Center" Margin="0,0,7,0">
+              <Ellipse.Effect><DropShadowEffect Color="#4D9FFF" BlurRadius="4" ShadowDepth="0"/></Ellipse.Effect>
+            </Ellipse>
+            <TextBlock Text="OUTPUT — " Style="{StaticResource Mono}" FontSize="8" VerticalAlignment="Center"/>
+            <TextBlock x:Name="LogStepName" Text="—" Style="{StaticResource MonoRun}" FontSize="8" VerticalAlignment="Center"/>
+          </StackPanel>
+          <TextBlock x:Name="LogLinesCount" Text="0 righe" Style="{StaticResource Mono}"
+                     FontSize="8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+        </Grid>
+        <Border Grid.Row="1" Background="#080D1A" BorderBrush="{StaticResource BrushBdim}"
+                BorderThickness="1" CornerRadius="5">
+          <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled" Padding="8,5">
+            <ItemsControl x:Name="LogList">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Text}" Foreground="{Binding Color}"
+                             FontFamily="Consolas, Courier New" FontSize="9.5"
+                             TextWrapping="Wrap" Margin="0,0.5,0,0.5"/>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Border>
+      </Grid>
 
-      <!-- ════ FOOTER ════ -->
-      <Grid Grid.Row="4" Margin="48,10,48,10">
+      <Border Grid.Row="6" Style="{StaticResource SepH}"/>
+
+      <!-- ── FOOTER ── -->
+      <Grid Grid.Row="7" Margin="28,7,28,7">
         <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto"/>
-          <ColumnDefinition Width="*"/>
-          <ColumnDefinition Width="Auto"/>
+          <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <TextBlock Grid.Column="0" Style="{StaticResource Mono}" FontSize="10">
-          <Run Text="NovaSCM "/>
-          <Run x:Name="FooterVer" Text="1.8.0" Foreground="#526080"/>
+        <TextBlock Grid.Column="0" Style="{StaticResource Mono}" FontSize="9">
+          <Run Text="NovaSCM "/><Run x:Name="FooterVer" Text="1.8.1" Foreground="#526080"/>
         </TextBlock>
         <TextBlock Grid.Column="1" Text="▲  Non spegnere il PC durante la configurazione"
-                   Style="{StaticResource Mono}" FontSize="10"
-                   Foreground="#7A6020" HorizontalAlignment="Center"/>
-        <TextBlock Grid.Column="2" Style="{StaticResource Mono}" FontSize="10">
-          <Run Text="Server "/>
-          <Run x:Name="FooterServer" Text="192.168.20.110" Foreground="#526080"/>
+                   Foreground="#7A6020" FontFamily="Consolas" FontSize="9" HorizontalAlignment="Center"/>
+        <TextBlock Grid.Column="2" Style="{StaticResource Mono}" FontSize="9">
+          <Run Text="Server "/><Run x:Name="FooterServer" Text="192.168.20.110" Foreground="#526080"/>
         </TextBlock>
       </Grid>
     </Grid>
 
-    <!-- ════ OVERLAY COMPLETATO ════ -->
-    <Grid x:Name="OverlayDone" Background="{StaticResource BrushBg}"
-          Visibility="Collapsed" Opacity="0">
-      <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-        <Border Width="110" Height="110" CornerRadius="55"
-                Background="#0D2D1A" BorderBrush="{StaticResource BrushOk}"
-                BorderThickness="2" Margin="0,0,0,24" HorizontalAlignment="Center">
-          <Border.Effect>
-            <DropShadowEffect Color="#00D97E" BlurRadius="40" ShadowDepth="0" Opacity=".4"/>
-          </Border.Effect>
-          <TextBlock Text="✓" Foreground="{StaticResource BrushOk}"
-                     FontSize="48" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-        </Border>
-        <TextBlock Text="Configurazione completata"
-                   Foreground="{StaticResource BrushHi}"
-                   FontSize="34" FontWeight="Light" HorizontalAlignment="Center"
-                   Margin="0,0,0,10"/>
-        <TextBlock x:Name="OverlayDoneHost" Text="WKS-MKTG-042"
-                   Style="{StaticResource MonoOk}" FontSize="14"
-                   HorizontalAlignment="Center" Margin="0,0,0,16"/>
-        <Border HorizontalAlignment="Center" Padding="20,8" CornerRadius="6"
-                Background="#0A0F1A" BorderBrush="{StaticResource BrushBdim}" BorderThickness="1"
-                Margin="0,0,0,20">
-          <TextBlock x:Name="OverlayDoneDetail" Style="{StaticResource Mono}" FontSize="11"
-                     HorizontalAlignment="Center"/>
-        </Border>
-        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-          <TextBlock Text="Riavvio automatico tra " Style="{StaticResource Mono}" FontSize="11"
-                     VerticalAlignment="Center"/>
-          <TextBlock x:Name="RebootCount" Text="30"
-                     Foreground="{StaticResource BrushWarn}" FontSize="14" FontWeight="SemiBold"
-                     Style="{StaticResource Mono}" VerticalAlignment="Center" Margin="4,0"/>
-          <TextBlock Text=" secondi" Style="{StaticResource Mono}" FontSize="11"
-                     VerticalAlignment="Center"/>
-        </StackPanel>
+    <!-- ══ OVERLAY COMPLETATO ══ -->
+    <Grid x:Name="OverlayDone" Background="#F005080F" Visibility="Collapsed" Opacity="0">
+      <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="860">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="40"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <StackPanel Grid.Column="0" HorizontalAlignment="Center" MinWidth="280">
+            <Border Width="90" Height="90" CornerRadius="45" Background="#0D2D1A"
+                    BorderBrush="{StaticResource BrushOk}" BorderThickness="2"
+                    HorizontalAlignment="Center" Margin="0,0,0,18">
+              <Border.Effect><DropShadowEffect Color="#00D97E" BlurRadius="35" ShadowDepth="0" Opacity=".4"/></Border.Effect>
+              <TextBlock Text="✓" Foreground="{StaticResource BrushOk}" FontSize="40"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <TextBlock Text="Configurazione completata" Foreground="{StaticResource BrushHi}"
+                       FontSize="26" FontWeight="Light" HorizontalAlignment="Center" Margin="0,0,0,8"/>
+            <TextBlock x:Name="OverlayDoneHost" Style="{StaticResource MonoOk}"
+                       FontSize="13" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+            <Border HorizontalAlignment="Center" Padding="14,6" CornerRadius="5"
+                    Background="#0A0F1A" BorderBrush="{StaticResource BrushBdim}" BorderThickness="1" Margin="0,0,0,14">
+              <TextBlock x:Name="OverlayDoneDetail" Style="{StaticResource Mono}"
+                         FontSize="10" HorizontalAlignment="Center"/>
+            </Border>
+            <WrapPanel x:Name="OverlayHwPanel" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+              <TextBlock Text="Riavvio tra " Style="{StaticResource Mono}" FontSize="10" VerticalAlignment="Center"/>
+              <TextBlock x:Name="RebootCount" Text="30" Foreground="{StaticResource BrushWarn}"
+                         FontFamily="Consolas" FontSize="14" FontWeight="SemiBold" Margin="4,0" VerticalAlignment="Center"/>
+              <TextBlock Text=" secondi" Style="{StaticResource Mono}" FontSize="10" VerticalAlignment="Center"/>
+            </StackPanel>
+          </StackPanel>
+          <!-- Screenshot -->
+          <Border Grid.Column="2" CornerRadius="8" BorderBrush="{StaticResource BrushBdim}"
+                  BorderThickness="1" Background="#090E1C" VerticalAlignment="Top">
+            <StackPanel>
+              <Border BorderBrush="{StaticResource BrushBdim}" BorderThickness="0,0,0,1" Padding="12,7">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Text="📷 " FontSize="11"/>
+                  <TextBlock Text="Screenshot finale — " Style="{StaticResource Mono}" FontSize="8" VerticalAlignment="Center"/>
+                  <TextBlock x:Name="SsTime" Text="—" Style="{StaticResource MonoRun}" FontSize="8" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Border>
+              <Border x:Name="SsPlaceholder" Height="190" Background="#070C1A">
+                <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                  <TextBlock Text="🖥" FontSize="32" Opacity=".2" HorizontalAlignment="Center"/>
+                  <TextBlock x:Name="SsStatus" Text="In acquisizione…"
+                             Style="{StaticResource Mono}" FontSize="9"
+                             HorizontalAlignment="Center" Margin="0,8,0,0"/>
+                </StackPanel>
+              </Border>
+              <Image x:Name="SsImage" Visibility="Collapsed" MaxHeight="190" Stretch="UniformToFill"/>
+              <TextBlock Text="Salvato su NovaSCM · disponibile nella UI Deploy Floor"
+                         Style="{StaticResource Mono}" FontSize="8"
+                         HorizontalAlignment="Center" Margin="0,8,0,10"/>
+            </StackPanel>
+          </Border>
+        </Grid>
       </StackPanel>
     </Grid>
 
-    <!-- ════ OVERLAY ERRORE ════ -->
-    <Grid x:Name="OverlayErr" Background="{StaticResource BrushBg}"
-          Visibility="Collapsed" Opacity="0">
+    <!-- ══ OVERLAY ERRORE ══ -->
+    <Grid x:Name="OverlayErr" Background="#F005080F" Visibility="Collapsed" Opacity="0">
       <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-        <Border Width="100" Height="100" CornerRadius="50"
-                Background="#2D0D0D" BorderBrush="{StaticResource BrushErr}"
-                BorderThickness="2" Margin="0,0,0,24" HorizontalAlignment="Center">
-          <Border.Effect>
-            <DropShadowEffect Color="#FF4757" BlurRadius="40" ShadowDepth="0" Opacity=".35"/>
-          </Border.Effect>
-          <TextBlock Text="✕" Foreground="{StaticResource BrushErr}"
-                     FontSize="42" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        <Border Width="90" Height="90" CornerRadius="45" Background="#2D0D0D"
+                BorderBrush="{StaticResource BrushErr}" BorderThickness="2"
+                HorizontalAlignment="Center" Margin="0,0,0,20">
+          <Border.Effect><DropShadowEffect Color="#FF4757" BlurRadius="35" ShadowDepth="0" Opacity=".35"/></Border.Effect>
+          <TextBlock Text="✕" Foreground="{StaticResource BrushErr}" FontSize="40"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Border>
-        <TextBlock Text="Errore durante la configurazione"
-                   Foreground="{StaticResource BrushHi}"
-                   FontSize="30" FontWeight="Light" HorizontalAlignment="Center" Margin="0,0,0,12"/>
-        <TextBlock x:Name="OverlayErrStep"
-                   Style="{StaticResource MonoErr}" FontSize="13"
-                   HorizontalAlignment="Center" Margin="0,0,0,16"/>
-        <Border HorizontalAlignment="Center" Padding="20,8" CornerRadius="6"
+        <TextBlock Text="Errore durante la configurazione" Foreground="{StaticResource BrushHi}"
+                   FontSize="28" FontWeight="Light" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+        <TextBlock x:Name="OverlayErrStep" Style="{StaticResource MonoErr}"
+                   FontSize="13" HorizontalAlignment="Center" Margin="0,0,0,16"/>
+        <Border HorizontalAlignment="Center" Padding="16,7" CornerRadius="5"
                 Background="#0A0F1A" BorderBrush="{StaticResource BrushBdim}" BorderThickness="1">
-          <TextBlock x:Name="OverlayErrDetail" Style="{StaticResource Mono}" FontSize="11"
-                     HorizontalAlignment="Center"/>
+          <TextBlock x:Name="OverlayErrDetail" Style="{StaticResource Mono}"
+                     FontSize="10" HorizontalAlignment="Center"/>
         </Border>
       </StackPanel>
     </Grid>

@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NovaSCM — Configurazione in corso</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#05080f;--ok:#00d97e;--run:#4d9fff;--warn:#f5a623;--err:#ff4757;
+  --txt:rgba(195,210,235,.88);--hi:#e8f0ff;--muted:rgba(130,150,190,.5);
+  --dim:rgba(60,80,120,.35);--bdim:rgba(40,55,90,.4);
+}
+html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-family:'IBM Plex Sans',sans-serif;color:var(--txt)}
+.bg-grad{position:fixed;inset:0;z-index:0;background:radial-gradient(ellipse 55% 45% at 15% 85%,rgba(0,70,155,.16) 0%,transparent 65%),radial-gradient(ellipse 45% 35% at 85% 15%,rgba(0,40,110,.1) 0%,transparent 65%),var(--bg)}
+.bg-grid{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(77,159,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(77,159,255,.035) 1px,transparent 1px);background-size:56px 56px}
+.bg-scan{position:fixed;inset:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.05) 2px,rgba(0,0,0,.05) 3px)}
+.bg-vig{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse 110% 110% at 50% 50%,transparent 45%,rgba(2,4,12,.9) 100%)}
+
+/* ── SHELL: 3 righe, 3 colonne ── */
+.shell{position:relative;z-index:2;height:100vh;width:100vw;display:grid;
+  grid-template-columns:1fr 1px 340px;
+  grid-template-rows:auto auto 1fr auto auto;
+  grid-template-areas:
+    "hdr  hdr  hdr"
+    "hw   hw   hw"
+    "left div  right"
+    "log  div  right"
+    "ftr  ftr  ftr"}
+
+/* ── HEADER ── */
+.hdr{grid-area:hdr;padding:14px 28px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bdim);animation:fade-down .6s ease both}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-box{width:34px;height:34px;border-radius:8px;background:rgba(77,159,255,.08);border:1.5px solid rgba(77,159,255,.3);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--run)}
+.logo-n{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--hi);letter-spacing:2px}
+.logo-s{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
+.pc-name{font-family:'DM Mono',monospace;font-size:20px;font-weight:500;color:var(--hi);text-align:center}
+.pc-domain{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px;text-align:center}
+.wf-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:4px;background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.2);font-family:'DM Mono',monospace;font-size:9px;color:var(--run);text-transform:uppercase;letter-spacing:.5px}
+.led{width:5px;height:5px;border-radius:50%;background:var(--run);box-shadow:0 0 5px var(--run);animation:blink 1.6s ease-in-out infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.hdr-time{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px;text-align:right}
+
+/* ── HW STRIP ── */
+.hw-strip{grid-area:hw;display:flex;align-items:stretch;border-bottom:1px solid var(--bdim);animation:fade-down .6s .1s ease both}
+.hw-item{flex:1;display:flex;align-items:center;gap:10px;padding:8px 28px;border-right:1px solid var(--bdim)}
+.hw-item:last-child{border-right:none}
+.hw-icon{font-size:14px;opacity:.55;flex-shrink:0}
+.hw-info{display:flex;flex-direction:column;gap:1px}
+.hw-val{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;color:var(--hi)}
+.hw-lbl{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.hw-bar{height:2px;border-radius:2px;margin-top:3px;background:var(--bdim);width:80px;overflow:hidden}
+.hw-bar-fill{height:100%;border-radius:2px;background:var(--run);transition:width 1s ease}
+.hw-pending{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);animation:blink-txt 2s ease-in-out infinite}
+@keyframes blink-txt{0%,100%{opacity:.8}50%{opacity:.2}}
+
+/* ── DIVISORE ── */
+.divider{grid-area:div;background:var(--bdim)}
+
+/* ── COLONNA SINISTRA ── */
+.col-left{grid-area:left;padding:16px 28px 10px;display:flex;flex-direction:column;gap:14px;overflow:hidden;animation:fade-right .6s .1s ease both}
+
+.ring-wrap{display:flex;align-items:center;gap:18px}
+.ring-svg{flex-shrink:0;filter:drop-shadow(0 0 10px rgba(77,159,255,.2))}
+.ring-track{fill:none;stroke:rgba(77,159,255,.1);stroke-width:5}
+.ring-fill{fill:none;stroke:var(--run);stroke-width:5;stroke-linecap:round;stroke-dasharray:251.2;stroke-dashoffset:251.2;transition:stroke-dashoffset 1s cubic-bezier(.25,.46,.45,.94),stroke .5s;transform-origin:50% 50%;transform:rotate(-90deg)}
+.ring-fill.done{stroke:var(--ok)}
+.ring-center{font-family:'DM Mono',monospace;font-size:20px;font-weight:500;fill:var(--hi)}
+.ring-label{font-family:'DM Mono',monospace;font-size:8px;fill:var(--muted);text-transform:uppercase;letter-spacing:1px}
+.ri-label{font-size:15px;font-weight:300;color:var(--hi)}
+.ri-sub{font-family:'DM Mono',monospace;font-size:10px;color:var(--run);margin-top:4px;animation:blink-txt 2s ease-in-out infinite}
+
+.bar-meta{display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:4px}
+.bar-outer{height:4px;background:rgba(77,159,255,.1);border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#2a6fff,#7ec8ff);transition:width .9s cubic-bezier(.25,.46,.45,.94);position:relative;overflow:hidden}
+.bar-fill::after{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);animation:shimmer 2s linear infinite}
+@keyframes shimmer{to{left:100%}}
+.bar-fill.done{background:linear-gradient(90deg,var(--ok),#5fffb8)}
+.bar-fill.done::after{display:none}
+
+/* stats */
+.stats-row{display:flex;gap:0}
+.stat{flex:1;padding:8px 0;border-right:1px solid var(--bdim);display:flex;flex-direction:column;gap:2px}
+.stat:last-child{border-right:none}
+.stat-val{font-family:'DM Mono',monospace;font-size:16px;font-weight:500;color:var(--hi);text-align:center}
+.stat-val.run{color:var(--run)}
+.stat-val.ok{color:var(--ok)}
+.stat-val.warn{color:var(--warn)}
+.stat-lbl{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;text-align:center}
+
+/* cur box */
+.cur-box{padding:9px 12px;background:rgba(77,159,255,.05);border:1px solid rgba(77,159,255,.15);border-radius:8px;display:flex;align-items:center;gap:10px}
+.cur-spinner{width:24px;height:24px;border-radius:50%;flex-shrink:0;border:2px solid rgba(77,159,255,.2);border-top-color:var(--run);animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.cur-spinner.done{border:2px solid var(--ok);animation:none;display:flex;align-items:center;justify-content:center;color:var(--ok);font-size:11px}
+.cur-name{font-size:12px;font-weight:500;color:var(--hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cur-tipo{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px}
+.cur-time{font-family:'DM Mono',monospace;font-size:12px;color:var(--run);flex-shrink:0;margin-left:auto}
+
+/* ── LOG BOX ── */
+.log-area{grid-area:log;padding:0 28px 12px;display:flex;flex-direction:column;animation:fade-up .6s .2s ease both}
+.log-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.log-title{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;display:flex;align-items:center;gap:6px}
+.log-dot{width:4px;height:4px;border-radius:50%;background:var(--run);animation:blink 1.2s ease-in-out infinite}
+.log-box{height:90px;background:rgba(5,10,22,.7);border:1px solid var(--bdim);border-radius:6px;overflow-y:auto;padding:6px 10px;font-family:'DM Mono',monospace;font-size:9.5px;line-height:1.55;color:rgba(130,160,210,.75)}
+.log-box::-webkit-scrollbar{width:2px}
+.log-box::-webkit-scrollbar-thumb{background:var(--bdim)}
+.log-line{white-space:pre-wrap;word-break:break-all}
+.log-line.ok{color:var(--ok)}
+.log-line.err{color:var(--err)}
+.log-line.warn{color:var(--warn)}
+.log-line.info{color:rgba(77,159,255,.7)}
+.log-cursor{display:inline-block;width:6px;height:11px;background:var(--run);animation:blink .8s step-end infinite;vertical-align:text-bottom;margin-left:2px}
+
+/* ── COLONNA DESTRA ── */
+.col-right{grid-area:right;padding:14px 28px 12px;display:flex;flex-direction:column;overflow:hidden;animation:fade-left .6s .15s ease both}
+.steps-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0}
+.steps-title{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
+.steps-count{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}
+.pipeline{flex:1;overflow-y:auto;display:flex;flex-direction:column;padding-right:4px}
+.pipeline::-webkit-scrollbar{width:3px}
+.pipeline::-webkit-scrollbar-thumb{background:var(--bdim);border-radius:2px}
+.step-row{display:flex;align-items:center;position:relative}
+.step-row:not(:last-child) .step-connector{position:absolute;left:11px;top:26px;width:2px;height:calc(100% - 6px);background:var(--bdim);transition:background .4s;z-index:0}
+.step-row.st-done:not(:last-child) .step-connector{background:rgba(0,217,126,.25)}
+.step-row.st-active:not(:last-child) .step-connector{background:rgba(77,159,255,.2)}
+.step-left{display:flex;flex-direction:column;align-items:center;padding:5px 0;flex-shrink:0;width:26px;position:relative;z-index:1}
+.step-circle{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-family:'DM Mono',monospace;flex-shrink:0;transition:all .3s}
+.st-done .step-circle{background:rgba(0,217,126,.15);border:1.5px solid var(--ok);color:var(--ok)}
+.st-active .step-circle{background:rgba(77,159,255,.15);border:1.5px solid var(--run);color:var(--run);animation:pulse-c 1.5s ease-in-out infinite}
+.st-error .step-circle{background:rgba(255,71,87,.15);border:1.5px solid var(--err);color:var(--err)}
+.st-future .step-circle{background:rgba(20,30,55,.3);border:1.5px solid var(--bdim);color:var(--muted)}
+@keyframes pulse-c{0%,100%{box-shadow:0 0 0 0 rgba(77,159,255,.4)}50%{box-shadow:0 0 0 3px rgba(77,159,255,0)}}
+.step-body{flex:1;min-width:0;padding:5px 8px;display:flex;align-items:center;gap:8px;border-radius:5px;margin:1px 0;transition:background .25s}
+.st-active .step-body{background:rgba(77,159,255,.06)}
+.st-error .step-body{background:rgba(255,71,87,.06)}
+.step-text{flex:1;min-width:0}
+.step-name{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .3s}
+.st-done .step-name{color:var(--muted)}
+.st-active .step-name{color:var(--hi);font-weight:500}
+.st-error .step-name{color:var(--err)}
+.st-future .step-name{color:var(--muted);opacity:.5}
+.step-tipo{font-family:'DM Mono',monospace;font-size:8px;color:var(--dim);margin-top:1px}
+.st-active .step-tipo{color:rgba(77,159,255,.5)}
+.step-right{flex-shrink:0;font-family:'DM Mono',monospace;font-size:9px;min-width:32px;text-align:right}
+.st-done .step-right{color:var(--ok)}
+.st-active .step-right{color:var(--run)}
+.st-error .step-right{color:var(--err)}
+.st-future .step-right{color:var(--dim)}
+/* stima tempo futuro */
+.step-est{font-family:'DM Mono',monospace;font-size:8px;color:var(--dim);opacity:.6}
+
+/* ── FOOTER ── */
+.ftr{grid-area:ftr;padding:7px 28px;border-top:1px solid var(--bdim);display:flex;align-items:center;justify-content:space-between;animation:fade-up .6s .3s ease both}
+.ftr-item{font-family:'DM Mono',monospace;font-size:9px;color:var(--dim)}
+.ftr-item b{color:rgba(140,160,200,.4);font-weight:400}
+.ftr-warn{font-family:'DM Mono',monospace;font-size:9px;color:rgba(245,166,35,.55)}
+
+/* ── OVERLAY COMPLETATO ── */
+.overlay{position:fixed;inset:0;z-index:20;background:rgba(5,8,15,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:0;pointer-events:none;transition:opacity .7s ease}
+.overlay.show{opacity:1;pointer-events:all}
+.ov-top{display:flex;align-items:flex-start;gap:40px;max-width:780px;width:100%}
+.ov-left{display:flex;flex-direction:column;align-items:center;gap:14px}
+.ov-ring{width:90px;height:90px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:38px}
+.ov-ring.ok{background:rgba(0,217,126,.1);border:2px solid var(--ok);box-shadow:0 0 40px rgba(0,217,126,.15)}
+.ov-title{font-size:26px;font-weight:300;color:var(--hi);text-align:center}
+.ov-sub.ok{font-family:'DM Mono',monospace;font-size:12px;color:var(--ok);text-align:center}
+.ov-detail{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:6px 16px;background:rgba(255,255,255,.03);border:1px solid var(--bdim);border-radius:5px;text-align:center}
+.reboot-line{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.reboot-n{color:var(--warn);font-size:13px;font-weight:500}
+
+/* screenshot preview */
+.ov-right{flex:1}
+.screenshot-box{width:100%;border-radius:8px;border:1px solid var(--bdim);overflow:hidden;background:rgba(10,15,30,.8)}
+.screenshot-header{padding:6px 12px;border-bottom:1px solid var(--bdim);font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.screenshot-img{width:100%;height:160px;object-fit:cover;display:block}
+.screenshot-placeholder{width:100%;height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(5,10,22,.5)}
+.screenshot-placeholder .icon{font-size:28px;opacity:.25}
+.screenshot-placeholder .lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}
+
+/* hw overlay summary */
+.ov-hw{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.ov-hw-chip{padding:4px 10px;border-radius:4px;background:rgba(77,159,255,.06);border:1px solid var(--bdim);font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.ov-hw-chip b{color:var(--hi);font-weight:500}
+
+@keyframes fade-down{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@keyframes fade-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes fade-right{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+@keyframes fade-left{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="bg-grad"></div>
+<div class="bg-grid"></div>
+<div class="bg-scan"></div>
+<div class="bg-vig"></div>
+
+<div class="shell">
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <div class="logo">
+      <div class="logo-box">N</div>
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <span class="logo-n">NOVASCM</span>
+        <span class="logo-s">Deployment Agent</span>
+      </div>
+    </div>
+    <div>
+      <div class="pc-name" id="pc-name">WKS-MKTG-042</div>
+      <div class="pc-domain">polariscore.local</div>
+    </div>
+    <div style="text-align:right">
+      <div class="wf-badge"><span class="led"></span>Deploy Base Win 11</div>
+      <div class="hdr-time" id="clock">--:--:--</div>
+    </div>
+  </header>
+
+  <!-- HW STRIP -->
+  <div class="hw-strip" id="hw-strip">
+    <div class="hw-item">
+      <span class="hw-icon">🖥</span>
+      <div class="hw-info">
+        <div class="hw-val" id="hw-cpu"><span class="hw-pending">rilevamento…</span></div>
+        <div class="hw-lbl">MODELLO CPU</div>
+      </div>
+    </div>
+    <div class="hw-item">
+      <span class="hw-icon">💾</span>
+      <div class="hw-info">
+        <div class="hw-val" id="hw-ram"><span class="hw-pending">rilevamento…</span></div>
+        <div class="hw-lbl">RAM</div>
+      </div>
+    </div>
+    <div class="hw-item">
+      <span class="hw-icon">💿</span>
+      <div class="hw-info">
+        <div class="hw-val" id="hw-disk"><span class="hw-pending">rilevamento…</span></div>
+        <div class="hw-lbl">DISCO</div>
+      </div>
+    </div>
+    <div class="hw-item" style="flex:1.4">
+      <span class="hw-icon">🌐</span>
+      <div class="hw-info">
+        <div class="hw-val" id="hw-mac"><span class="hw-pending">rilevamento…</span></div>
+        <div class="hw-val" style="font-size:10px;margin-top:2px" id="hw-ip"><span class="hw-pending">—</span></div>
+        <div class="hw-lbl">RETE — MAC / IP</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- COLONNA SINISTRA -->
+  <div class="col-left">
+    <div class="ring-wrap">
+      <svg class="ring-svg" width="78" height="78" viewBox="0 0 90 90">
+        <circle class="ring-track" cx="45" cy="45" r="40"/>
+        <circle class="ring-fill" cx="45" cy="45" r="40" id="ring-fill"/>
+        <text x="45" y="41" text-anchor="middle" dominant-baseline="middle" class="ring-center" id="ring-pct">0%</text>
+        <text x="45" y="55" text-anchor="middle" class="ring-label">completato</text>
+      </svg>
+      <div>
+        <div class="ri-label" id="cur-name">Avvio in corso…</div>
+        <div class="ri-sub" id="cur-tipo">inizializzazione</div>
+      </div>
+    </div>
+    <div>
+      <div class="bar-meta">
+        <span>Progresso</span>
+        <span id="bar-steps-lbl">step 0 / 0</span>
+      </div>
+      <div class="bar-outer"><div class="bar-fill" id="bar" style="width:0%"></div></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-val run" id="stat-done">0</div><div class="stat-lbl">Completati</div></div>
+      <div class="stat"><div class="stat-val" id="stat-rem">0</div><div class="stat-lbl">Rimanenti</div></div>
+      <div class="stat"><div class="stat-val warn" id="stat-eta">—</div><div class="stat-lbl">Stima fin.</div></div>
+      <div class="stat"><div class="stat-val" id="stat-ela">—</div><div class="stat-lbl">Trascorso</div></div>
+    </div>
+    <div class="cur-box">
+      <div class="cur-spinner" id="cur-spinner"></div>
+      <div style="flex:1;min-width:0">
+        <div class="cur-name" id="cur-box-name">In attesa…</div>
+        <div class="cur-tipo" id="cur-box-tipo">—</div>
+      </div>
+      <div class="cur-time" id="cur-box-time">—</div>
+    </div>
+  </div>
+
+  <!-- LOG BOX -->
+  <div class="log-area">
+    <div class="log-header">
+      <div class="log-title"><span class="log-dot"></span>OUTPUT — <span id="log-step-name">—</span></div>
+      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--dim)" id="log-lines">0 righe</div>
+    </div>
+    <div class="log-box" id="log-box">
+      <span style="color:var(--dim)">In attesa dell'output…</span>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- COLONNA DESTRA -->
+  <div class="col-right">
+    <div class="steps-header">
+      <span class="steps-title">Pipeline</span>
+      <span class="steps-count" id="steps-count">— step</span>
+    </div>
+    <div class="pipeline" id="pipeline"></div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="ftr">
+    <div class="ftr-item">NovaSCM <b>1.8.1</b></div>
+    <div class="ftr-warn">▲ Non spegnere il PC durante la configurazione</div>
+    <div class="ftr-item">Server <b>192.168.20.110</b></div>
+  </footer>
+</div>
+
+<!-- OVERLAY COMPLETATO -->
+<div class="overlay" id="ov-done">
+  <div class="ov-top">
+    <div class="ov-left">
+      <div class="ov-ring ok">✓</div>
+      <div class="ov-title">Configurazione<br>completata</div>
+      <div class="ov-sub ok" id="ov-host">WKS-MKTG-042</div>
+      <div class="ov-detail" id="ov-detail">—</div>
+      <div class="ov-hw" id="ov-hw"></div>
+      <div class="reboot-line">Riavvio tra <span class="reboot-n" id="reboot-n">30</span>s</div>
+    </div>
+    <div class="ov-right">
+      <div class="screenshot-box">
+        <div class="screenshot-header">
+          <span>📷</span>
+          <span>Screenshot finale — <span id="ss-time">—</span></span>
+        </div>
+        <div class="screenshot-placeholder" id="ss-placeholder">
+          <div class="icon">🖥</div>
+          <div class="lbl" id="ss-status">Acquisizione in corso…</div>
+        </div>
+        <img id="ss-img" class="screenshot-img" style="display:none" alt="screenshot finale"/>
+      </div>
+      <div style="margin-top:12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-align:center">
+        Salvato su NovaSCM server · disponibile nella UI Deploy Floor
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  DEMO DATA
+// ══════════════════════════════════════════════════
+const DEMO_STEPS=[
+  {id:1, nome:"Partizionamento disco",         tipo:"ps_script",       dur:16,  est:18},
+  {id:2, nome:"Formattazione partizioni",       tipo:"ps_script",       dur:8,   est:9},
+  {id:3, nome:"Installazione Windows 11",       tipo:"windows_update",  dur:260, est:280},
+  {id:4, nome:"Prima configurazione OOBE",      tipo:"ps_script",       dur:35,  est:38},
+  {id:5, nome:"Driver chipset",                 tipo:"winget_install",  dur:20,  est:22},
+  {id:6, nome:"Driver scheda di rete",          tipo:"winget_install",  dur:14,  est:15},
+  {id:7, nome:"Driver audio",                   tipo:"winget_install",  dur:10,  est:11},
+  {id:8, nome:"Driver grafica",                 tipo:"winget_install",  dur:25,  est:27},
+  {id:9, nome:"Windows Update — critico",       tipo:"windows_update",  dur:200, est:210},
+  {id:10,nome:"Windows Update — cumulativo",    tipo:"windows_update",  dur:180, est:195},
+  {id:11,nome:"Microsoft Visual C++ 2022",      tipo:"winget_install",  dur:18,  est:20},
+  {id:12,nome:".NET Runtime 8",                 tipo:"winget_install",  dur:22,  est:24},
+  {id:13,nome:"Agente sicurezza aziendale",     tipo:"winget_install",  dur:30,  est:32},
+  {id:14,nome:"Configurazione policy firewall", tipo:"ps_script",       dur:8,   est:9},
+  {id:15,nome:"Join dominio Active Directory",  tipo:"ps_script",       dur:28,  est:30},
+  {id:16,nome:"Sincronizzazione GPO",           tipo:"ps_script",       dur:12,  est:13},
+  {id:17,nome:"Registrazione certificato",      tipo:"ps_script",       dur:10,  est:11},
+  {id:18,nome:"Office 365 ProPlus",             tipo:"winget_install",  dur:95,  est:100},
+  {id:19,nome:"Configurazione Outlook",         tipo:"reg_set",         dur:6,   est:7},
+  {id:20,nome:"Teams client",                   tipo:"winget_install",  dur:30,  est:32},
+  {id:21,nome:"OneDrive — configurazione",      tipo:"reg_set",         dur:5,   est:6},
+  {id:22,nome:"Profilo utente predefinito",     tipo:"reg_set",         dur:4,   est:5},
+  {id:23,nome:"Agente NovaSCM",                 tipo:"ps_script",       dur:8,   est:9},
+  {id:24,nome:"Pulizia file temporanei",        tipo:"shell_script",    dur:5,   est:6},
+  {id:25,nome:"Riavvio finale",                 tipo:"reboot",          dur:3,   est:4},
+];
+
+// Log simulati per step
+const DEMO_LOGS={
+  1:["[INFO] Avvio partizionamento...","[INFO] Rilevato disco: Samsung SSD 980 500GB","[INFO] Creazione partizione EFI (500MB)","[INFO] Creazione partizione Windows (450GB)","[OK] Partizionamento completato"],
+  2:["[INFO] Formattazione EFI: FAT32","[INFO] Formattazione C:\\: NTFS (quick)","[OK] Formattazione completata in 7s"],
+  3:["[INFO] Avvio setup.exe /unattend:X:\\autounattend.xml","[INFO] Fase 1: Copia file Windows...","[INFO] Fase 2: Preparazione file da installare...","[INFO] Fase 3: Installazione feature...","[INFO] Fase 4: Installazione aggiornamenti...","[WARN] Riavvio richiesto dal setup","[OK] Windows 11 Pro 23H2 installato"],
+  4:["[INFO] Configurazione OOBE silente","[INFO] Disabilita telemetria consumer","[INFO] Imposta lingua: it-IT, tastiera: it","[OK] OOBE completato"],
+  5:["[INFO] winget install --id Intel.Chipset --silent","[OK] Driver chipset installato v10.1.18"],
+  14:["[INFO] netsh advfirewall set allprofiles state on","[INFO] Regola IN: blocco porte non standard","[INFO] Regola OUT: DNS solo 192.168.20.253","[OK] Policy firewall applicata"],
+  15:["[INFO] Add-Computer -DomainName polariscore.local","[INFO] Autenticazione con account di join...","[INFO] Creazione oggetto computer in OU=Workstations","[OK] Join al dominio completato — riavvio richiesto"],
+  18:["[INFO] Scaricamento Office 365 ProPlus (2.1 GB)...","[INFO] Download: 45% — 180 MB/s","[INFO] Download: 78% — 195 MB/s","[INFO] Download: 100% completato","[INFO] Installazione componenti...","[OK] Microsoft 365 Apps for Enterprise installato"],
+};
+
+const HW_DEMO={cpu:"Intel Core i5-12400",ram:"16 GB DDR4",disk:"Samsung SSD 980 500GB",mac:"00:1A:2B:3C:4D:5E",ip:"192.168.10.42"};
+
+let steps=[],activeIdx=-1,startTime=null,stepTimer=null,demoElapsed=0,logLines=[];
+const $=id=>document.getElementById(id);
+
+// ── INIT DEMO ──
+function initDemo(){
+  startTime=Date.now();
+  steps=DEMO_STEPS.map(s=>({...s,status:"future",elapsed:0}));
+  $("steps-count").textContent=steps.length+" step";
+  renderPipeline();updateLeft();
+  // simula arrivo hw dopo 2s
+  setTimeout(()=>setHardware(HW_DEMO),2000);
+  runDemoStep(0);
+}
+
+// ── HARDWARE ──
+function setHardware(hw){
+  $("hw-cpu").textContent=hw.cpu;
+  $("hw-ram").textContent=hw.ram;
+  $("hw-disk").textContent=hw.disk;
+  $("hw-mac").textContent=hw.mac;
+  $("hw-ip").textContent=hw.ip;
+}
+
+// ── DEMO STEP ──
+function runDemoStep(idx){
+  if(idx>=steps.length){setTimeout(showDone,400);return;}
+  steps[idx].status="active";activeIdx=idx;demoElapsed=0;
+  logLines=[];clearLog(steps[idx].nome);
+  updateLeft();renderPipeline();
+  // simula log lines
+  const logs=DEMO_LOGS[steps[idx].id]||[`[INFO] Avvio ${steps[idx].nome}...`,"[INFO] Esecuzione in corso…"];
+  let li=0;
+  function addNextLog(){
+    if(li<logs.length){addLog(logs[li++]);setTimeout(addNextLog,280+Math.random()*400);}
+  }
+  setTimeout(addNextLog,300);
+  const dur=Math.max(1.2,(steps[idx].dur||10)*0.042);
+  stepTimer=setInterval(()=>{
+    demoElapsed+=0.12;steps[idx].elapsed=demoElapsed;
+    const el=document.getElementById("lt-"+steps[idx].id);
+    if(el)el.textContent=fmt(demoElapsed);
+    $("cur-box-time").textContent=fmt(demoElapsed);
+    $("stat-ela").textContent=fmtMs(Date.now()-startTime);
+    updateETA();
+    if(demoElapsed>=dur){
+      clearInterval(stepTimer);
+      addLog(`[OK] ${steps[idx].nome} completato in ${fmt(demoElapsed)}`,"ok");
+      steps[idx].status="done";
+      updateLeft();renderPipeline();
+      setTimeout(()=>runDemoStep(idx+1),220);
+    }
+  },120);
+}
+
+// ── LOG ──
+function clearLog(stepName){
+  logLines=[];
+  $("log-box").innerHTML='';
+  $("log-step-name").textContent=stepName;
+  $("log-lines").textContent="0 righe";
+}
+function addLog(text,cls=""){
+  logLines.push(text);
+  const lb=$("log-box");
+  const line=document.createElement("div");
+  line.className="log-line"+(cls?" "+cls:"");
+  line.textContent=text;
+  lb.appendChild(line);
+  lb.scrollTop=lb.scrollHeight;
+  $("log-lines").textContent=logLines.length+" "+(logLines.length===1?"riga":"righe");
+}
+
+// ── ETA ──
+function updateETA(){
+  const done=steps.filter(s=>s.status==="done").length;
+  const future=steps.filter(s=>s.status==="future");
+  let remSec=future.reduce((a,s)=>a+(s.est||s.dur||10),0);
+  const active=steps.find(s=>s.status==="active");
+  if(active)remSec+=Math.max(0,(active.est||active.dur||10)*0.042-demoElapsed);
+  $("stat-eta").textContent=remSec>0?fmt(remSec):"—";
+}
+
+// ── PIPELINE ──
+function renderPipeline(){
+  const pipe=$("pipeline");
+  pipe.innerHTML=steps.map(s=>{
+    const spinner=s.status==="active"?`<div style="width:9px;height:9px;border-radius:50%;border:1.5px solid rgba(77,159,255,.25);border-top-color:var(--run);animation:spin .8s linear infinite"></div>`
+      :s.status==="done"?"✓":s.status==="error"?"✕":String(s.id);
+    const elapsed=s.status==="done"?(s.elapsed?fmt(s.elapsed):"✓")
+      :s.status==="active"?`<span id="lt-${s.id}">${s.elapsed?fmt(s.elapsed):"0s"}</span>`
+      :s.status==="error"?"ERR":"";
+    const est=s.status==="future"&&s.est?`<div class="step-est">~${fmt(s.est)}</div>`:"";
+    return`<div class="step-row st-${s.status}" id="sr-${s.id}">
+      <div class="step-connector"></div>
+      <div class="step-left"><div class="step-circle">${spinner}</div></div>
+      <div class="step-body">
+        <div class="step-text">
+          <div class="step-name">${s.nome}</div>
+          <div class="step-tipo">${s.tipo}${est}</div>
+        </div>
+        <div class="step-right">${elapsed}</div>
+      </div></div>`;
+  }).join("");
+  if(activeIdx>=0){const el=document.getElementById("sr-"+steps[activeIdx].id);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});}
+}
+
+// ── LEFT ──
+function updateLeft(){
+  const done=steps.filter(s=>s.status==="done").length;
+  const total=steps.length;
+  const pct=total?Math.round(done/total*100):0;
+  const active=steps.find(s=>s.status==="active");
+  const circ=2*Math.PI*40;
+  $("ring-fill").style.strokeDashoffset=circ-(pct/100)*circ;
+  if(pct>=100)$("ring-fill").classList.add("done");
+  $("ring-pct").textContent=pct+"%";
+  $("bar").style.width=pct+"%";
+  if(pct>=100)$("bar").classList.add("done");
+  $("bar-steps-lbl").textContent=`step ${done} / ${total}`;
+  $("stat-done").textContent=done;
+  $("stat-rem").textContent=Math.max(0,total-done);
+  if(active){
+    $("cur-box-name").textContent=active.nome;
+    $("cur-box-tipo").textContent=active.tipo;
+    $("cur-name").textContent=active.nome;
+    $("cur-tipo").textContent=active.tipo;
+  }
+}
+
+// ── DONE ──
+function showDone(){
+  $("bar").style.width="100%";$("bar").classList.add("done");
+  $("ring-fill").style.strokeDashoffset=0;$("ring-fill").classList.add("done");
+  $("ring-pct").textContent="100%";
+  $("ov-detail").textContent=`25 step · durata ${fmtMs(Date.now()-startTime)}`;
+  $("ov-hw").innerHTML=`
+    <div class="ov-hw-chip">🖥 <b>${HW_DEMO.cpu}</b></div>
+    <div class="ov-hw-chip">💾 <b>${HW_DEMO.ram}</b></div>
+    <div class="ov-hw-chip">💿 <b>${HW_DEMO.disk}</b></div>
+    <div class="ov-hw-chip">🌐 <b>${HW_DEMO.mac}</b> · ${HW_DEMO.ip}</div>`;
+  $("ss-status").textContent="Acquisizione in corso…";
+  $("ov-done").classList.add("show");
+  // simula screenshot dopo 2s
+  setTimeout(()=>{
+    $("ss-status").textContent="Screenshot acquisito ✓";
+    $("ss-time").textContent=new Date().toLocaleTimeString("it-IT");
+    // in produzione qui arriva l'immagine base64 dal server
+  },2000);
+  let n=30;const t=setInterval(()=>{$("reboot-n").textContent=--n;if(n<=0)clearInterval(t);},1000);
+}
+
+function fmt(s){s=Math.round(s);return s<60?s+"s":Math.floor(s/60)+"m "+String(s%60).padStart(2,"0")+"s"}
+function fmtMs(ms){const s=Math.floor(ms/1000);return s<60?s+"s":Math.floor(s/60)+"m "+String(s%60).padStart(2,"0")+"s"}
+function tick(){$("clock").textContent=new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
+
+tick();setInterval(tick,1000);
+initDemo();
+</script>
+</body>
+</html>
