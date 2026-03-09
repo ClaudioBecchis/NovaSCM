@@ -70,6 +70,8 @@ public partial class WorkflowStepWindow : Window
 
     private void CmbTipo_SelectionChanged(object s, SelectionChangedEventArgs e)
     {
+        // Guard: l'evento scatta durante InitializeComponent prima che i controlli siano pronti
+        if (TxtParametri == null) return;
         if (CmbTipo.SelectedItem is not ComboBoxItem item) return;
         var tipo = item.Tag?.ToString() ?? "";
         if (DefaultParams.TryGetValue(tipo, out var def))
