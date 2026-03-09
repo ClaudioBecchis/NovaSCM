@@ -4,6 +4,23 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.4] - 2026-03-09
+
+### Sicurezza
+
+- **C-7 (completo)**: `server/api.py` — script installer scaricano direttamente il binario agente, verificano SHA256 prima di eseguire; aggiunto endpoint `GET /api/download/agent.sha256`
+
+### Bug fix
+
+- **M-2**: `server/api.py` — `/health` non espone più il percorso del DB nella risposta (era `{"status":"ok","db":"/data/novascm.db"}`, ora solo `{"status":"ok"}`)
+- **M-7 (completo)**: `server/api.py` — aggiunto indice mancante `idx_pc_workflows_status ON pc_workflows(status)` (ora totale: 4 indici)
+
+### Miglioramenti
+
+- **I-2**: `NovaSCMAgent/ApiClient.cs` — `AgentVer` letto da `Assembly.GetExecutingAssembly()` invece di costante hardcoded `"1.0.0"`
+
+---
+
 ## [1.7.3] - 2026-03-09
 
 ### Sicurezza

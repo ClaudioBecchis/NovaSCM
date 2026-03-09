@@ -9,7 +9,8 @@ public class ApiClient
 {
     private readonly HttpClient _http;
     private readonly ILogger<ApiClient> _log;
-    private const string AgentVer = "1.0.0";
+    private static readonly string AgentVer =
+        System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
 
     public ApiClient(ILogger<ApiClient> log)
     {
