@@ -15,7 +15,7 @@ import os, sys, json, time, platform, subprocess, socket, logging, traceback, sh
 from datetime import datetime
 from urllib.request import urlopen, Request
 from urllib.error import URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 # ── Costanti ──────────────────────────────────────────────────────────────────
 IS_WINDOWS = platform.system() == "Windows"
@@ -59,6 +59,30 @@ DEFAULT_CONFIG = {
     "pc_name":   socket.gethostname().upper(),
 }
 
+
+# Host bloccati: metadata service AWS/Azure/GCP, loopback (il server NovaSCM è su LAN, non localhost)
+_BLOCKED_HOSTS = {
+    "169.254.169.254",           # AWS/Azure/Alibaba metadata
+    "metadata.google.internal",  # GCP metadata
+    "metadata.internal",         # GCP alias
+}
+
+def _validate_api_url(url: str) -> str:
+    """Valida api_url: solo http/https, no metadata service. Esce se non valido."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            log.error("[SSRF] api_url schema non valido ('%s'). Solo http/https consentiti.", parsed.scheme)
+            sys.exit(1)
+        host = (parsed.hostname or "").lower()
+        if host in _BLOCKED_HOSTS:
+            log.error("[SSRF] api_url punta a host non consentito: %s", host)
+            sys.exit(1)
+    except Exception as e:
+        log.error("[SSRF] api_url non valido: %s", e)
+        sys.exit(1)
+    return url
+
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "w") as f:
@@ -71,6 +95,8 @@ def load_config():
     cfg.setdefault("api_key", "")
     if "YOUR-SERVER-IP" in cfg.get("api_url", ""):
         log.error("[ATTENZIONE] agent.json non configurato! Modifica api_url in: %s", CONFIG_FILE)
+    # SSRF: valida schema e host prima di usare l'URL
+    cfg["api_url"] = _validate_api_url(cfg.get("api_url", ""))
     return cfg
 
 # ── State (persistenza tra riavvii) ──────────────────────────────────────────
