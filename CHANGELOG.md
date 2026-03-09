@@ -4,6 +4,18 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.3] - 2026-03-09
+
+### Sicurezza e qualità (v4 analysis report)
+
+- **BUG-04**: Credenziali cifrate con DPAPI (`ProtectedData.Protect`, scope `CurrentUser`) — `UnifiPass`, `AdminPass`, `NovaSCMApiKey` non vengono più scritte in chiaro in `config.json`; retrocompatibilità automatica al primo salvataggio
+- **SEC-03**: Eliminata argument injection residua in 3 chiamate `ssh.exe`/`scp` (Proxmox temp + Deploy PXE) — migrate da `.Arguments` f-string a `.ArgumentList`; `StrictHostKeyChecking` cambiato da `no` a `accept-new` (meno esposto a MITM)
+- **NEW-E**: Aggiunto `EnsureApiConfigured()` null-guard su `BtnCrCreate_Click` — messaggio chiaro invece di `NullReferenceException` se l'URL API non è configurato
+- **SEC-04**: Warning UI in `BtnDeployGenerate_Click` quando il join AD è attivo — avvisa che la password è scritta in chiaro nel `postinstall.ps1`
+- **NEW-F**: Confermato — `_apiCache` già passato correttamente al costruttore di `NovaSCMApiService` in `LoadConfig()`
+
+---
+
 ## [1.6.2] - 2026-03-08
 
 ### Security fix — UI (argument injection)

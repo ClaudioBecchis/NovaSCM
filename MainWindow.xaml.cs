@@ -178,6 +178,7 @@ class AppConfig
     public string CertportalUrl { get; set; } = "";
     public string UnifiUrl      { get; set; } = "";
     public string UnifiUser     { get; set; } = "admin";
+    // Campi plain mantenuti per retrocompatibilità (migrazione automatica al primo salvataggio)
     public string UnifiPass     { get; set; } = "";
     public string Ssid          { get; set; } = "NovaSCM-Secure";
     public string RadiusIp      { get; set; } = "";
@@ -192,6 +193,10 @@ class AppConfig
     public string ScanNetworks  { get; set; } = "192.168.1.0/24";
     public string NovaSCMApiUrl { get; set; } = "";
     public string NovaSCMApiKey { get; set; } = "";
+    // BUG-04: campi cifrati con DPAPI (sostituiscono i campi plain sopra)
+    public string UnifiPassE     { get; set; } = "";
+    public string AdminPassE     { get; set; } = "";
+    public string NovaSCMApiKeyE { get; set; } = "";
 }
 
 public class CrRow
@@ -270,6 +275,38 @@ public partial class MainWindow : Window
     // ARCH-01: servizio API centralizzato (ricreato in LoadConfig quando cambia l'URL)
     private NovaSCMApiService? _apiSvc;
 
+    // BUG-04: DPAPI helpers (Windows-only, CurrentUser scope)
+    private static string DpapiEncrypt(string plain)
+    {
+        if (string.IsNullOrEmpty(plain)) return "";
+        var encrypted = System.Security.Cryptography.ProtectedData.Protect(
+            System.Text.Encoding.UTF8.GetBytes(plain), null,
+            System.Security.Cryptography.DataProtectionScope.CurrentUser);
+        return Convert.ToBase64String(encrypted);
+    }
+
+    private static string DpapiDecrypt(string cipher)
+    {
+        if (string.IsNullOrEmpty(cipher)) return "";
+        try
+        {
+            var plain = System.Security.Cryptography.ProtectedData.Unprotect(
+                Convert.FromBase64String(cipher), null,
+                System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            return System.Text.Encoding.UTF8.GetString(plain);
+        }
+        catch { return ""; }
+    }
+
+    // NEW-E: null-guard per handler che richiedono l'API configurata
+    private bool EnsureApiConfigured(string? statusControl = null)
+    {
+        if (_apiSvc != null) return true;
+        var msg = "⚙️  Configura l'URL API NovaSCM nelle Impostazioni";
+        SetStatus(msg);
+        return false;
+    }
+
     // FEAT-03: Search overlay record
     private record SearchResult(string Label, string Sub, int TabIndex, string Workspace = "asset");
 
@@ -320,6 +357,10 @@ public partial class MainWindow : Window
         if (File.Exists(ConfigPath))
             try { _config = JsonSerializer.Deserialize<AppConfig>(File.ReadAllText(ConfigPath)) ?? new(); }
             catch { _config = new(); }
+        // BUG-04: decripta campi DPAPI (fallback al plain per retrocompatibilità)
+        if (!string.IsNullOrEmpty(_config.UnifiPassE))     _config.UnifiPass     = DpapiDecrypt(_config.UnifiPassE);
+        if (!string.IsNullOrEmpty(_config.AdminPassE))     _config.AdminPass     = DpapiDecrypt(_config.AdminPassE);
+        if (!string.IsNullOrEmpty(_config.NovaSCMApiKeyE)) _config.NovaSCMApiKey = DpapiDecrypt(_config.NovaSCMApiKeyE);
         // ARCH-01: ricrea il servizio API con i nuovi parametri di configurazione
         _apiSvc = string.IsNullOrWhiteSpace(_config.NovaSCMApiUrl)
             ? null
@@ -377,7 +418,6 @@ public partial class MainWindow : Window
         _config.CertportalUrl = TxtCertportalUrl.Text.Trim();
         _config.UnifiUrl      = TxtUnifiUrl.Text.Trim();
         _config.UnifiUser     = TxtUnifiUser.Text.Trim();
-        _config.UnifiPass     = TxtUnifiPass.Password;
         _config.Ssid          = TxtSsid.Text.Trim();
         _config.RadiusIp      = TxtRadiusIp.Text.Trim();
         _config.CertDays      = TxtCertDays.Text.Trim();
@@ -387,9 +427,14 @@ public partial class MainWindow : Window
         _config.ScanSubnet    = TxtScanSubnet.Text.Trim();
         _config.ScanNetworks  = TxtScanNetworks.Text;
         _config.AdminUser     = TxtAdminUser.Text.Trim();
-        _config.AdminPass     = TxtAdminPass.Password;
         _config.NovaSCMApiUrl = TxtNovaSCMApiUrl.Text.Trim();
-        _config.NovaSCMApiKey = TxtNovaSCMApiKey.Password;
+        // BUG-04: cifra le credenziali con DPAPI, non salvare plaintext
+        _config.UnifiPassE     = DpapiEncrypt(TxtUnifiPass.Password);
+        _config.AdminPassE     = DpapiEncrypt(TxtAdminPass.Password);
+        _config.NovaSCMApiKeyE = DpapiEncrypt(TxtNovaSCMApiKey.Password);
+        _config.UnifiPass      = "";
+        _config.AdminPass      = "";
+        _config.NovaSCMApiKey  = "";
         Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
         File.WriteAllText(ConfigPath,
             JsonSerializer.Serialize(_config, new JsonSerializerOptions { WriteIndented = true }));
@@ -2968,7 +3013,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.6.2";
+    private const string CurrentVersion = "1.6.3";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -3597,6 +3642,7 @@ public partial class MainWindow : Window
 
     private async void BtnCrCreate_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         var pcName = TxtCrPcName.Text.Trim().ToUpper();
         var domain = TxtCrDomain.Text.Trim();
         if (string.IsNullOrEmpty(pcName) || string.IsNullOrEmpty(domain))
@@ -3887,11 +3933,17 @@ public partial class MainWindow : Window
         BtnDeployUsb.IsEnabled  = true;
         BtnDeployPxe.IsEnabled  = true;
 
+        // SEC-04: avvisa l'utente che la password di domain join è in chiaro nel file generato
+        var domainWarning = cfg.DomainJoin == "AD" && !string.IsNullOrEmpty(cfg.DomainPassword)
+            ? "\n⚠️  La password di join AD è scritta in chiaro nel postinstall.ps1 — proteggi il server PXE e le chiavette USB."
+            : "";
+
         TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         TxtDeployStatus.Text =
             $"✅  File generati — {cfg.WinEdition} · {cfg.WingetPackages.Count} software · " +
             $"{(cfg.IncludeAgent ? "agente incluso" : "senza agente")}\n" +
-            "💡  Per USB: copia autounattend.xml + postinstall.ps1 nella radice della chiavetta insieme all'ISO Windows.";
+            "💡  Per USB: copia autounattend.xml + postinstall.ps1 nella radice della chiavetta insieme all'ISO Windows." +
+            domainWarning;
         App.Log($"[Deploy] File generati in {_deployTmpDir}");
     }
 
@@ -3988,15 +4040,21 @@ public partial class MainWindow : Window
                 foreach (var file in new[] { "autounattend.xml", "postinstall.ps1" })
                 {
                     var src  = Path.Combine(_deployTmpDir!, file);
-                    var args = $"-i \"{keyPath}\" -o StrictHostKeyChecking=no " +
-                               $"\"{src}\" root@{pxeIp}:{pxePath}{file}";
-                    using var proc = Process.Start(new ProcessStartInfo("scp", args)
+                    // SEC-03: ArgumentList evita injection da pxeIp/pxePath controllati dall'utente
+                    var scpInfo = new ProcessStartInfo("scp")
                     {
                         UseShellExecute        = false,
                         RedirectStandardOutput = true,
                         RedirectStandardError  = true,
                         CreateNoWindow         = true,
-                    })!;
+                    };
+                    scpInfo.ArgumentList.Add("-i");
+                    scpInfo.ArgumentList.Add(keyPath);
+                    scpInfo.ArgumentList.Add("-o");
+                    scpInfo.ArgumentList.Add("StrictHostKeyChecking=accept-new");
+                    scpInfo.ArgumentList.Add(src);
+                    scpInfo.ArgumentList.Add($"root@{pxeIp}:{pxePath}{file}");
+                    using var proc = Process.Start(scpInfo)!;
                     proc.WaitForExit(30_000);
                     if (proc.ExitCode != 0)
                         throw new Exception($"scp {file} fallito (exit {proc.ExitCode}): " +
@@ -6935,16 +6993,19 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             var keyPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".ssh", "id_ed25519");
+            // SEC-03: ArgumentList evita injection da _pveHost (valore UI)
             var psi = new ProcessStartInfo("ssh.exe")
             {
-                Arguments = $"-i \"{keyPath}\" -o StrictHostKeyChecking=no " +
-                            $"-o ConnectTimeout=5 root@{_pveHost} " +
-                            "\"sensors -j 2>/dev/null\"",
                 UseShellExecute        = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError  = true,
                 CreateNoWindow         = true
             };
+            psi.ArgumentList.Add("-i");              psi.ArgumentList.Add(keyPath);
+            psi.ArgumentList.Add("-o");              psi.ArgumentList.Add("StrictHostKeyChecking=accept-new");
+            psi.ArgumentList.Add("-o");              psi.ArgumentList.Add("ConnectTimeout=5");
+            psi.ArgumentList.Add($"root@{_pveHost}");
+            psi.ArgumentList.Add("sensors -j 2>/dev/null");
             var proc = Process.Start(psi)!;
             var json = await proc.StandardOutput.ReadToEndAsync();
             await proc.WaitForExitAsync();
@@ -6983,16 +7044,18 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             if (readings.Count == 0)
             {
                 // Fallback: thermal_zone sysfs
+                // SEC-03: ArgumentList evita injection da _pveHost (valore UI)
                 var psi2 = new ProcessStartInfo("ssh.exe")
                 {
-                    Arguments = $"-i \"{keyPath}\" -o StrictHostKeyChecking=no " +
-                                $"-o ConnectTimeout=5 root@{_pveHost} " +
-                                "\"paste <(cat /sys/class/thermal/thermal_zone*/type) " +
-                                "<(cat /sys/class/thermal/thermal_zone*/temp)\"",
                     UseShellExecute        = false,
                     RedirectStandardOutput = true,
                     CreateNoWindow         = true
                 };
+                psi2.ArgumentList.Add("-i");              psi2.ArgumentList.Add(keyPath);
+                psi2.ArgumentList.Add("-o");              psi2.ArgumentList.Add("StrictHostKeyChecking=accept-new");
+                psi2.ArgumentList.Add("-o");              psi2.ArgumentList.Add("ConnectTimeout=5");
+                psi2.ArgumentList.Add($"root@{_pveHost}");
+                psi2.ArgumentList.Add("paste <(cat /sys/class/thermal/thermal_zone*/type) <(cat /sys/class/thermal/thermal_zone*/temp)");
                 var proc2  = Process.Start(psi2)!;
                 var output = await proc2.StandardOutput.ReadToEndAsync();
                 await proc2.WaitForExitAsync();
