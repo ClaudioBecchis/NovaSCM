@@ -2795,53 +2795,48 @@ public partial class MainWindow : Window
     // ── FEAT-01: Dashboard ────────────────────────────────────────────────────
     private async Task RefreshDashboardAsync()
     {
-        var pcOnline   = _netRows.Count(r => r.Status.Contains("online", StringComparison.OrdinalIgnoreCase) || r.Status.Contains("🟢"));
-        var pcTotal    = _netRows.Count;
-        var wfRunning  = _wfAssignRows.Count(w => w.Status.Contains("running", StringComparison.OrdinalIgnoreCase));
-        var devices    = _netRows.Count;
-
-        int crOpen = 0;
-        var feedItems = new List<string>();
-        if (!string.IsNullOrEmpty(CrApiBase))
+        try
         {
-            try
+            var pcOnline  = _netRows.Count(r => r.Status.Contains("online", StringComparison.OrdinalIgnoreCase) || r.Status.Contains("🟢"));
+            var pcTotal   = _netRows.Count;
+            var wfRunning = _wfAssignRows.Count(w => w.Status.Contains("running", StringComparison.OrdinalIgnoreCase));
+
+            int crOpen = 0;
+            var feedItems = new List<string>();
+            if (_apiSvc != null)
             {
-                string json;
-                if (!_apiCache.TryGet(CrApiBase, out json))
+                try
                 {
-                    using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-                    json = await http.GetStringAsync(CrApiBase);
-                    _apiCache.Set(CrApiBase, json, TimeSpan.FromSeconds(60));
+                    var json = await _apiSvc.GetDashboardJsonAsync();
+                    var doc  = System.Text.Json.JsonDocument.Parse(json);
+                    foreach (var el in doc.RootElement.EnumerateArray())
+                    {
+                        var st = el.TryGetProperty("status", out var s) ? s.GetString() ?? "" : "";
+                        if (st == "open" || st == "pending" || st == "in_progress") crOpen++;
+                        var pc = el.TryGetProperty("pc_name", out var p) ? p.GetString() ?? "" : "";
+                        var ts = el.TryGetProperty("created_at", out var t) ? t.GetString() ?? "" : "";
+                        feedItems.Add($"📋 CR {pc}  [{st}]  {ts[..Math.Min(10, ts.Length)]}");
+                    }
                 }
-                var doc  = System.Text.Json.JsonDocument.Parse(json);
-                foreach (var el in doc.RootElement.EnumerateArray())
-                {
-                    var st = el.TryGetProperty("status", out var s) ? s.GetString() ?? "" : "";
-                    if (st == "open" || st == "pending" || st == "in_progress") crOpen++;
-                    var pc = el.TryGetProperty("pc_name", out var p) ? p.GetString() ?? "" : "";
-                    var ts = el.TryGetProperty("created_at", out var t) ? t.GetString() ?? "" : "";
-                    feedItems.Add($"📋 CR {pc}  [{st}]  {ts[..Math.Min(10, ts.Length)]}");
-                }
+                catch { feedItems.Add("⚠️  Server API non raggiungibile"); }
             }
-            catch { feedItems.Add("⚠️  Server API non raggiungibile"); }
-        }
 
-        // Aggiungi eventi workflow recenti
-        foreach (var wf in _wfAssignRows.Take(3))
-            feedItems.Add($"⚙️  {wf.PcName} — {wf.WorkflowNome} [{wf.Status}]");
+            // Aggiungi eventi workflow recenti
+            foreach (var wf in _wfAssignRows.Take(3))
+                feedItems.Add($"⚙️  {wf.PcName} — {wf.WorkflowNome} [{wf.Status}]");
 
-        if (feedItems.Count == 0) feedItems.Add("Nessun evento recente.");
+            if (feedItems.Count == 0) feedItems.Add("Nessun evento recente.");
 
-        Dispatcher.Invoke(() =>
-        {
-            TxtDashPcOnline.Text  = pcTotal > 0 ? $"{pcOnline}/{pcTotal}" : "—";
-            TxtDashWorkflow.Text  = _wfAssignRows.Count > 0 ? wfRunning.ToString() : "—";
-            TxtDashCrOpen.Text    = crOpen.ToString();
-            TxtDashDevices.Text   = devices > 0 ? devices.ToString() : "—";
-            DashFeed.ItemsSource  = feedItems.Take(12).ToList();
+            // Aggiorna UI — già sul thread UI dopo await (no Dispatcher.Invoke necessario)
+            TxtDashPcOnline.Text    = pcTotal > 0 ? $"{pcOnline}/{pcTotal}" : "—";
+            TxtDashWorkflow.Text    = _wfAssignRows.Count > 0 ? wfRunning.ToString() : "—";
+            TxtDashCrOpen.Text      = crOpen.ToString();
+            TxtDashDevices.Text     = pcTotal > 0 ? pcTotal.ToString() : "—";
+            DashFeed.ItemsSource    = feedItems.Take(12).ToList();
             TxtDashLastRefresh.Text = $"Aggiornato: {DateTime.Now:HH:mm:ss}";
             UpdateNavBadges(wfRunning, crOpen);
-        });
+        }
+        catch (Exception ex) { App.Log($"[Dashboard] {ex.Message}"); }
     }
 
     // UI-04: badge counters sui TreeViewItem della nav
@@ -3013,7 +3008,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.6.6";
+    private const string CurrentVersion = "1.6.7";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
