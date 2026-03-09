@@ -1,0 +1,27 @@
+<Application x:Class="NovaSCMDeployScreen.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+  <Application.Resources>
+    <!-- Colori -->
+    <SolidColorBrush x:Key="BrushBg"      Color="#05080F"/>
+    <SolidColorBrush x:Key="BrushS1"      Color="#080C18"/>
+    <SolidColorBrush x:Key="BrushOk"      Color="#00D97E"/>
+    <SolidColorBrush x:Key="BrushRun"     Color="#4D9FFF"/>
+    <SolidColorBrush x:Key="BrushWarn"    Color="#F5A623"/>
+    <SolidColorBrush x:Key="BrushErr"     Color="#FF4757"/>
+    <SolidColorBrush x:Key="BrushTxt"     Color="#C3D2EB"/>
+    <SolidColorBrush x:Key="BrushHi"      Color="#E8F0FF"/>
+    <SolidColorBrush x:Key="BrushMuted"   Color="#526080"/>
+    <SolidColorBrush x:Key="BrushDim"     Color="#2A3550"/>
+    <SolidColorBrush x:Key="BrushBdim"    Color="#1E2E50"/>
+    <SolidColorBrush x:Key="BrushRunDim"  Color="#0D1E35"/>
+
+    <!-- Font sizes -->
+    <System:Double x:Key="FontSm"  xmlns:System="clr-namespace:System;assembly=mscorlib">10</System:Double>
+    <System:Double x:Key="FontMd"  xmlns:System="clr-namespace:System;assembly=mscorlib">12</System:Double>
+    <System:Double x:Key="FontLg"  xmlns:System="clr-namespace:System;assembly=mscorlib">14</System:Double>
+    <System:Double x:Key="FontXl"  xmlns:System="clr-namespace:System;assembly=mscorlib">22</System:Double>
+    <System:Double x:Key="FontXxl" xmlns:System="clr-namespace:System;assembly=mscorlib">30</System:Double>
+  </Application.Resources>
+</Application>
