@@ -4,6 +4,17 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.5] - 2026-03-09
+
+### Bug fix
+
+- **C-1**: `server/api.py` — rimosso `@require_auth` da `/health`; il Docker healthcheck chiamava l'endpoint senza API key → 401 → container in loop restart
+- **M-1**: `server/tests/test_api.py` — aggiornato `TestHealth`: rimosso `test_health_includes_db_field` (campo rimosso in v1.7.4), aggiunto `test_health_does_not_expose_db_path`; corretta variabile spuria in `test_health_status_ok`; **78/78 test passing**
+- **M-2**: `NovaSCMApiService.cs` — `DownloadExeAsync` usava ancora `EnsureSuccessStatusCode()`; allineato al pattern di `SendAsync` con messaggio di errore dettagliato
+- **M-3**: `NovaSCMApiService.cs` — `HttpResponseMessage` in `SendAsync` ora wrapped in `using` (resource leak in caso di eccezione)
+
+---
+
 ## [1.7.4] - 2026-03-09
 
 ### Sicurezza

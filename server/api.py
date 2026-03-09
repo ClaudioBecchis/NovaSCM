@@ -1033,7 +1033,6 @@ def ui_static(path):
 # ── Health check ──────────────────────────────────────────────────────────────
 
 @app.route("/health", methods=["GET"])
-@require_auth
 def health():
     return jsonify({"status": "ok"})
 
