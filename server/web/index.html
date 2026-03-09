@@ -1104,6 +1104,7 @@ function app() {
     liveOk: false,
     lastUpdate: '',
     toast: { show: false, msg: '', type: 'ok' },
+    apiKey: document.querySelector('meta[name="x-api-key"]')?.content || '',
 
     workflows: [],
     assignments: [],
@@ -1194,7 +1195,9 @@ function app() {
 
     async api(url, method = 'GET', body = null) {
       try {
-        const opts = { method, headers: { 'Content-Type': 'application/json' } };
+        const headers = { 'Content-Type': 'application/json' };
+        if (this.apiKey) headers['X-Api-Key'] = this.apiKey;
+        const opts = { method, headers };
         if (body) opts.body = JSON.stringify(body);
         const r = await fetch(url, opts);
         if (!r.ok) return null;

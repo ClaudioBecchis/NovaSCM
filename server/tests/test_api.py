@@ -630,3 +630,48 @@ class TestVersion:
     def test_download_agent_not_found(self, client):
         r = client.get("/api/download/agent", headers=AUTH)
         assert r.status_code == 404
+
+    # ── Round 7 ──────────────────────────────────────────────────────────────
+
+    def test_ui_api_call_with_auth(self, client):
+        """GET /api/cr con X-Api-Key deve rispondere 200."""
+        r = client.get("/api/cr", headers=AUTH)
+        assert r.status_code == 200
+
+    def test_ui_api_call_without_auth_fails(self, client):
+        """GET /api/cr senza header deve rispondere 401."""
+        r = client.get("/api/cr")
+        assert r.status_code == 401
+
+    def test_delete_workflow_cascade(self, client):
+        """DELETE workflow deve rimuovere anche workflow_steps figli."""
+        wf = client.post("/api/workflows",
+                         json={"nome": "WF-CASCADE"},
+                         headers=AUTH).get_json()
+        wf_id = wf["id"]
+        client.post(f"/api/workflows/{wf_id}/steps",
+                    json={"nome": "S1", "tipo": "reboot", "ordine": 1},
+                    headers=AUTH)
+        r = client.delete(f"/api/workflows/{wf_id}", headers=AUTH)
+        assert r.status_code == 200
+        # Il workflow non deve più esistere
+        r2 = client.get(f"/api/workflows/{wf_id}", headers=AUTH)
+        assert r2.status_code == 404
+
+    def test_delete_cr_also_removes_cr_steps(self, client):
+        """DELETE /api/cr deve rimuovere anche i cr_steps figli."""
+        cr = client.post("/api/cr",
+                         json={"pc_name": "STEP-PC", "domain": "test.local"},
+                         headers=AUTH).get_json()
+        cr_id = cr["id"]
+        # simula checkin step
+        client.post("/api/checkin",
+                    json={"hostname": "STEP-PC"},
+                    headers=AUTH)
+        client.post("/api/step",
+                    json={"hostname": "STEP-PC", "step": "postinstall_start", "status": "done"},
+                    headers=AUTH)
+        client.delete(f"/api/cr/{cr_id}", headers=AUTH)
+        # La CR non deve più esistere
+        r = client.get(f"/api/cr/{cr_id}", headers=AUTH)
+        assert r.status_code == 404
