@@ -4,6 +4,14 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.7] - 2026-03-09
+
+### Bugfix
+
+- **BUG**: Dashboard bloccata/congelata — `RefreshDashboardAsync` usava `new HttpClient()` inline (ARCH-01) puntando alla root URL invece di `/api/cr`, causando una risposta inattesa che poteva bloccare il `Dispatcher.Invoke` sincrono; refactored: usa `_apiSvc.GetDashboardJsonAsync()` (endpoint corretto + chiave API + HttpClient condiviso), aggiornamento UI diretto senza `Dispatcher.Invoke`, try/catch esterno con logging
+
+---
+
 ## [1.6.6] - 2026-03-09
 
 ### Bugfix
