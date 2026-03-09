@@ -26,7 +26,8 @@
 
 | Versione | Data | Note |
 |---|---|---|
-| **v1.6.9** | 2026-03-09 | Fix freeze tab PC Gestiti (PerformanceCounter + NetworkInterfaces su background) + auto-report crash GitHub |
+| **v1.7.0** | 2026-03-09 | 🔒 SEC-06: fix path traversal in file_copy (StepExecutor + agent Python) |
+| v1.6.9 | 2026-03-09 | Fix freeze tab PC Gestiti (PerformanceCounter + NetworkInterfaces su background) + auto-report crash GitHub |
 | v1.6.8 | 2026-03-09 | 🔒 SEC-05: rimosso parametro shell da run_cmd() nell'agent (shell=False hardcodato) |
 | v1.6.7 | 2026-03-09 | Fix Dashboard bloccata (RefreshDashboardAsync usa endpoint corretto + rimozione Dispatcher.Invoke) |
 | v1.6.6 | 2026-03-09 | Fix auto-update da About (installer Inno Setup rilevato e avviato silenzioso) |
