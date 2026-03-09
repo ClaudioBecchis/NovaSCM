@@ -15,5 +15,12 @@ ENV PORT=9091
 
 EXPOSE 9091
 
+# Crea utente non-root e cedi la ownership di /app e /data
+RUN adduser --disabled-password --gecos "" novascm \
+    && mkdir -p /data \
+    && chown -R novascm:novascm /app /data
+
+USER novascm
+
 # Gunicorn: 2 worker, timeout 30s
 CMD ["gunicorn", "--workers=1", "--threads=4", "--timeout=30", "--bind=0.0.0.0:9091", "api:app"]
