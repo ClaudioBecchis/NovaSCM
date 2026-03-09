@@ -3951,7 +3951,12 @@ public partial class MainWindow : Window
         TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
         TxtDeployStatus.Text =
             $"✅  File generati — {cfg.WinEdition} · {cfg.WingetPackages.Count} software · " +
-            $"{(cfg.IncludeAgent ? "agente incluso" : "senza agente")}\n" +
+            $"{(cfg.IncludeAgent ? "agente incluso" : "senza agente")}\n\n" +
+            "⚠️  Il PC si riavvierà 2-3 volte — è NORMALE, non spegnere.\n\n" +
+            "📋  Fasi automatiche:\n" +
+            "     Fase 1 — Setup Windows copia i file        (~10 min) → riavvio\n" +
+            "     Fase 2 — Configurazione sistema             (~ 5 min) → riavvio\n" +
+            "     Fase 3 — Post-install: software + agente   (~ 5 min) → riavvio finale\n\n" +
             "💡  Per USB: copia autounattend.xml + postinstall.ps1 nella radice della chiavetta insieme all'ISO Windows." +
             domainWarning;
         App.Log($"[Deploy] File generati in {_deployTmpDir}");
@@ -4146,6 +4151,15 @@ public partial class MainWindow : Window
         // ── RunSynchronousCommands per specialize (pre-calcolato) ─────────────
         var _rsSb  = new System.Text.StringBuilder();
         int _rsOrd = 1;
+
+        // Priorità boot: Windows Boot Manager prima di USB/ISO — evita che al riavvio riparta dall'ISO
+        _rsSb.Append($@"
+        <RunSynchronousCommand wcm:action=""add"">
+          <Order>{_rsOrd++}</Order>
+          <Path>bcdedit /set {{fwbootmgr}} displayorder {{bootmgr}} /addfirst</Path>
+          <Description>Priorita' boot da disco — non da USB/ISO</Description>
+        </RunSynchronousCommand>");
+
         if (!cfg.UseMicrosoftAccount && cfg.DomainJoin != "AD")
             _rsSb.Append($@"
         <RunSynchronousCommand wcm:action=""add"">
