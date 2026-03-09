@@ -3008,7 +3008,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.7.0";
+    private const string CurrentVersion = "1.7.1";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -3907,7 +3907,7 @@ public partial class MainWindow : Window
             File.WriteAllText(Path.Combine(folder, "postinstall.ps1"), ps1, System.Text.Encoding.UTF8);
 
             // 3. Apri Explorer nella cartella
-            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+            Process.Start(new ProcessStartInfo { FileName = "explorer.exe", Arguments = folder, UseShellExecute = true });
 
             TxtCrStatus.Text       = $"✅  File generati in {folder}";
             TxtCrStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
@@ -6398,6 +6398,10 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         if (string.IsNullOrEmpty(ip))
         { TxtScriptRunStatus.Text = "⚠️ Nessun IP target — seleziona un device in Rete o inserisci IP"; return; }
 
+        if (!System.Net.IPAddress.TryParse(ip, out _) &&
+            !System.Text.RegularExpressions.Regex.IsMatch(ip, @"^[a-zA-Z0-9\-\.]+$"))
+        { TxtScriptRunStatus.Text = "⚠️ IP/hostname non valido"; return; }
+
         var code = TxtScriptEditor.Text;
         if (string.IsNullOrWhiteSpace(code)) return;
 
@@ -6415,12 +6419,18 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                     $"Invoke-Command -ComputerName '{ip}' -ScriptBlock {{\n" +
                     code + "\n} -ErrorAction Stop";
                 File.WriteAllText(tmp, wrapped);
-                var psi = new ProcessStartInfo("powershell.exe",
-                    $"-NonInteractive -NoProfile -ExecutionPolicy Bypass -File \"{tmp}\"")
+                var psi = new ProcessStartInfo
                 {
+                    FileName = "powershell.exe",
                     RedirectStandardOutput = true, RedirectStandardError = true,
                     UseShellExecute = false, CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("-NonInteractive");
+                psi.ArgumentList.Add("-NoProfile");
+                psi.ArgumentList.Add("-ExecutionPolicy");
+                psi.ArgumentList.Add("Bypass");
+                psi.ArgumentList.Add("-File");
+                psi.ArgumentList.Add(tmp);
                 using var proc = Process.Start(psi)!;
                 var stdout = proc.StandardOutput.ReadToEnd();
                 var stderr = proc.StandardError.ReadToEnd();
@@ -6453,12 +6463,18 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             {
                 var tmp = Path.GetTempFileName() + ".ps1";
                 File.WriteAllText(tmp, code);
-                var psi = new ProcessStartInfo("powershell.exe",
-                    $"-NonInteractive -NoProfile -ExecutionPolicy Bypass -File \"{tmp}\"")
+                var psi = new ProcessStartInfo
                 {
+                    FileName = "powershell.exe",
                     RedirectStandardOutput = true, RedirectStandardError = true,
                     UseShellExecute = false, CreateNoWindow = true
                 };
+                psi.ArgumentList.Add("-NonInteractive");
+                psi.ArgumentList.Add("-NoProfile");
+                psi.ArgumentList.Add("-ExecutionPolicy");
+                psi.ArgumentList.Add("Bypass");
+                psi.ArgumentList.Add("-File");
+                psi.ArgumentList.Add(tmp);
                 using var proc = Process.Start(psi)!;
                 var stdout = proc.StandardOutput.ReadToEnd();
                 var stderr = proc.StandardError.ReadToEnd();
