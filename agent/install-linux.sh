@@ -51,7 +51,18 @@ curl -fsSL "$API_URL/api/download/agent" -o "$AGENT_DIR/novascm-agent.py"
 chmod +x "$AGENT_DIR/novascm-agent.py"
 log "Agent scaricato: $AGENT_DIR/novascm-agent.py"
 
-# ── 5. Crea config ────────────────────────────────────────────────────────────
+# ── 5. Verifica SHA256 ───────────────────────────────────────────────────────
+log "Verifico integrità SHA256..."
+EXPECTED=$(curl -fsSL "$API_URL/api/download/agent.sha256?os=linux")
+ACTUAL=$(sha256sum "$AGENT_DIR/novascm-agent.py" | awk '{print $1}')
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+    log "ERRORE: hash mismatch. Atteso: $EXPECTED  Ottenuto: $ACTUAL"
+    rm -f "$AGENT_DIR/novascm-agent.py"
+    exit 1
+fi
+log "SHA256 verificato: OK"
+
+# ── 6. Crea config ────────────────────────────────────────────────────────────
 log "Scrivo config: $CONFIG_DIR/agent.json"
 cat > "$CONFIG_DIR/agent.json" << EOF
 {
@@ -61,7 +72,7 @@ cat > "$CONFIG_DIR/agent.json" << EOF
 }
 EOF
 
-# ── 6. Crea systemd service ───────────────────────────────────────────────────
+# ── 7. Crea systemd service ───────────────────────────────────────────────────
 # Crea utente dedicato se non esiste
 if ! id "novascm" &>/dev/null; then
     log "Creo utente novascm..."
@@ -96,7 +107,7 @@ ReadWritePaths=$STATE_DIR $LOG_DIR
 WantedBy=multi-user.target
 EOF
 
-# ── 7. Abilita e avvia servizio ───────────────────────────────────────────────
+# ── 8. Abilita e avvia servizio ───────────────────────────────────────────────
 log "Abilito e avvio $SVC_NAME..."
 systemctl daemon-reload
 systemctl enable "$SVC_NAME"
