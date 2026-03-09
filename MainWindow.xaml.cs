@@ -3008,7 +3008,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.6.8";
+    private const string CurrentVersion = "1.6.9";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -5086,17 +5086,34 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
     // ── System Gauges (PC tab) ─────────────────────────────────────────────────
     private System.Windows.Threading.DispatcherTimer? _gaugeTimer;
     private System.Diagnostics.PerformanceCounter? _cpuCounter;
+    private long _lastNetBytes; // cache per gauge NET — evita GetAllNetworkInterfaces() ogni 1.5s
 
     private void StartGauges()
     {
-        try { _cpuCounter = new System.Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total"); }
-        catch { _cpuCounter = null; }
+        // PerformanceCounter può bloccarsi secondi sul thread UI — init su background
+        _ = Task.Run(() =>
+        {
+            try { _cpuCounter = new System.Diagnostics.PerformanceCounter("Processor", "% Processor Time", "_Total"); }
+            catch { _cpuCounter = null; }
+        });
+
+        // Cache iniziale NET su background
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                _lastNetBytes = System.Net.NetworkInformation.NetworkInterface
+                    .GetAllNetworkInterfaces()
+                    .Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+                    .Sum(n => n.GetIPStatistics().BytesSent + n.GetIPStatistics().BytesReceived);
+            }
+            catch { }
+        });
 
         _gaugeTimer = new System.Windows.Threading.DispatcherTimer
-            { Interval = TimeSpan.FromSeconds(1.5) };
+            { Interval = TimeSpan.FromSeconds(2) };
         _gaugeTimer.Tick += (_, _) => UpdateGauges();
         _gaugeTimer.Start();
-        UpdateGauges();
     }
 
     private void StopGauges()
@@ -5108,18 +5125,12 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
     private void UpdateGauges()
     {
         float cpu = 0;
-        try { _cpuCounter?.NextValue(); cpu = _cpuCounter?.NextValue() ?? 0; }
+        try { cpu = _cpuCounter?.NextValue() ?? 0; }
         catch { }
 
-        var mem   = GC.GetGCMemoryInfo();
-        float ram = mem.TotalAvailableMemoryBytes > 0
-            ? (float)(1.0 - (double)mem.MemoryLoadBytes / mem.TotalAvailableMemoryBytes) * 100
-            : 0;
-        // Simpler: use Environment working set as rough proxy
-        long usedBytes  = Environment.WorkingSet;
-        float ramUsed   = (float)(usedBytes / (1024.0 * 1024.0));
+        long usedBytes = Environment.WorkingSet;
+        float ramUsed  = (float)(usedBytes / (1024.0 * 1024.0));
 
-        // Disk
         float disk = 0;
         try
         {
@@ -5128,21 +5139,27 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         }
         catch { }
 
-        // Network (send rough counter)
-        float net = 0;
-        try
-        {
-            var netIfs = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces();
-            long totalBytes = netIfs.Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
-                                    .Sum(n => n.GetIPStatistics().BytesSent + n.GetIPStatistics().BytesReceived);
-            net = Math.Min(100, (float)(totalBytes / 1e9 % 100));
-        }
-        catch { }
+        // NET: usa valore cached (aggiornato ogni 30s su background)
+        float net = Math.Min(100, (float)(_lastNetBytes / 1e9 % 100));
 
         DrawArcGauge(GaugeCpu,  cpu,  100, "CPU",  "#3b82f6", $"{cpu:F0}%");
         DrawArcGauge(GaugeRam,  Math.Min(100, ramUsed / 40 * 100), 100, "RAM",  "#10b981", $"{ramUsed:F0} MB");
         DrawArcGauge(GaugeDisk, disk, 100, "Disco","#f59e0b", $"{disk:F0}%");
         DrawArcGauge(GaugeNet,  net,  100, "NET",  "#a78bfa", "● " + (net > 10 ? "Attivo" : "Idle"));
+
+        // Aggiorna NET in background ogni ~30s (ogni 15 tick da 2s)
+        if (DateTime.Now.Second % 30 < 2)
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    _lastNetBytes = System.Net.NetworkInformation.NetworkInterface
+                        .GetAllNetworkInterfaces()
+                        .Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+                        .Sum(n => n.GetIPStatistics().BytesSent + n.GetIPStatistics().BytesReceived);
+                }
+                catch { }
+            });
     }
 
     private static void DrawArcGauge(Canvas canvas, float value, float max,
