@@ -4,6 +4,7 @@ Porta: 9091 (configurabile con PORT env var)
 DB:    /data/novascm.db (configurabile con NOVASCM_DB env var)
 """
 from flask import Flask, request, jsonify, Response, send_from_directory
+from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3, json, datetime, os, functools, hmac, logging, re, secrets
 from xml.sax.saxutils import escape as _xe
 from contextlib import contextmanager
@@ -23,6 +24,7 @@ except ImportError:
     log_startup.warning("flask-limiter non disponibile — rate limiting disabilitato (pip install flask-limiter)")
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 # ── Rate limiting (facoltativo: richiede flask-limiter) ───────────────────────
 if _limiter_available:
