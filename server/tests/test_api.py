@@ -200,6 +200,22 @@ class TestCrGet:
         r = client.get("/api/cr/by-name/GHOST-PC", headers=AUTH)
         assert r.status_code == 404
 
+    def test_get_cr_does_not_expose_passwords(self, client):
+        cr_id = _create_cr(client, pc_name="PASSWD-PC").get_json()["id"]
+        r = client.get(f"/api/cr/{cr_id}", headers=AUTH)
+        assert r.status_code == 200
+        d = r.get_json()
+        assert "join_pass" not in d
+        assert "admin_pass" not in d
+
+    def test_list_cr_does_not_expose_passwords(self, client):
+        _create_cr(client, pc_name="PASSWD-LIST-PC")
+        r = client.get("/api/cr", headers=AUTH)
+        assert r.status_code == 200
+        for cr in r.get_json():
+            assert "join_pass" not in cr
+            assert "admin_pass" not in cr
+
 
 class TestCrUpdateStatus:
     def test_update_status_to_in_progress(self, client):

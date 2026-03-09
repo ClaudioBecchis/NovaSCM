@@ -87,6 +87,7 @@ if not API_KEY:
             os.makedirs(os.path.dirname(_key_file), exist_ok=True)
             with open(_key_file, "w") as _f:
                 _f.write(API_KEY)
+            os.chmod(_key_file, 0o600)
             log.warning("NOVASCM_API_KEY non impostata — generata e salvata in %s", _key_file)
         except OSError:
             log.warning("NOVASCM_API_KEY non impostata — generata in memoria (non persistita)")
@@ -236,9 +237,14 @@ def init_db():
                 if "duplicate column name" not in str(e).lower():
                     log.warning("Migrazione %s.%s: %s", table, col, e)
 
-def row_to_dict(row):
+_SENSITIVE = {"join_pass", "admin_pass"}
+
+def row_to_dict(row, include_sensitive: bool = False):
     d = dict(row)
     d["software"] = json.loads(d.get("software") or "[]")
+    if not include_sensitive:
+        for k in _SENSITIVE:
+            d.pop(k, None)
     return d
 
 # ── CR CRUD ───────────────────────────────────────────────────────────────────
@@ -344,7 +350,7 @@ def get_autounattend(pc_name):
                            (pc_name.upper().strip(),)).fetchone()
     if not row:
         return "CR non trovato", 404
-    d = row_to_dict(row)
+    d = row_to_dict(row, include_sensitive=True)
     pkgs = d.get("software", [])
     def _safe_pkg(pkg_id):
         """Sanifica package ID winget: solo caratteri alfanumerici, punto, trattino, underscore."""
