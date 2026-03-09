@@ -4,6 +4,30 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.8.0] - 2026-03-09
+
+### Feature
+
+- **UI redesign enterprise "Deploy War Room"**: nuovo `server/web/index.html` completo
+  - Font IBM Plex Sans (UI) + DM Mono (hostname/codice/timestamp)
+  - Palette `#080b12` industriale con CSS variables complete
+  - Sidebar con cerchi ●/○ al posto di emoji, logo NOVA+SCM
+  - Topbar 48px con scanline decorativa e LED pulse live
+  - LED animati con glow per stato running/ok/err
+  - Badge system con classi b-ok/b-run/b-warn/b-err/b-skip/b-win/b-lin
+  - Progress bar 3px con shimmer animato
+  - Pipeline grafica step-by-step nel modale dettaglio deploy
+  - Toast notifications al posto di `alert()`
+  - Card installer in Settings (PS1 + SH download link)
+  - Tabelle alta densità, header DM Mono uppercase
+  - Fade-in animato al cambio sezione
+
+### Test
+
+- 81/81 ✅
+
+---
+
 ## [1.7.9] - 2026-03-09
 
 ### Bug fix (Round 6)
