@@ -10,6 +10,7 @@ services:
       NOVASCM_DB: /data/novascm.db
       PORT: 9091
       NOVASCM_API_KEY: ${NOVASCM_API_KEY:-}
+      NOVASCM_PUBLIC_URL: ${NOVASCM_PUBLIC_URL:-}
       NOVASCM_RATE_LIMIT_STORAGE: redis://redis:6379/0
     depends_on:
       redis:

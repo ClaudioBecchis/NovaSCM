@@ -44,6 +44,14 @@ else:
 # Percorso DB: variabile d'ambiente NOVASCM_DB, default /data/novascm.db
 DB = os.environ.get("NOVASCM_DB", "/data/novascm.db")
 
+# URL pubblico del server (M-2: evita Host header injection dietro reverse proxy)
+# Se impostato, sovrascrive request.host_url negli installer generati dinamicamente
+_PUBLIC_URL = os.environ.get("NOVASCM_PUBLIC_URL", "").rstrip("/")
+
+def _get_public_url() -> str:
+    """Restituisce l'URL pubblico del server, con priorità a NOVASCM_PUBLIC_URL."""
+    return _PUBLIC_URL if _PUBLIC_URL else request.host_url.rstrip("/")
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -1015,26 +1023,49 @@ def download_agent():
 @app.route("/api/download/agent-install.ps1", methods=["GET"])
 @require_auth
 def download_agent_installer_ps1():
-    """Genera install-windows.ps1 con API URL pre-configurato."""
-    api_url = request.host_url.rstrip("/")
-    # SEC-2 + C-7: scarica in file temp, verifica SHA256, poi esegui — no Invoke-Expression
-    ps1 = f"""# NovaSCM Agent Installer — generato automaticamente
-$ApiUrl = "{api_url}"
-$PcName = $env:COMPUTERNAME
+    """Genera install-windows.ps1 con API URL e API Key pre-configurati."""
+    api_url = _get_public_url()
+    api_key = API_KEY
+    # SEC-2 + C-7 + M-1: scarica in temp, verifica SHA256, scrivi config con api_key, installa via sc.exe
+    ps1 = f"""#Requires -RunAsAdministrator
+# NovaSCM Agent Installer — generato automaticamente
+$ErrorActionPreference = "Stop"
+$ApiUrl   = "{api_url}"
+$ApiKey   = "{api_key}"
+$AgentDir = "$env:ProgramData\\NovaSCM"
+$AgentExe = "$AgentDir\\NovaSCMAgent.exe"
+$CfgFile  = "$AgentDir\\agent.json"
+$SvcName  = "NovaSCMAgent"
+
+New-Item -ItemType Directory -Force -Path $AgentDir | Out-Null
+New-Item -ItemType Directory -Force -Path "$AgentDir\\logs" | Out-Null
+
+# Scarica e verifica SHA256
 $TmpAgent = Join-Path $env:TEMP "NovaSCMAgent_$([System.IO.Path]::GetRandomFileName()).exe"
 try {{
-    Invoke-WebRequest -Uri "$ApiUrl/api/download/agent" -OutFile $TmpAgent -UseBasicParsing
-    $Expected = (Invoke-WebRequest -Uri "$ApiUrl/api/download/agent.sha256" -UseBasicParsing).Content.Trim()
+    $Headers = @{{ "X-Api-Key" = $ApiKey }}
+    Invoke-WebRequest -Uri "$ApiUrl/api/download/agent" -OutFile $TmpAgent -UseBasicParsing -Headers $Headers
+    $Expected = (Invoke-WebRequest -Uri "$ApiUrl/api/download/agent.sha256" -UseBasicParsing -Headers $Headers).Content.Trim()
     $Actual   = (Get-FileHash $TmpAgent -Algorithm SHA256).Hash
-    if ($Actual -ieq $Expected) {{
-        Start-Process $TmpAgent -ArgumentList "--install --api-url $ApiUrl" -Wait -NoNewWindow
-    }} else {{
-        Write-Error "Hash mismatch: atteso $Expected, ottenuto $Actual"
-        exit 1
+    if (-not ($Actual -ieq $Expected)) {{
+        Write-Error "Hash mismatch: atteso $Expected, ottenuto $Actual"; exit 1
     }}
+    Copy-Item $TmpAgent $AgentExe -Force
 }} finally {{
     if (Test-Path $TmpAgent) {{ Remove-Item -Force $TmpAgent }}
 }}
+
+# Scrivi config con api_key
+@{{ api_url = $ApiUrl; api_key = $ApiKey; pc_name = $env:COMPUTERNAME.ToUpper(); poll_sec = 60 }} |
+    ConvertTo-Json | Set-Content -Path $CfgFile -Encoding UTF8
+
+# Installa come Windows Service
+$existing = Get-Service -Name $SvcName -ErrorAction SilentlyContinue
+if ($existing) {{ sc.exe delete $SvcName; Start-Sleep 2 }}
+sc.exe create $SvcName binPath= "`"$AgentExe`"" start= auto DisplayName= "NovaSCM Agent"
+sc.exe description $SvcName "NovaSCM Workflow Agent"
+sc.exe start $SvcName
+Write-Host "[NovaSCM] Installato. Config: $CfgFile"
 """
     return Response(ps1, mimetype="text/plain",
                     headers={"Content-Disposition": "attachment; filename=agent-install.ps1"})
@@ -1042,23 +1073,75 @@ try {{
 @app.route("/api/download/agent-install.sh", methods=["GET"])
 @require_auth
 def download_agent_installer_sh():
-    """Genera install-linux.sh con API URL pre-configurato."""
-    api_url = request.host_url.rstrip("/")
-    # SEC-2 + C-7: scarica agente in file temp, verifica SHA256, poi installa — no pipe a bash
+    """Genera install-linux.sh con API URL e API Key pre-configurati."""
+    api_url = _get_public_url()
+    api_key = API_KEY
+    # SEC-2 + C-7 + M-1: scarica in temp, verifica SHA256, scrivi config con api_key, installa via systemd
     sh = f"""#!/bin/bash
 # NovaSCM Agent Installer — generato automaticamente
 set -euo pipefail
+API_URL="{api_url}"
+API_KEY="{api_key}"
+PC_NAME=$(hostname | tr '[:lower:]' '[:upper:]')
+AGENT_DIR="/opt/novascm-agent"
+CONFIG_DIR="/etc/novascm"
+STATE_DIR="/var/lib/novascm"
+LOG_DIR="/var/log/novascm"
+SVC_NAME="novascm-agent"
+PYTHON=$(command -v python3 || {{ apt-get install -y -qq python3 && command -v python3; }})
+
+mkdir -p "$AGENT_DIR" "$CONFIG_DIR" "$STATE_DIR" "$LOG_DIR"
+
 TMPAGENT=$(mktemp /tmp/novascm-agent-XXXXXX)
 trap 'rm -f "$TMPAGENT"' EXIT
-curl -fsSL "{api_url}/api/download/agent?os=linux" -o "$TMPAGENT"
-EXPECTED=$(curl -fsSL "{api_url}/api/download/agent.sha256?os=linux")
+
+curl -fsSL -H "X-Api-Key: $API_KEY" "$API_URL/api/download/agent" -o "$TMPAGENT"
+EXPECTED=$(curl -fsSL -H "X-Api-Key: $API_KEY" "$API_URL/api/download/agent.sha256?os=linux")
 ACTUAL=$(sha256sum "$TMPAGENT" | awk '{{print $1}}')
 if [ "$ACTUAL" != "$EXPECTED" ]; then
-    echo "Hash mismatch: atteso $EXPECTED, ottenuto $ACTUAL" >&2
-    exit 1
+    echo "Hash mismatch: atteso $EXPECTED, ottenuto $ACTUAL" >&2; exit 1
 fi
-chmod +x "$TMPAGENT"
-sudo "$TMPAGENT" --install --api-url "{api_url}"
+cp "$TMPAGENT" "$AGENT_DIR/novascm-agent.py"
+chmod +x "$AGENT_DIR/novascm-agent.py"
+
+cat > "$CONFIG_DIR/agent.json" << AGENTCFG
+{{
+  "api_url":  "$API_URL",
+  "api_key":  "$API_KEY",
+  "pc_name":  "$PC_NAME",
+  "poll_sec": 60
+}}
+AGENTCFG
+
+id novascm &>/dev/null || useradd --system --no-create-home --shell /usr/sbin/nologin novascm
+chown -R novascm:novascm "$AGENT_DIR" "$STATE_DIR" "$LOG_DIR"
+
+cat > "/etc/systemd/system/$SVC_NAME.service" << SYSD
+[Unit]
+Description=NovaSCM Workflow Agent
+After=network-online.target
+
+[Service]
+Type=simple
+User=novascm
+ExecStart=$PYTHON $AGENT_DIR/novascm-agent.py
+Restart=always
+RestartSec=30
+StandardOutput=append:$LOG_DIR/agent.log
+StandardError=append:$LOG_DIR/agent.log
+ProtectSystem=strict
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=$STATE_DIR $LOG_DIR
+
+[Install]
+WantedBy=multi-user.target
+SYSD
+
+systemctl daemon-reload
+systemctl enable "$SVC_NAME"
+systemctl restart "$SVC_NAME"
+echo "[NovaSCM] Installato. Config: $CONFIG_DIR/agent.json"
 """
     return Response(sh, mimetype="text/plain",
                     headers={"Content-Disposition": "attachment; filename=agent-install.sh"})

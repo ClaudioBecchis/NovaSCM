@@ -4,6 +4,23 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.8] - 2026-03-09
+
+### Bug fix (Round 5)
+
+- **M-1**: `install-windows.ps1` — aggiunto parametro `-ApiKey`, scritto in `agent.json`
+- **M-1**: `install-linux.sh` — aggiunto parametro `--api-key`, scritto in `agent.json`
+- **M-1**: installer dinamici PS1/SH (API) — riscrittura completa: scrivono config con `api_key`, installano via `sc.exe`/systemd (rimosso `--install` non gestito dall'exe)
+- **M-2**: `request.host_url` sostituito con `_get_public_url()` — usa `NOVASCM_PUBLIC_URL` env var se impostata (fix Host header injection dietro reverse proxy)
+- **I-1**: `install-linux.sh` — `set -e` → `set -euo pipefail`
+- **I-2**: `agent/novascm-agent.py` — aggiunto `windows_update`: skipped su Linux, errore esplicito su Windows (suggerisce agent .NET)
+
+### Test
+
+- 79/79 ✅
+
+---
+
 ## [1.7.7] - 2026-03-09
 
 ### Nuove funzionalità

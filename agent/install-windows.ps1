@@ -1,9 +1,10 @@
 # NovaSCM Agent Installer — Windows
 # Scarica NovaSCMAgent.exe e lo installa come Windows Service
-# Uso: install-windows.ps1 -ApiUrl "http://192.168.20.110:9091" -PcName "NOME-PC"
+# Uso: install-windows.ps1 -ApiUrl "http://192.168.20.110:9091" -ApiKey "chiave" -PcName "NOME-PC"
 
 param(
     [string]$ApiUrl  = "http://YOUR-SERVER-IP:9091",
+    [string]$ApiKey  = "",
     [string]$PcName  = $env:COMPUTERNAME,
     [int]$PollSec    = 60
 )
@@ -52,6 +53,7 @@ try {
 Log "Scrivo config: $ConfigFile"
 @{
     api_url  = $ApiUrl
+    api_key  = $ApiKey
     pc_name  = $PcName.ToUpper()
     poll_sec = [int]$PollSec
 } | ConvertTo-Json | Set-Content -Path $ConfigFile -Encoding UTF8
