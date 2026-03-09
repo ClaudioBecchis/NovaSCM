@@ -3013,7 +3013,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.6.3";
+    private const string CurrentVersion = "1.6.4";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -3765,6 +3765,7 @@ public partial class MainWindow : Window
 
     private async void MenuCrDebug_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         var cr = GetSelectedCr();
         if (cr == null) return;
         try
@@ -3793,6 +3794,7 @@ public partial class MainWindow : Window
     private async Task UpdateCrStatusAsync(CrRow? cr, string status)
     {
         if (cr == null) return;
+        if (!EnsureApiConfigured()) return;
         try
         {
             await _apiSvc!.SetCrStatusAsync(cr.Id, status);
@@ -3808,6 +3810,7 @@ public partial class MainWindow : Window
 
     private async void MenuCrDelete_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         var cr = GetSelectedCr();
         if (cr == null) return;
         if (MessageBox.Show($"Eliminare CR per '{cr.PcName}'?", "Conferma",
@@ -3827,6 +3830,7 @@ public partial class MainWindow : Window
 
     private async void MenuCrDownloadXml_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         var cr = GetSelectedCr();
         if (cr == null) return;
         try
@@ -3854,6 +3858,7 @@ public partial class MainWindow : Window
 
     private async void MenuCrGenUsb_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         var cr = GetSelectedCr();
         if (cr == null) return;
 
@@ -4788,6 +4793,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnWfAddStep_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         if (LstWorkflows.SelectedItem is not WfRow wf)
         {
             MessageBox.Show("Seleziona prima un workflow dalla lista.", "NovaSCM", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -4819,6 +4825,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnWfEditStep_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         if (GridWfSteps.SelectedItem is not WfStepRow step)
         {
             MessageBox.Show("Seleziona uno step da modificare.", "NovaSCM", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -4874,6 +4881,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async Task SwapStepOrdineAsync(int wfId, WfStepRow a, WfStepRow b)
     {
+        if (!EnsureApiConfigured()) return;
         // Usa ordine temporaneo 9999 per evitare il constraint UNIQUE(workflow_id, ordine)
         object StepBody(WfStepRow st, int ord) => new
             { ordine = ord, nome = st.Nome, tipo = st.Tipo, parametri = st.Parametri, platform = st.Platform, su_errore = st.SuErrore };
@@ -4885,6 +4893,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnWfDeleteStep_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         try
         {
         if (GridWfSteps.SelectedItem is not WfStepRow step)
@@ -4904,6 +4913,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnWfAssign_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         var win = new WfAssignWindow(_wfRows.ToList());
         if (win.ShowDialog() != true || string.IsNullOrEmpty(win.PcName) || win.WorkflowId <= 0) return;
         try
@@ -4931,6 +4941,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
     private async void BtnWfDeleteAssign_Click(object s, RoutedEventArgs e)
     {
+        if (!EnsureApiConfigured()) return;
         try
         {
         if (GridWfAssignments.SelectedItem is not WfAssignRow assign)
@@ -7055,7 +7066,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                 psi2.ArgumentList.Add("-o");              psi2.ArgumentList.Add("StrictHostKeyChecking=accept-new");
                 psi2.ArgumentList.Add("-o");              psi2.ArgumentList.Add("ConnectTimeout=5");
                 psi2.ArgumentList.Add($"root@{_pveHost}");
-                psi2.ArgumentList.Add("paste <(cat /sys/class/thermal/thermal_zone*/type) <(cat /sys/class/thermal/thermal_zone*/temp)");
+                // SEC-03b: comando POSIX-compatibile (evita bash process substitution)
+                psi2.ArgumentList.Add("for z in /sys/class/thermal/thermal_zone*; do printf '%s\\t%s\\n' \"$(cat $z/type)\" \"$(cat $z/temp)\"; done");
                 var proc2  = Process.Start(psi2)!;
                 var output = await proc2.StandardOutput.ReadToEndAsync();
                 await proc2.WaitForExitAsync();

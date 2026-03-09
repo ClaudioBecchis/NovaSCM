@@ -26,7 +26,8 @@
 
 | Versione | Data | Note |
 |---|---|---|
-| **v1.6.3** | 2026-03-09 | 🔒 DPAPI per credenziali in config.json + fix SEC-03 scp/ssh + null-guard API |
+| **v1.6.4** | 2026-03-09 | null-guard API completo (11 handler) + comando POSIX thermal_zone |
+| v1.6.3 | 2026-03-09 | 🔒 DPAPI per credenziali in config.json + fix SEC-03 scp/ssh + null-guard API |
 | v1.6.2 | 2026-03-08 | 🔒 Security patch SEC-02: eliminata argument injection in UI (`ProcessStartInfo.ArgumentList`) |
 | v1.6.1 | 2026-03-08 | 🔒 Security patch SEC-01: eliminata command injection in agent `run_cmd()` |
 | v1.6.0 | 2026-03-08 | Refactoring BUG-05/ARCH-01: static HttpClient, Flask init_db, SSL fix, try/catch |
