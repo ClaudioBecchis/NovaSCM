@@ -11,14 +11,16 @@
 
 :root{
   --bg:#05080f;
+  --s1:#080c18;
   --ok:#00d97e;
   --run:#4d9fff;
   --warn:#f5a623;
   --err:#ff4757;
-  --muted:rgba(140,160,200,.45);
-  --dim:rgba(80,100,140,.3);
-  --txt:rgba(200,215,240,.9);
+  --txt:rgba(195,210,235,.88);
   --hi:#e8f0ff;
+  --muted:rgba(130,150,190,.5);
+  --dim:rgba(60,80,120,.35);
+  --bdim:rgba(40,55,90,.4);
 }
 
 html,body{
@@ -26,647 +28,754 @@ html,body{
   background:var(--bg);
   font-family:'IBM Plex Sans',sans-serif;
   color:var(--txt);
-  cursor:none;
 }
 
-/* ── SFONDO ANIMATO ── */
-.bg{
+/* ── BG ── */
+.bg-grad{
   position:fixed;inset:0;z-index:0;
   background:
-    radial-gradient(ellipse 60% 50% at 20% 80%, rgba(0,80,160,.18) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 40% at 80% 20%, rgba(0,50,120,.12) 0%, transparent 70%),
+    radial-gradient(ellipse 55% 45% at 15% 85%, rgba(0,70,155,.16) 0%, transparent 65%),
+    radial-gradient(ellipse 45% 35% at 85% 15%, rgba(0,40,110,.1)  0%, transparent 65%),
     var(--bg);
 }
-.grid-lines{
+.bg-grid{
   position:fixed;inset:0;z-index:0;
   background-image:
-    linear-gradient(rgba(77,159,255,.04) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(77,159,255,.04) 1px,transparent 1px);
-  background-size:64px 64px;
-  animation:grid-drift 40s linear infinite;
+    linear-gradient(rgba(77,159,255,.035) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(77,159,255,.035) 1px,transparent 1px);
+  background-size:56px 56px;
 }
-@keyframes grid-drift{
-  from{background-position:0 0}
-  to  {background-position:64px 64px}
-}
-.scanlines{
+.bg-scan{
   position:fixed;inset:0;z-index:1;pointer-events:none;
-  background:repeating-linear-gradient(
-    0deg,transparent,transparent 3px,
-    rgba(0,0,0,.06) 3px,rgba(0,0,0,.06) 4px
-  );
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.05) 2px,rgba(0,0,0,.05) 3px);
 }
-.vignette{
+.bg-vig{
   position:fixed;inset:0;z-index:1;pointer-events:none;
-  background:radial-gradient(ellipse 100% 100% at 50% 50%,
-    transparent 55%,rgba(2,4,10,.85) 100%);
+  background:radial-gradient(ellipse 110% 110% at 50% 50%,transparent 45%,rgba(2,4,12,.9) 100%);
 }
 
-/* ── LAYOUT ── */
+/* ── LAYOUT A DUE COLONNE ── */
 .shell{
   position:relative;z-index:2;
   height:100vh;width:100vw;
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;
-  gap:0;
-  padding:60px 80px;
+  display:grid;
+  grid-template-columns: 1fr 1px 1fr;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas:
+    "hdr hdr hdr"
+    "left div right"
+    "ftr ftr ftr";
 }
 
-/* ── LOGO AREA ── */
-.logo-wrap{
-  display:flex;flex-direction:column;align-items:center;gap:10px;
-  margin-bottom:60px;
-  animation:fade-up .8s ease both;
+/* ── HEADER ── */
+.hdr{
+  grid-area:hdr;
+  padding:28px 52px 22px;
+  display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--bdim);
+  animation:fade-down .7s ease both;
 }
-.logo-mark{
-  width:56px;height:56px;
-  border:2px solid rgba(77,159,255,.4);
-  border-radius:14px;
+.logo{display:flex;align-items:center;gap:14px}
+.logo-box{
+  width:42px;height:42px;border-radius:10px;
+  background:rgba(77,159,255,.08);
+  border:1.5px solid rgba(77,159,255,.3);
   display:flex;align-items:center;justify-content:center;
-  position:relative;
-  background:rgba(77,159,255,.06);
+  font-family:'DM Mono',monospace;font-size:16px;font-weight:500;color:var(--run);
 }
-.logo-mark::before{
-  content:'';position:absolute;inset:-1px;border-radius:14px;
-  background:linear-gradient(135deg,rgba(77,159,255,.3),transparent 60%);
-  z-index:-1;
+.logo-text{display:flex;flex-direction:column;gap:1px}
+.logo-n{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--hi);letter-spacing:2px}
+.logo-s{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
+.hdr-center{text-align:center}
+.pc-name{font-family:'DM Mono',monospace;font-size:clamp(20px,2.5vw,32px);font-weight:500;color:var(--hi);letter-spacing:-1px}
+.pc-domain{font-family:'DM Mono',monospace;font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:.3px}
+.hdr-right{text-align:right;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.wf-badge{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:4px 12px;border-radius:4px;
+  background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.2);
+  font-family:'DM Mono',monospace;font-size:10px;color:var(--run);
+  text-transform:uppercase;letter-spacing:.5px;
 }
-.logo-inner{
-  font-family:'DM Mono',monospace;font-size:18px;font-weight:500;
-  color:var(--run);letter-spacing:-1px;
-}
-.logo-name{
-  font-family:'DM Mono',monospace;font-size:13px;letter-spacing:3px;
-  color:rgba(140,160,200,.5);text-transform:uppercase;
+.led{width:6px;height:6px;border-radius:50%;background:var(--run);box-shadow:0 0 6px var(--run);animation:blink 1.6s ease-in-out infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.hdr-time{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted)}
+
+/* ── DIVISORE ── */
+.divider{grid-area:div;background:var(--bdim)}
+
+/* ── COLONNA SINISTRA: progresso + info ── */
+.col-left{
+  grid-area:left;
+  padding:36px 52px 28px;
+  display:flex;flex-direction:column;
+  gap:28px;
+  overflow:hidden;
+  animation:fade-right .7s .1s ease both;
 }
 
-/* ── HOSTNAME ── */
-.hostname-wrap{
-  text-align:center;margin-bottom:50px;
-  animation:fade-up .8s .15s ease both;
+/* ── PROGRESS RING ── */
+.ring-wrap{display:flex;align-items:center;gap:28px}
+.ring-svg{flex-shrink:0;filter:drop-shadow(0 0 12px rgba(77,159,255,.2))}
+.ring-track{fill:none;stroke:rgba(77,159,255,.1);stroke-width:5}
+.ring-fill {fill:none;stroke:var(--run);stroke-width:5;stroke-linecap:round;
+  stroke-dasharray:251.2;stroke-dashoffset:251.2;
+  transition:stroke-dashoffset 1s cubic-bezier(.25,.46,.45,.94),stroke .5s;
+  transform-origin:50% 50%;transform:rotate(-90deg);
 }
-.hostname{
-  font-family:'DM Mono',monospace;
-  font-size:clamp(28px,4vw,48px);
-  font-weight:500;
-  color:var(--hi);
-  letter-spacing:-1px;
-  line-height:1;
-}
-.domain{
-  font-family:'DM Mono',monospace;
-  font-size:clamp(13px,1.5vw,16px);
-  color:var(--muted);
-  margin-top:8px;
-  letter-spacing:.5px;
-}
+.ring-fill.done{stroke:var(--ok)}
+.ring-fill.error{stroke:var(--err)}
+.ring-center{font-family:'DM Mono',monospace;font-size:26px;font-weight:500;fill:var(--hi)}
+.ring-label{font-family:'DM Mono',monospace;font-size:10px;fill:var(--muted);text-transform:uppercase;letter-spacing:1px}
 
-/* ── STATO CORRENTE ── */
-.status-wrap{
-  text-align:center;margin-bottom:48px;
-  animation:fade-up .8s .25s ease both;
-  min-height:50px;
-}
-.status-label{
-  font-size:clamp(14px,1.8vw,18px);
-  font-weight:300;
-  color:var(--txt);
-  letter-spacing:.2px;
-  margin-bottom:6px;
-}
-.status-sub{
-  font-family:'DM Mono',monospace;
-  font-size:clamp(11px,1.2vw,13px);
-  color:var(--run);
-  animation:blink-txt 2s ease-in-out infinite;
-}
-@keyframes blink-txt{0%,100%{opacity:.8}50%{opacity:.35}}
+.ring-info{display:flex;flex-direction:column;gap:6px}
+.ri-label{font-size:clamp(15px,1.8vw,21px);font-weight:300;color:var(--hi)}
+.ri-sub  {font-family:'DM Mono',monospace;font-size:11px;color:var(--run);animation:blink-txt 2s ease-in-out infinite}
+@keyframes blink-txt{0%,100%{opacity:.85}50%{opacity:.3}}
+.ri-sub.idle{color:var(--muted);animation:none}
 
-/* ── BARRA PROGRESSO ── */
-.progress-wrap{
-  width:min(640px,80vw);
-  margin-bottom:40px;
-  animation:fade-up .8s .35s ease both;
-}
-.progress-header{
-  display:flex;justify-content:space-between;align-items:baseline;
-  margin-bottom:10px;
-  font-family:'DM Mono',monospace;
-  font-size:11px;color:var(--muted);
-}
-.pct-num{
-  font-size:16px;font-weight:500;color:var(--run);
-  transition:color .5s;
-}
-.pct-num.done{color:var(--ok)}
-.bar-outer{
-  height:6px;background:rgba(77,159,255,.1);
-  border-radius:6px;overflow:hidden;
-  border:1px solid rgba(77,159,255,.12);
-  position:relative;
-}
+/* progress bar lineare */
+.bar-section{display:flex;flex-direction:column;gap:8px}
+.bar-meta{display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)}
+.bar-outer{height:4px;background:rgba(77,159,255,.1);border-radius:4px;overflow:hidden}
 .bar-fill{
-  height:100%;border-radius:6px;
-  background:linear-gradient(90deg,var(--run) 0%,rgba(120,200,255,.7) 100%);
-  transition:width .8s cubic-bezier(.25,.46,.45,.94);
-  position:relative;
+  height:100%;border-radius:4px;
+  background:linear-gradient(90deg,#2a6fff,#7ec8ff);
+  transition:width .9s cubic-bezier(.25,.46,.45,.94);
+  position:relative;overflow:hidden;
 }
 .bar-fill::after{
-  content:'';position:absolute;top:0;right:0;bottom:0;width:60px;
-  background:linear-gradient(90deg,transparent,rgba(255,255,255,.35));
-  animation:shimmer-bar 2s linear infinite;
+  content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);
+  animation:shimmer 2s linear infinite;
 }
-@keyframes shimmer-bar{
-  0%  {opacity:1;transform:translateX(-60px)}
-  100%{opacity:0;transform:translateX(0)}
-}
-.bar-fill.done{
-  background:linear-gradient(90deg,var(--ok),rgba(0,220,140,.6));
-}
+@keyframes shimmer{to{left:100%}}
+.bar-fill.done{background:linear-gradient(90deg,var(--ok),#5fffb8)}
 .bar-fill.done::after{display:none}
+.bar-fill.error{background:linear-gradient(90deg,var(--err),#ff9a63);animation:none}
+.bar-fill.error::after{display:none}
 
-/* ── STEP LIST ── */
-.steps-wrap{
-  width:min(640px,80vw);
-  display:flex;flex-direction:column;gap:0;
-  animation:fade-up .8s .45s ease both;
+/* stats */
+.stats-row{display:flex;gap:0}
+.stat{
+  flex:1;padding:14px 0;
+  border-right:1px solid var(--bdim);
+  display:flex;flex-direction:column;gap:3px;
 }
-.step{
-  display:flex;align-items:center;gap:16px;
-  padding:10px 0;
-  border-bottom:1px solid var(--dim);
-  transition:opacity .3s;
-}
-.step:last-child{border-bottom:none}
-.step.future{opacity:.28}
-.step.done  {opacity:.55}
-.step.active{opacity:1}
+.stat:last-child{border-right:none}
+.stat-val{font-family:'DM Mono',monospace;font-size:20px;font-weight:500;color:var(--hi)}
+.stat-val.ok {color:var(--ok)}
+.stat-val.run{color:var(--run)}
+.stat-val.err{color:var(--err)}
+.stat-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
 
-.step-icon{
-  width:22px;height:22px;flex-shrink:0;
-  border-radius:50%;display:flex;align-items:center;justify-content:center;
-  font-size:9px;position:relative;
+/* current step detail */
+.cur-box{
+  padding:14px 18px;
+  background:rgba(77,159,255,.05);
+  border:1px solid rgba(77,159,255,.15);
+  border-radius:8px;
+  display:flex;align-items:center;gap:14px;
 }
-.step-icon.done  {background:rgba(0,217,126,.15);border:1.5px solid var(--ok)}
-.step-icon.active{background:rgba(77,159,255,.15);border:1.5px solid var(--run);animation:pulse-icon 1.6s ease-in-out infinite}
-.step-icon.future{background:rgba(255,255,255,.04);border:1.5px solid var(--dim)}
-.step-icon.error {background:rgba(255,71,87,.15);border:1.5px solid var(--err)}
-@keyframes pulse-icon{
-  0%,100%{box-shadow:0 0 0 0 rgba(77,159,255,.4)}
-  50%    {box-shadow:0 0 0 5px rgba(77,159,255,0)}
-}
-
-.step-info{flex:1;min-width:0}
-.step-name{
-  font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  transition:color .3s;
-}
-.step.done   .step-name{color:var(--muted)}
-.step.active .step-name{color:var(--hi)}
-.step.future .step-name{color:var(--muted)}
-.step-tipo{
-  font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);
-  margin-top:1px;
-}
-
-.step-time{
-  font-family:'DM Mono',monospace;font-size:10.5px;flex-shrink:0;
-}
-.step.done  .step-time{color:var(--ok)}
-.step.active .step-time{color:var(--run)}
-.step.future .step-time{color:var(--dim)}
-
-/* check / spinner */
-.ico-check::before{content:'✓';color:var(--ok)}
-.ico-spin{
-  width:10px;height:10px;border-radius:50%;
-  border:1.5px solid rgba(77,159,255,.25);
-  border-top-color:var(--run);
-  animation:spin .8s linear infinite;display:inline-block;
+.cur-spinner{
+  width:32px;height:32px;border-radius:50%;flex-shrink:0;
+  border:2px solid rgba(77,159,255,.2);border-top-color:var(--run);
+  animation:spin .9s linear infinite;
 }
 @keyframes spin{to{transform:rotate(360deg)}}
-.ico-dot::before{content:'○';color:var(--dim);font-size:9px}
-.ico-err::before{content:'✕';color:var(--err)}
+.cur-spinner.done{border:2px solid var(--ok);animation:none;background:rgba(0,217,126,.1)}
+.cur-spinner.done::after{content:'✓';display:flex;align-items:center;justify-content:center;color:var(--ok);font-size:14px;height:100%}
+.cur-spinner.error{border:2px solid var(--err);animation:none}
+.cur-info{flex:1;min-width:0}
+.cur-name{font-size:14px;font-weight:500;color:var(--hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cur-tipo{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px}
+.cur-time{font-family:'DM Mono',monospace;font-size:13px;color:var(--run);flex-shrink:0}
+
+/* ── COLONNA DESTRA: step list completa ── */
+.col-right{
+  grid-area:right;
+  padding:24px 52px 20px;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+  animation:fade-left .7s .15s ease both;
+}
+.steps-header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:16px;flex-shrink:0;
+}
+.steps-title{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
+.steps-count{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted)}
+
+/* pipeline scrollabile */
+.pipeline{
+  flex:1;overflow-y:auto;
+  display:flex;flex-direction:column;gap:0;
+  padding-right:4px;
+}
+.pipeline::-webkit-scrollbar{width:3px}
+.pipeline::-webkit-scrollbar-track{background:transparent}
+.pipeline::-webkit-scrollbar-thumb{background:var(--bdim);border-radius:2px}
+
+/* step row */
+.step-row{
+  display:flex;align-items:center;gap:0;
+  position:relative;
+}
+/* linea verticale connettore */
+.step-row:not(:last-child) .step-connector{
+  position:absolute;left:15px;top:32px;width:2px;
+  height:calc(100% - 8px);
+  background:var(--bdim);
+  transition:background .4s;
+  z-index:0;
+}
+.step-row.st-done:not(:last-child) .step-connector{background:rgba(0,217,126,.25)}
+.step-row.st-active:not(:last-child) .step-connector{background:rgba(77,159,255,.2)}
+
+.step-left{
+  display:flex;flex-direction:column;align-items:center;
+  padding:8px 0;flex-shrink:0;width:32px;
+  position:relative;z-index:1;
+}
+.step-circle{
+  width:22px;height:22px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-family:'DM Mono',monospace;
+  flex-shrink:0;transition:all .3s;
+}
+.st-done   .step-circle{background:rgba(0,217,126,.15);border:1.5px solid var(--ok);color:var(--ok)}
+.st-active .step-circle{background:rgba(77,159,255,.15);border:1.5px solid var(--run);color:var(--run);animation:pulse-c 1.5s ease-in-out infinite}
+.st-error  .step-circle{background:rgba(255,71,87,.15);border:1.5px solid var(--err);color:var(--err)}
+.st-skip   .step-circle{background:rgba(40,55,90,.3);border:1.5px solid var(--bdim);color:var(--muted)}
+.st-future .step-circle{background:rgba(20,30,55,.3);border:1.5px solid var(--bdim);color:var(--muted)}
+@keyframes pulse-c{0%,100%{box-shadow:0 0 0 0 rgba(77,159,255,.4)}50%{box-shadow:0 0 0 4px rgba(77,159,255,0)}}
+
+.step-body{
+  flex:1;min-width:0;
+  padding:8px 12px;
+  display:flex;align-items:center;gap:12px;
+  border-radius:6px;margin:2px 0;
+  transition:background .25s;
+}
+.st-active .step-body{background:rgba(77,159,255,.06)}
+.st-error  .step-body{background:rgba(255,71,87,.06)}
+
+.step-text{flex:1;min-width:0}
+.step-name{
+  font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:color .3s;
+}
+.st-done   .step-name{color:var(--muted)}
+.st-active .step-name{color:var(--hi);font-weight:500}
+.st-error  .step-name{color:var(--err)}
+.st-skip   .step-name{color:var(--dim);text-decoration:line-through}
+.st-future .step-name{color:var(--muted);opacity:.55}
+
+.step-tipo{font-family:'DM Mono',monospace;font-size:9.5px;color:var(--dim);margin-top:2px}
+.st-active .step-tipo{color:rgba(77,159,255,.55)}
+
+.step-right{
+  flex-shrink:0;font-family:'DM Mono',monospace;font-size:10px;
+  min-width:36px;text-align:right;
+}
+.st-done   .step-right{color:var(--ok)}
+.st-active .step-right{color:var(--run)}
+.st-error  .step-right{color:var(--err)}
+.st-future .step-right{color:var(--bdim)}
+.st-skip   .step-right{color:var(--dim)}
 
 /* ── FOOTER ── */
-.footer{
-  position:fixed;bottom:28px;left:0;right:0;
+.ftr{
+  grid-area:ftr;
+  padding:12px 52px;
+  border-top:1px solid var(--bdim);
   display:flex;align-items:center;justify-content:space-between;
-  padding:0 48px;z-index:3;
-  animation:fade-up .8s .6s ease both;
+  animation:fade-up .7s .3s ease both;
 }
-.footer-left{
-  font-family:'DM Mono',monospace;font-size:10.5px;color:var(--dim);
-  display:flex;flex-direction:column;gap:3px;
+.ftr-item{font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);display:flex;align-items:center;gap:5px}
+.ftr-item b{color:rgba(140,160,200,.45);font-weight:400}
+.ftr-warn{
+  font-family:'DM Mono',monospace;font-size:10px;
+  color:rgba(245,166,35,.6);
+  display:flex;align-items:center;gap:6px;
 }
-.footer-right{
-  font-family:'DM Mono',monospace;font-size:10.5px;color:var(--dim);
-  text-align:right;
-  display:flex;flex-direction:column;gap:3px;
-}
-.f-val{color:rgba(140,160,200,.5)}
 
-/* ── SCHERMATA COMPLETATO ── */
-.done-overlay{
-  position:fixed;inset:0;z-index:10;
+/* ── OVERLAY COMPLETATO ── */
+.overlay{
+  position:fixed;inset:0;z-index:20;
   background:var(--bg);
   display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:24px;
-  opacity:0;pointer-events:none;transition:opacity .6s ease;
+  align-items:center;justify-content:center;
+  gap:20px;
+  opacity:0;pointer-events:none;
+  transition:opacity .7s ease;
 }
-.done-overlay.show{opacity:1;pointer-events:all}
-.done-circle{
-  width:100px;height:100px;border-radius:50%;
-  background:rgba(0,217,126,.1);
-  border:2px solid var(--ok);
-  display:flex;align-items:center;justify-content:center;
-  font-size:44px;
-  animation:done-pop .5s cubic-bezier(.175,.885,.32,1.275) both;
-  box-shadow:0 0 40px rgba(0,217,126,.2);
-}
-@keyframes done-pop{
-  from{transform:scale(.5);opacity:0}
-  to  {transform:scale(1);opacity:1}
-}
-.done-title{
-  font-family:'IBM Plex Sans',sans-serif;
-  font-size:clamp(22px,3vw,34px);font-weight:300;
-  color:var(--hi);letter-spacing:.5px;
-}
-.done-sub{
-  font-family:'DM Mono',monospace;font-size:13px;
-  color:var(--ok);letter-spacing:.5px;
-}
-.done-reboot{
-  margin-top:16px;
-  font-family:'DM Mono',monospace;font-size:11px;
-  color:var(--muted);
-}
-.reboot-count{color:var(--warn);margin-left:4px}
+.overlay.show{opacity:1;pointer-events:all}
 
-/* ── SCHERMATA ERRORE ── */
-.err-overlay{
-  position:fixed;inset:0;z-index:10;
-  background:var(--bg);
-  display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:20px;
-  opacity:0;pointer-events:none;transition:opacity .6s ease;
-}
-.err-overlay.show{opacity:1;pointer-events:all}
-.err-circle{
-  width:90px;height:90px;border-radius:50%;
-  background:rgba(255,71,87,.1);border:2px solid var(--err);
+.ov-ring{
+  width:110px;height:110px;border-radius:50%;
   display:flex;align-items:center;justify-content:center;
-  font-size:38px;
-  animation:done-pop .5s .1s cubic-bezier(.175,.885,.32,1.275) both;
-  box-shadow:0 0 40px rgba(255,71,87,.15);
+  font-size:48px;
+  animation:pop .6s .1s cubic-bezier(.175,.885,.32,1.275) both;
 }
-.err-title{
-  font-size:clamp(18px,2.5vw,28px);font-weight:300;color:var(--hi);
-}
-.err-step{
-  font-family:'DM Mono',monospace;font-size:12px;
-  color:var(--err);padding:8px 18px;
-  background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);
-  border-radius:6px;max-width:500px;text-align:center;
-}
-.err-code{
+.ov-ring.ok {background:rgba(0,217,126,.1);border:2px solid var(--ok);box-shadow:0 0 50px rgba(0,217,126,.15),inset 0 0 20px rgba(0,217,126,.05)}
+.ov-ring.err{background:rgba(255,71,87,.1);border:2px solid var(--err);box-shadow:0 0 50px rgba(255,71,87,.15)}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+
+.ov-title{font-size:clamp(20px,2.8vw,36px);font-weight:300;color:var(--hi);text-align:center}
+.ov-sub  {font-family:'DM Mono',monospace;font-size:13px;text-align:center}
+.ov-sub.ok {color:var(--ok)}
+.ov-sub.err{color:var(--err)}
+.ov-detail{
+  margin-top:6px;
   font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);
+  padding:8px 20px;background:rgba(255,255,255,.03);
+  border:1px solid var(--bdim);border-radius:6px;text-align:center;
+  max-width:480px;
 }
+.reboot-line{
+  margin-top:12px;
+  font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);
+  display:flex;align-items:center;gap:8px;
+}
+.reboot-n{color:var(--warn);font-size:14px;font-weight:500;min-width:24px;text-align:center}
 
 /* ── ANIMAZIONI ── */
-@keyframes fade-up{
-  from{opacity:0;transform:translateY(18px)}
-  to  {opacity:1;transform:translateY(0)}
-}
+@keyframes fade-down {from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
+@keyframes fade-up   {from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:none}}
+@keyframes fade-right{from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:none}}
+@keyframes fade-left {from{opacity:0;transform:translateX(12px)} to{opacity:1;transform:none}}
+
+/* scroll automatico al passo attivo */
+.step-row.st-active{scroll-margin-top:20px;scroll-margin-bottom:20px}
 </style>
 </head>
 <body>
 
-<!-- BG -->
-<div class="bg"></div>
-<div class="grid-lines"></div>
-<div class="scanlines"></div>
-<div class="vignette"></div>
+<div class="bg-grad"></div>
+<div class="bg-grid"></div>
+<div class="bg-scan"></div>
+<div class="bg-vig"></div>
 
-<!-- MAIN -->
-<div class="shell" id="main">
+<div class="shell">
 
-  <!-- Logo -->
-  <div class="logo-wrap">
-    <div class="logo-mark"><span class="logo-inner">N</span></div>
-    <div class="logo-name">NovaSCM</div>
-  </div>
-
-  <!-- Hostname -->
-  <div class="hostname-wrap">
-    <div class="hostname" id="hostname">WKS-MKTG-042</div>
-    <div class="domain"   id="domain">polariscore.local</div>
-  </div>
-
-  <!-- Status -->
-  <div class="status-wrap">
-    <div class="status-label" id="status-label">Configurazione sistema in corso</div>
-    <div class="status-sub"   id="status-sub">Esecuzione step in corso…</div>
-  </div>
-
-  <!-- Progress bar -->
-  <div class="progress-wrap">
-    <div class="progress-header">
-      <span id="wf-name">Deploy Base Win 11</span>
-      <span class="pct-num" id="pct">0%</span>
+  <!-- ── HEADER ── -->
+  <header class="hdr">
+    <div class="logo">
+      <div class="logo-box">N</div>
+      <div class="logo-text">
+        <span class="logo-n">NOVASCM</span>
+        <span class="logo-s">Deployment Agent</span>
+      </div>
     </div>
-    <div class="bar-outer">
-      <div class="bar-fill" id="bar" style="width:0%"></div>
+    <div class="hdr-center">
+      <div class="pc-name"  id="pc-name">WKS-MKTG-042</div>
+      <div class="pc-domain" id="pc-domain">polariscore.local</div>
     </div>
+    <div class="hdr-right">
+      <div class="wf-badge"><span class="led"></span><span id="wf-name">Deploy Base Win 11</span></div>
+      <div class="hdr-time" id="clock">—</div>
+    </div>
+  </header>
+
+  <!-- ── COLONNA SINISTRA ── -->
+  <div class="col-left">
+
+    <!-- Ring + stato corrente -->
+    <div class="ring-wrap">
+      <svg class="ring-svg" width="90" height="90" viewBox="0 0 90 90">
+        <circle class="ring-track" cx="45" cy="45" r="40"/>
+        <circle class="ring-fill"  cx="45" cy="45" r="40" id="ring-fill"/>
+        <text x="45" y="41" text-anchor="middle" dominant-baseline="middle" class="ring-center" id="ring-pct">0%</text>
+        <text x="45" y="55" text-anchor="middle" class="ring-label">completato</text>
+      </svg>
+      <div class="ring-info">
+        <div class="ri-label" id="cur-name">Avvio in corso…</div>
+        <div class="ri-sub"   id="cur-tipo">inizializzazione</div>
+      </div>
+    </div>
+
+    <!-- Barra lineare -->
+    <div class="bar-section">
+      <div class="bar-meta">
+        <span id="bar-lbl">Progresso workflow</span>
+        <span id="bar-steps-lbl">step 0 / 0</span>
+      </div>
+      <div class="bar-outer"><div class="bar-fill" id="bar" style="width:0%"></div></div>
+    </div>
+
+    <!-- Statistiche -->
+    <div class="stats-row" id="stats-row">
+      <div class="stat"><div class="stat-val run" id="stat-done">0</div><div class="stat-lbl">Completati</div></div>
+      <div class="stat"><div class="stat-val"     id="stat-rem">0</div><div class="stat-lbl">Rimanenti</div></div>
+      <div class="stat"><div class="stat-val"     id="stat-tot">0</div><div class="stat-lbl">Totale</div></div>
+      <div class="stat"><div class="stat-val"     id="stat-ela">—</div><div class="stat-lbl">Tempo trascorso</div></div>
+    </div>
+
+    <!-- Step attivo in evidenza -->
+    <div class="cur-box" id="cur-box">
+      <div class="cur-spinner" id="cur-spinner"></div>
+      <div class="cur-info">
+        <div class="cur-name" id="cur-box-name">In attesa dell'agente…</div>
+        <div class="cur-tipo" id="cur-box-tipo">—</div>
+      </div>
+      <div class="cur-time" id="cur-box-time">—</div>
+    </div>
+
   </div>
 
-  <!-- Step list -->
-  <div class="steps-wrap" id="steps-wrap"></div>
+  <!-- ── DIVISORE ── -->
+  <div class="divider"></div>
+
+  <!-- ── COLONNA DESTRA: tutti gli step ── -->
+  <div class="col-right">
+    <div class="steps-header">
+      <span class="steps-title">Pipeline di installazione</span>
+      <span class="steps-count" id="steps-count">— step</span>
+    </div>
+    <div class="pipeline" id="pipeline"></div>
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <footer class="ftr">
+    <div class="ftr-item">NovaSCM <b id="f-ver">1.8.0</b></div>
+    <div class="ftr-warn">▲ Non spegnere il PC durante la configurazione</div>
+    <div class="ftr-item">Server <b id="f-server">192.168.20.110</b></div>
+  </footer>
 
 </div>
 
-<!-- Footer -->
-<div class="footer">
-  <div class="footer-left">
-    <span>Versione <span class="f-val" id="f-ver">1.8.0</span></span>
-    <span>Server <span class="f-val">192.168.20.110</span></span>
-  </div>
-  <div class="footer-right">
-    <span id="f-clock" class="f-val"></span>
-    <span>Non spegnere il PC</span>
+<!-- ── OVERLAY COMPLETATO ── -->
+<div class="overlay" id="ov-done">
+  <div class="ov-ring ok">✓</div>
+  <div class="ov-title">Configurazione completata</div>
+  <div class="ov-sub ok" id="ov-done-host">WKS-MKTG-042</div>
+  <div class="ov-detail" id="ov-done-detail">Tutti gli step eseguiti con successo.</div>
+  <div class="reboot-line">
+    <span>Riavvio automatico tra</span>
+    <span class="reboot-n" id="reboot-n">30</span>
+    <span>secondi</span>
   </div>
 </div>
 
-<!-- Overlay: COMPLETATO -->
-<div class="done-overlay" id="done-overlay">
-  <div class="done-circle">✓</div>
-  <div class="done-title">Configurazione completata</div>
-  <div class="done-sub" id="done-hostname"></div>
-  <div class="done-reboot">Riavvio automatico tra <span class="reboot-count" id="reboot-count">30</span>s</div>
-</div>
-
-<!-- Overlay: ERRORE -->
-<div class="err-overlay" id="err-overlay">
-  <div class="err-circle">✕</div>
-  <div class="err-title">Errore durante la configurazione</div>
-  <div class="err-step"  id="err-step">—</div>
-  <div class="err-code"  id="err-code">Contattare il supporto IT</div>
+<!-- ── OVERLAY ERRORE ── -->
+<div class="overlay" id="ov-err">
+  <div class="ov-ring err">✕</div>
+  <div class="ov-title">Errore durante la configurazione</div>
+  <div class="ov-sub err" id="ov-err-step">—</div>
+  <div class="ov-detail" id="ov-err-detail">Contattare il supporto IT con il codice errore mostrato.</div>
 </div>
 
 <script>
-// ══════════════════════════════════════════════════════════════════
-//  CONFIGURAZIONE — questa sezione viene popolata dall'agente
-//  tramite parametri URL oppure sostituita dinamicamente
-// ══════════════════════════════════════════════════════════════════
-const CFG = (() => {
-  const p = new URLSearchParams(location.search);
-  return {
-    hostname:   p.get("hostname")   || "WKS-MKTG-042",
-    domain:     p.get("domain")     || "polariscore.local",
-    wf_name:    p.get("wf")         || "Deploy Base Win 11",
-    server:     p.get("server")     || "http://192.168.20.110:9091",
-    api_key:    p.get("key")        || "",
-    pw_id:      p.get("pw_id")      || "1",       // pc_workflow id
-    version:    p.get("ver")        || "1.8.0",
-    demo:       p.get("demo")       === "1",       // modalità demo
-  };
-})();
+// ════════════════════════════════════════════════════
+//  CONFIG DA URL  (?demo=1 per la preview)
+// ════════════════════════════════════════════════════
+const P = new URLSearchParams(location.search);
+const CFG = {
+  hostname : P.get("hostname") || "WKS-MKTG-042",
+  domain   : P.get("domain")   || "polariscore.local",
+  wf_name  : P.get("wf")       || "Deploy Base Win 11",
+  server   : P.get("server")   || "http://192.168.20.110:9091",
+  api_key  : P.get("key")      || "",
+  pw_id    : P.get("pw_id")    || "1",
+  version  : P.get("ver")      || "1.8.0",
+  demo     : P.get("demo")     === "1",
+};
 
-// ══════════════════════════════════════════════════════════════════
-//  DATI STEP (caricati dal server; hardcoded per la demo)
-// ══════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
+//  STEP DI ESEMPIO (demo / fallback)
+// ════════════════════════════════════════════════════
 const DEMO_STEPS = [
-  { id:1, nome:"Partizione disco",          tipo:"ps_script",        dur:18 },
-  { id:2, nome:"Installazione Windows",     tipo:"windows_update",   dur:240 },
-  { id:3, nome:"Driver chipset",            tipo:"winget_install",   dur:22 },
-  { id:4, nome:"Driver scheda di rete",     tipo:"winget_install",   dur:12 },
-  { id:5, nome:"Aggiornamenti di sistema",  tipo:"windows_update",   dur:180 },
-  { id:6, nome:"Agenti sicurezza",          tipo:"winget_install",   dur:30 },
-  { id:7, nome:"Join dominio",              tipo:"ps_script",        dur:25 },
-  { id:8, nome:"Profilo utente",            tipo:"reg_set",          dur:8  },
-  { id:9, nome:"Pulizia e riavvio finale",  tipo:"reboot",           dur:5  },
+  { id:1,  nome:"Partizionamento disco",         tipo:"ps_script",        dur:16 },
+  { id:2,  nome:"Formattazione partizioni",       tipo:"ps_script",        dur:8  },
+  { id:3,  nome:"Installazione Windows 11",       tipo:"windows_update",   dur:260 },
+  { id:4,  nome:"Prima configurazione OOBE",      tipo:"ps_script",        dur:35 },
+  { id:5,  nome:"Driver chipset",                 tipo:"winget_install",   dur:20 },
+  { id:6,  nome:"Driver scheda di rete",          tipo:"winget_install",   dur:14 },
+  { id:7,  nome:"Driver audio",                   tipo:"winget_install",   dur:10 },
+  { id:8,  nome:"Driver grafica",                 tipo:"winget_install",   dur:25 },
+  { id:9,  nome:"Windows Update — critico",       tipo:"windows_update",   dur:200 },
+  { id:10, nome:"Windows Update — cumulativo",    tipo:"windows_update",   dur:180 },
+  { id:11, nome:"Microsoft Visual C++ 2022",      tipo:"winget_install",   dur:18 },
+  { id:12, nome:".NET Runtime 8",                 tipo:"winget_install",   dur:22 },
+  { id:13, nome:"Agente sicurezza aziendale",     tipo:"winget_install",   dur:30 },
+  { id:14, nome:"Configurazione policy firewall", tipo:"ps_script",        dur:8  },
+  { id:15, nome:"Join dominio Active Directory",  tipo:"ps_script",        dur:28 },
+  { id:16, nome:"Sincronizzazione GPO",           tipo:"ps_script",        dur:12 },
+  { id:17, nome:"Registrazione certificato",      tipo:"ps_script",        dur:10 },
+  { id:18, nome:"Office 365 ProPlus",             tipo:"winget_install",   dur:95 },
+  { id:19, nome:"Configurazione Outlook",         tipo:"reg_set",          dur:6  },
+  { id:20, nome:"Teams client",                   tipo:"winget_install",   dur:30 },
+  { id:21, nome:"OneDrive — configurazione",      tipo:"reg_set",          dur:5  },
+  { id:22, nome:"Profilo utente predefinito",     tipo:"reg_set",          dur:4  },
+  { id:23, nome:"Agente NovaSCM",                 tipo:"ps_script",        dur:8  },
+  { id:24, nome:"Pulizia file temporanei",        tipo:"shell_script",     dur:5  },
+  { id:25, nome:"Riavvio finale",                 tipo:"reboot",           dur:3  },
 ];
 
-// ══════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
 //  STATO
-// ══════════════════════════════════════════════════════════════════
-let steps       = [];
-let activeStep  = 0;   // indice 0-based
-let pct         = 0;
-let polling     = null;
-let stepTimer   = null;
-let demoRunning = false;
+// ════════════════════════════════════════════════════
+let steps      = [];
+let activeIdx  = -1;
+let startTime  = null;
+let polling    = null;
+let stepTimer  = null;
+let elTimer    = null;
+let demoStep   = 0;
+let demoElapsed = 0;
 
-// ══════════════════════════════════════════════════════════════════
-//  INIT
-// ══════════════════════════════════════════════════════════════════
-document.getElementById("hostname").textContent = CFG.hostname;
-document.getElementById("domain").textContent   = CFG.domain;
-document.getElementById("wf-name").textContent  = CFG.wf_name;
-document.getElementById("f-ver").textContent    = CFG.version;
-document.getElementById("done-hostname").textContent = CFG.hostname;
-
-if (CFG.demo) {
-  steps = DEMO_STEPS.map((s,i) => ({...s, status: i===0?"active":"pending", elapsed:null}));
-  renderSteps();
-  runDemo();
-} else {
-  steps = DEMO_STEPS.map(s => ({...s, status:"pending", elapsed:null}));
-  renderSteps();
-  startPolling();
+// ════════════════════════════════════════════════════
+//  INIT DOM
+// ════════════════════════════════════════════════════
+function initDOM() {
+  $("pc-name").textContent    = CFG.hostname;
+  $("pc-domain").textContent  = CFG.domain;
+  $("wf-name").textContent    = CFG.wf_name;
+  $("f-ver").textContent      = CFG.version;
+  $("f-server").textContent   = CFG.server.replace(/https?:\/\//,"");
+  $("ov-done-host").textContent = CFG.hostname;
 }
 
-// ══════════════════════════════════════════════════════════════════
-//  POLLING REALE (ogni 3s verso il server)
-// ══════════════════════════════════════════════════════════════════
+function $(id){ return document.getElementById(id) }
+
+// ════════════════════════════════════════════════════
+//  RENDER PIPELINE (tutti gli step)
+// ════════════════════════════════════════════════════
+function renderPipeline() {
+  const pipe = $("pipeline");
+  pipe.innerHTML = steps.map((s, i) => {
+    const cls   = s.status;
+    const isLast = i === steps.length - 1;
+    const iconChar =
+      s.status === "done"   ? "✓" :
+      s.status === "active" || s.status === "running" ? "" :  // spinner via CSS
+      s.status === "error"  ? "✕" :
+      s.status === "skip"   ? "—" :
+      String(s.id);
+
+    const spinnerInner = (s.status === "active" || s.status === "running")
+      ? `<div style="width:10px;height:10px;border-radius:50%;border:1.5px solid rgba(77,159,255,.25);border-top-color:var(--run);animation:spin .8s linear infinite"></div>`
+      : iconChar;
+
+    const timeStr = s.elapsed
+      ? fmtSec(s.elapsed)
+      : (s.status === "future" || s.status === "pending") ? "" : "";
+
+    const rightStr = s.status === "done"   ? (s.elapsed ? fmtSec(s.elapsed) : "✓")
+                   : s.status === "active" || s.status === "running" ? `<span id="live-time-${s.id}">${s.elapsed ? fmtSec(s.elapsed) : "0s"}</span>`
+                   : s.status === "error"  ? "ERR"
+                   : s.status === "skip"   ? "skip"
+                   : "";
+
+    return `
+<div class="step-row st-${cls}" id="step-row-${s.id}">
+  <div class="step-connector"></div>
+  <div class="step-left">
+    <div class="step-circle">${spinnerInner}</div>
+  </div>
+  <div class="step-body">
+    <div class="step-text">
+      <div class="step-name">${s.nome}</div>
+      <div class="step-tipo">${s.tipo}</div>
+    </div>
+    <div class="step-right">${rightStr}</div>
+  </div>
+</div>`;
+  }).join("");
+
+  // scroll al passo attivo
+  if (activeIdx >= 0) {
+    const el = document.getElementById(`step-row-${steps[activeIdx].id}`);
+    if (el) el.scrollIntoView({ behavior:"smooth", block:"center" });
+  }
+
+  $("steps-count").textContent = steps.length + " step";
+}
+
+// ════════════════════════════════════════════════════
+//  AGGIORNA UI SINISTRA
+// ════════════════════════════════════════════════════
+function updateLeft() {
+  const done  = steps.filter(s => s.status === "done" || s.status === "skip").length;
+  const total = steps.length;
+  const pct   = total ? Math.round(done / total * 100) : 0;
+  const active = steps.find(s => s.status === "active" || s.status === "running");
+  const failed = steps.find(s => s.status === "error");
+
+  // ring
+  const circ  = 2 * Math.PI * 40;  // 251.2
+  const offset = circ - (pct / 100) * circ;
+  const ring   = $("ring-fill");
+  ring.style.strokeDashoffset = offset;
+  if (pct >= 100) ring.classList.add("done");
+  if (failed)     ring.classList.add("error");
+  $("ring-pct").textContent = pct + "%";
+
+  // bar
+  const bar = $("bar");
+  bar.style.width = pct + "%";
+  if (pct >= 100) bar.classList.add("done");
+  if (failed)     bar.classList.add("error");
+  $("bar-steps-lbl").textContent = `step ${done} / ${total}`;
+
+  // stats
+  $("stat-done").textContent = done;
+  $("stat-rem").textContent  = Math.max(0, total - done);
+  $("stat-tot").textContent  = total;
+  if (startTime) $("stat-ela").textContent = fmtElapsed(Date.now() - startTime);
+
+  // cur box
+  if (active) {
+    $("cur-box-name").textContent = active.nome;
+    $("cur-box-tipo").textContent = active.tipo;
+    $("cur-name").textContent     = active.nome;
+    $("cur-tipo").textContent     = active.tipo;
+    $("cur-spinner").className    = "cur-spinner";
+    $("cur-box-time").textContent = active.elapsed ? fmtSec(active.elapsed) : "0s";
+  } else if (pct >= 100 && !failed) {
+    $("cur-box-name").textContent = "Tutti gli step completati";
+    $("cur-box-tipo").textContent = "—";
+    $("cur-spinner").className    = "cur-spinner done";
+    $("cur-box-time").textContent = "";
+    $("cur-name").textContent     = "Completato";
+    $("cur-tipo").className       = "ri-sub idle";
+    $("cur-tipo").textContent     = "—";
+  } else if (failed) {
+    $("cur-box-name").textContent = `Errore: ${failed.nome}`;
+    $("cur-box-tipo").textContent = failed.tipo;
+    $("cur-spinner").className    = "cur-spinner error";
+    $("cur-box-time").textContent = "";
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  DEMO
+// ════════════════════════════════════════════════════
+function startDemo() {
+  startTime = Date.now();
+  steps = DEMO_STEPS.map(s => ({...s, status:"future", elapsed:0}));
+  renderPipeline();
+  updateLeft();
+  runDemoStep(0);
+}
+
+function runDemoStep(idx) {
+  if (idx >= steps.length) {
+    setTimeout(showDone, 400);
+    return;
+  }
+  steps[idx].status = "active";
+  activeIdx = idx;
+  updateLeft();
+  renderPipeline();
+
+  demoElapsed = 0;
+  const durSec = Math.max(1.5, (steps[idx].dur || 10) * 0.045);
+  stepTimer = setInterval(() => {
+    demoElapsed += 0.12;
+    steps[idx].elapsed = demoElapsed;
+    // aggiorna timer live
+    const el = document.getElementById(`live-time-${steps[idx].id}`);
+    if (el) el.textContent = fmtSec(demoElapsed);
+    $("cur-box-time").textContent = fmtSec(demoElapsed);
+    if (startTime) $("stat-ela").textContent = fmtElapsed(Date.now() - startTime);
+
+    if (demoElapsed >= durSec) {
+      clearInterval(stepTimer);
+      steps[idx].status  = "done";
+      updateLeft();
+      renderPipeline();
+      setTimeout(() => runDemoStep(idx + 1), 220);
+    }
+  }, 120);
+}
+
+// ════════════════════════════════════════════════════
+//  POLLING REALE
+// ════════════════════════════════════════════════════
 async function startPolling() {
+  startTime = Date.now();
   await fetchStatus();
   polling = setInterval(fetchStatus, 3000);
 }
 
 async function fetchStatus() {
   try {
-    const r = await fetch(
-      `${CFG.server}/api/pc-workflows/${CFG.pw_id}`,
-      { headers: { "X-Api-Key": CFG.api_key } }
-    );
+    const r = await fetch(`${CFG.server}/api/pc-workflows/${CFG.pw_id}`,
+      { headers:{"X-Api-Key": CFG.api_key} });
     if (!r.ok) return;
     const data = await r.json();
-    applyServerState(data);
-  } catch(e) {
-    // server non raggiungibile — continua a mostrare l'ultimo stato
-  }
+    applyServer(data);
+  } catch {}
 }
 
-function applyServerState(data) {
+function applyServer(data) {
   const srvSteps = data.steps || [];
-  if (srvSteps.length > 0) {
-    steps = srvSteps.map(s => ({
-      id:     s.step_id,
-      nome:   s.nome,
-      tipo:   s.tipo,
-      status: s.status,         // done | running | error | pending | skipped
-      elapsed: s.elapsed_sec ? fmtSec(s.elapsed_sec) : null,
-    }));
-  }
-  const done  = steps.filter(s=>s.status==="done"||s.status==="skipped").length;
-  pct = steps.length ? Math.round(done / steps.length * 100) : 0;
-  const running = steps.find(s => s.status === "running");
-  activeStep = running ? steps.indexOf(running) : done;
-
-  if (data.status === "completed") { clearInterval(polling); showDone(); return; }
-  if (data.status === "failed")    { clearInterval(polling); showError(running); return; }
-
-  updateUI();
-  renderSteps();
+  if (!srvSteps.length) return;
+  steps = srvSteps.map(s => ({
+    id:      s.step_id,
+    nome:    s.nome,
+    tipo:    s.tipo,
+    status:  s.status === "running" ? "active" : s.status,
+    elapsed: s.elapsed_sec || 0,
+  }));
+  activeIdx = steps.findIndex(s => s.status === "active");
+  updateLeft();
+  renderPipeline();
+  if (data.status === "completed") { clearInterval(polling); setTimeout(showDone, 400); }
+  if (data.status === "failed")    { clearInterval(polling); showError(steps.find(s=>s.status==="error")); }
 }
 
-// ══════════════════════════════════════════════════════════════════
-//  DEMO — simula avanzamento step
-// ══════════════════════════════════════════════════════════════════
-function runDemo() {
-  demoRunning = true;
-  runDemoStep(0);
-}
-
-function runDemoStep(idx) {
-  if (idx >= steps.length) { showDone(); return; }
-
-  steps[idx].status = "active";
-  activeStep = idx;
-  pct = Math.round(idx / steps.length * 100);
-  updateUI();
-  renderSteps();
-
-  let elapsed = 0;
-  const dur = Math.max(2, (steps[idx].dur || 10) * 0.05); // velocizza x20 per demo
-  stepTimer = setInterval(() => {
-    elapsed += 0.1;
-    steps[idx].elapsed = fmtSec(elapsed);
-    const node = document.getElementById(`step-time-${steps[idx].id}`);
-    if (node) node.textContent = steps[idx].elapsed;
-
-    if (elapsed >= dur) {
-      clearInterval(stepTimer);
-      steps[idx].status  = "done";
-      steps[idx].elapsed = fmtSec(elapsed);
-      pct = Math.round((idx+1) / steps.length * 100);
-      updateUI();
-      renderSteps();
-      setTimeout(() => runDemoStep(idx+1), 300);
-    }
-  }, 100);
-}
-
-// ══════════════════════════════════════════════════════════════════
-//  RENDER
-// ══════════════════════════════════════════════════════════════════
-function updateUI() {
-  // progress bar
-  const bar = document.getElementById("bar");
-  bar.style.width = pct + "%";
-  if (pct >= 100) bar.classList.add("done");
-
-  document.getElementById("pct").textContent = pct + "%";
-  if (pct >= 100) document.getElementById("pct").classList.add("done");
-
-  // status label
-  const running = steps.find(s => s.status === "active" || s.status === "running");
-  if (running) {
-    document.getElementById("status-label").textContent = running.nome;
-    document.getElementById("status-sub").textContent   = running.tipo;
-  }
-}
-
-function renderSteps() {
-  const wrap = document.getElementById("steps-wrap");
-
-  // Mostra solo 5 step centrati sull'attivo
-  const total  = steps.length;
-  const center = Math.max(2, Math.min(total-3, activeStep));
-  const start  = Math.max(0, center-2);
-  const end    = Math.min(total, start+5);
-  const visible = steps.slice(start, end);
-
-  wrap.innerHTML = visible.map(s => {
-    const cls = s.status === "active" ? "active"
-              : s.status === "done"   ? "done"
-              : s.status === "error"  ? "active"
-              : s.status === "running"? "active"
-              : "future";
-
-    const iconHtml =
-        s.status==="done"    ? `<span class="ico-check"></span>` :
-        s.status==="error"   ? `<span class="ico-err"></span>` :
-        (s.status==="active"||s.status==="running") ? `<span class="ico-spin"></span>` :
-        `<span class="ico-dot"></span>`;
-
-    const timeStr = s.elapsed
-        ? s.elapsed
-        : (s.status==="future"||s.status==="pending") ? "—" : "";
-
-    return `
-<div class="step ${cls}">
-  <div class="step-icon ${cls}">${iconHtml}</div>
-  <div class="step-info">
-    <div class="step-name">${s.nome}</div>
-    <div class="step-tipo">${s.tipo}</div>
-  </div>
-  <div class="step-time" id="step-time-${s.id}">${timeStr}</div>
-</div>`;
-  }).join("");
-}
-
-// ══════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
 //  SCHERMATE FINALI
-// ══════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
 function showDone() {
-  pct = 100;
-  document.getElementById("bar").style.width = "100%";
-  document.getElementById("bar").classList.add("done");
-  document.getElementById("pct").textContent = "100%";
-  document.getElementById("pct").classList.add("done");
-  document.getElementById("status-label").textContent = "Configurazione completata";
-  document.getElementById("status-sub").textContent   = "Riavvio in corso…";
-
-  setTimeout(() => {
-    document.getElementById("done-overlay").classList.add("show");
-    startRebootCount();
-  }, 600);
-}
-
-function showError(failedStep) {
-  const name = failedStep ? failedStep.nome : "Step sconosciuto";
-  document.getElementById("err-step").textContent = "Errore in: " + name;
-  document.getElementById("err-code").textContent = "Segnalare al supporto IT · NovaSCM v" + CFG.version;
-  document.getElementById("err-overlay").classList.add("show");
-}
-
-function startRebootCount() {
+  $("bar").style.width = "100%";
+  $("bar").classList.add("done");
+  $("ring-fill").style.strokeDashoffset = 0;
+  $("ring-fill").classList.add("done");
+  $("ring-pct").textContent = "100%";
+  const done = steps.filter(s=>s.status==="done"||s.status==="skip").length;
+  $("ov-done-detail").textContent =
+    `${done} step eseguiti · durata totale ${startTime ? fmtElapsed(Date.now()-startTime) : "—"}`;
+  $("ov-done").classList.add("show");
   let n = 30;
-  const el = document.getElementById("reboot-count");
-  const t = setInterval(() => {
-    n--;
-    el.textContent = n;
-    if (n <= 0) { clearInterval(t); /* qui: chiamata al server per segnalare completamento */ }
-  }, 1000);
+  const t = setInterval(() => { $("reboot-n").textContent = --n; if(n<=0) clearInterval(t); }, 1000);
 }
 
-// ══════════════════════════════════════════════════════════════════
+function showError(s) {
+  $("ov-err-step").textContent = s ? `Errore in: ${s.nome}` : "Step sconosciuto";
+  $("ov-err-detail").textContent = "Contattare il supporto IT · NovaSCM v" + CFG.version;
+  $("ov-err").classList.add("show");
+}
+
+// ════════════════════════════════════════════════════
 //  HELPERS
-// ══════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
 function fmtSec(s) {
   s = Math.round(s);
-  return s >= 60 ? Math.floor(s/60)+"m "+String(s%60).padStart(2,"0")+"s" : s+"s";
+  if (s < 60) return s + "s";
+  return Math.floor(s/60) + "m " + String(s%60).padStart(2,"0") + "s";
+}
+function fmtElapsed(ms) {
+  const s = Math.floor(ms/1000);
+  if (s < 60) return s + "s";
+  return Math.floor(s/60) + "m " + String(s%60).padStart(2,"0") + "s";
+}
+function updateClock() {
+  $("clock").textContent = new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
 }
 
-function updateClock() {
-  document.getElementById("f-clock").textContent =
-    new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
-}
-setInterval(updateClock, 1000);
+// ════════════════════════════════════════════════════
+//  START
+// ════════════════════════════════════════════════════
+initDOM();
 updateClock();
+setInterval(updateClock, 1000);
+
+if (CFG.demo) { startDemo(); }
+else          { startPolling(); }
 </script>
 </body>
 </html>
