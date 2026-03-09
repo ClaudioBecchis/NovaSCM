@@ -4,6 +4,21 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.8.1] - 2026-03-09
+
+### Bug fix (Round 7)
+
+- **C-1**: `server/web/index.html` — `api()` ora invia `X-Api-Key` header; key iniettata via `<meta>` dalla route `/` in `api.py`
+- **M-1**: `DELETE /api/workflows` — cascade su `workflow_steps` e `pc_workflows` (fix record orfani)
+- **I-1**: `get_db_ctx()` — aggiunto `PRAGMA foreign_keys = ON` (FK enforcement SQLite)
+- **I-2**: `PUT /api/settings` — `SETTINGS_SCHEMA` valida e casta `default_workflow_id` come int; chiavi sconosciute passate invariate
+
+### Test
+
+- 85/85 ✅ (+4: `test_ui_api_call_with_auth`, `test_ui_api_call_without_auth_fails`, `test_delete_workflow_cascade`, `test_delete_cr_also_removes_cr_steps`)
+
+---
+
 ## [1.8.0] - 2026-03-09
 
 ### Feature

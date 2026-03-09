@@ -119,6 +119,7 @@ def get_db():
 @contextmanager
 def get_db_ctx():
     conn = get_db()
+    conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
     finally:
@@ -335,8 +336,8 @@ def delete_cr(cr_id):
     with get_db_ctx() as conn:
         if not conn.execute("SELECT 1 FROM cr WHERE id=?", (cr_id,)).fetchone():
             return jsonify({"error": "Non trovato"}), 404
-        conn.execute("DELETE FROM cr_steps WHERE cr_id=?", (cr_id,))  # figli prima
-        conn.execute("DELETE FROM cr WHERE id=?", (cr_id,))
+        conn.execute("DELETE FROM cr_steps WHERE cr_id=?", (cr_id,))
+        conn.execute("DELETE FROM cr       WHERE id=?",   (cr_id,))
         conn.commit()
     return jsonify({"ok": True})
 
@@ -533,12 +534,21 @@ def get_settings():
         rows = conn.execute("SELECT key, value FROM settings").fetchall()
     return jsonify({r["key"]: r["value"] for r in rows})
 
+SETTINGS_SCHEMA = {
+    "default_workflow_id": int,
+}
+
 @app.route("/api/settings", methods=["PUT"])
 @require_auth
 def update_settings():
     data = request.get_json(force=True)
     with get_db_ctx() as conn:
         for key, value in data.items():
+            if key in SETTINGS_SCHEMA:
+                try:
+                    value = SETTINGS_SCHEMA[key](value) if value not in (None, "") else None
+                except (ValueError, TypeError):
+                    return jsonify({"error": f"Tipo non valido per {key}"}), 400
             conn.execute(
                 "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (key, str(value) if value is not None else "")
@@ -652,10 +662,12 @@ def update_workflow(wf_id):
 @require_auth
 def delete_workflow(wf_id):
     with get_db_ctx() as conn:
-        affected = conn.execute("DELETE FROM workflows WHERE id=?", (wf_id,)).rowcount
+        if not conn.execute("SELECT 1 FROM workflows WHERE id=?", (wf_id,)).fetchone():
+            return jsonify({"error": "Non trovato"}), 404
+        conn.execute("DELETE FROM workflow_steps WHERE workflow_id=?", (wf_id,))
+        conn.execute("DELETE FROM pc_workflows   WHERE workflow_id=?", (wf_id,))
+        conn.execute("DELETE FROM workflows      WHERE id=?",          (wf_id,))
         conn.commit()
-    if affected == 0:
-        return jsonify({"error": "Non trovato"}), 404
     return jsonify({"ok": True})
 
 # ── Workflow Engine — Steps CRUD ───────────────────────────────────────────────
@@ -1160,7 +1172,14 @@ WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 
 @app.route("/")
 def ui_index():
-    return send_from_directory(WEB_DIR, "index.html")
+    html_path = os.path.join(WEB_DIR, "index.html")
+    with open(html_path, encoding="utf-8") as f:
+        html = f.read()
+    html = html.replace(
+        "</head>",
+        f'<meta name="x-api-key" content="{API_KEY}">\n</head>'
+    )
+    return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 @app.route("/web/<path:path>")
 def ui_static(path):
