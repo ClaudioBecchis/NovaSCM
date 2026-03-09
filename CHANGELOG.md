@@ -4,6 +4,14 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.6.8] - 2026-03-09
+
+### Sicurezza
+
+- **SEC-05**: Rimosso parametro `shell` da `run_cmd()` in `agent/novascm-agent.py` — il parametro `shell=shell` era passato direttamente a `subprocess.run()`, lasciando aperta la via per `shell=True`; ora `shell=False` è hardcodato nella funzione e non può essere sovrascritto; rimossi tutti gli `shell=False` espliciti dai caller (ridondanti)
+
+---
+
 ## [1.6.7] - 2026-03-09
 
 ### Bugfix

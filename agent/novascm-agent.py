@@ -153,11 +153,11 @@ def api_post(base_url, path, body, api_key=""):
 def get_os_platform():
     return "windows" if IS_WINDOWS else "linux"
 
-def run_cmd(cmd, shell=False, timeout=STEP_TIMEOUT, env=None):
-    """Esegue un comando. cmd deve essere una lista di argomenti (shell=False)."""
+def run_cmd(cmd, timeout=STEP_TIMEOUT, env=None):
+    """Esegue un comando. cmd deve essere una lista di argomenti — shell=False sempre."""
     try:
         r = subprocess.run(
-            cmd, shell=shell, capture_output=True, text=True,
+            cmd, shell=False, capture_output=True, text=True,
             timeout=timeout, encoding="utf-8", errors="replace", env=env
         )
         out = (r.stdout + r.stderr).strip()
@@ -187,7 +187,7 @@ def execute_step(step):
         if not pkg_id:
             return False, "Parametro 'id' mancante"
         return run_cmd(["winget", "install", "--id", pkg_id, "--silent",
-                        "--accept-package-agreements", "--accept-source-agreements"], shell=False)
+                        "--accept-package-agreements", "--accept-source-agreements"])
 
     # ── apt_install ──
     elif tipo == "apt_install":
@@ -195,7 +195,7 @@ def execute_step(step):
         if not pkg:
             return False, "Parametro 'package' mancante"
         env = {**os.environ, "DEBIAN_FRONTEND": "noninteractive"}
-        return run_cmd(["apt-get", "install", "-y", pkg], shell=False, env=env)
+        return run_cmd(["apt-get", "install", "-y", pkg], env=env)
 
     # ── snap_install ──
     elif tipo == "snap_install":
@@ -205,7 +205,7 @@ def execute_step(step):
         cmd = ["snap", "install", pkg]
         if parametri.get("classic"):
             cmd.append("--classic")
-        return run_cmd(cmd, shell=False)
+        return run_cmd(cmd)
 
     # ── ps_script ──
     elif tipo == "ps_script":
@@ -216,7 +216,7 @@ def execute_step(step):
             cmd = ["powershell.exe", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]
         else:
             cmd = ["pwsh", "-NonInteractive", "-Command", script]
-        return run_cmd(cmd, shell=False)
+        return run_cmd(cmd)
 
     # ── shell_script ──
     elif tipo == "shell_script":
@@ -225,9 +225,9 @@ def execute_step(step):
             return False, "Parametro 'script' mancante"
         # BUG-02: usa lista argomenti — nessuna interpolazione shell
         if IS_WINDOWS:
-            return run_cmd(["cmd.exe", "/c", script], shell=False)
+            return run_cmd(["cmd.exe", "/c", script])
         else:
-            return run_cmd(["bash", "-c", script], shell=False)
+            return run_cmd(["bash", "-c", script])
 
     # ── reg_set (Windows only) ──
     elif tipo == "reg_set":
@@ -241,7 +241,7 @@ def execute_step(step):
         _VALID_REG_TYPES = {"REG_SZ","REG_DWORD","REG_QWORD","REG_BINARY","REG_EXPAND_SZ","REG_MULTI_SZ"}
         if rtype not in _VALID_REG_TYPES:
             return False, f"Tipo registro non valido: {rtype}"
-        return run_cmd(["reg", "add", path, "/v", name, "/t", rtype, "/d", value, "/f"], shell=False)
+        return run_cmd(["reg", "add", path, "/v", name, "/t", rtype, "/d", value, "/f"])
 
     # ── systemd_service (Linux only) ──
     elif tipo == "systemd_service":
@@ -254,7 +254,7 @@ def execute_step(step):
         # BUG-02: whitelist azione systemd
         if action not in ("start", "stop", "enable", "disable", "restart", "reload", "status"):
             return False, f"Azione systemd non valida: {action}"
-        return run_cmd(["systemctl", action, name], shell=False)
+        return run_cmd(["systemctl", action, name])
 
     # ── file_copy ──
     elif tipo == "file_copy":
@@ -276,9 +276,9 @@ def execute_step(step):
             delay = 5
         log.info(f"  Riavvio programmato tra {delay}s")
         if IS_WINDOWS:
-            run_cmd(["shutdown", "/r", "/t", str(delay)], shell=False)
+            run_cmd(["shutdown", "/r", "/t", str(delay)])
         else:
-            run_cmd(["shutdown", "-r", f"+{max(1, delay // 60)}"], shell=False)
+            run_cmd(["shutdown", "-r", f"+{max(1, delay // 60)}"])
         return True, f"Riavvio programmato tra {delay}s"
 
     # ── message ──
