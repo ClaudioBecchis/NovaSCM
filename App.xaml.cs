@@ -49,12 +49,17 @@ public partial class App : Application
         };
 
         // Modalità OSD: NovaSCM.exe --osd <pcname> <apiurl>
+        //              NovaSCM.exe --osd-preview
         var args = e.Args;
-        if (args.Length >= 1 && args[0] == "--osd")
+        if (args.Length >= 1 && (args[0] == "--osd" || args[0] == "--osd-preview"))
         {
-            var pcName = args.Length >= 2 ? args[1] : Environment.MachineName;
-            var apiUrl = args.Length >= 3 ? args[2] : "";
-            Log($"[OSD] Avvio modalità OSD — PC={pcName} API={apiUrl}");
+            var pcName = args[0] == "--osd-preview"
+                ? "WKS-PREVIEW-01"
+                : (args.Length >= 2 ? args[1] : Environment.MachineName);
+            var apiUrl = args[0] == "--osd-preview"
+                ? ""
+                : (args.Length >= 3 ? args[2] : "");
+            Log($"[OSD] Avvio modalità OSD — PC={pcName} API={(string.IsNullOrEmpty(apiUrl) ? "(demo)" : apiUrl)}");
             var osd = new OsdWindow(pcName, apiUrl);
             MainWindow = osd;
             osd.Show();

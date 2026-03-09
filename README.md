@@ -193,7 +193,38 @@ These are previews to choose the final UI design direction.
 
 ---
 
-## License
+## Legal & Compliance
 
-MIT License — free to use, modify and distribute.
+### License
+NovaSCM is released under the **MIT License** — free to use, modify and distribute.
+See [LICENSE](LICENSE) for the full text.
 © 2026 Claudio Becchis — [PolarisCore.it](https://polariscore.it)
+
+### Third-party software
+NovaSCM is a **deployment tool** — it does not bundle, distribute or license any
+third-party software. When you use NovaSCM to install applications (via winget,
+apt or other package managers), those applications are downloaded directly from
+their official sources and are subject to their own license agreements.
+
+**You are solely responsible for:**
+- Holding valid licenses for all software deployed through NovaSCM
+  (including Windows OS, Microsoft 365, and any other commercial product)
+- Complying with the End User License Agreements (EULAs) of all installed software
+- Ensuring that Windows licenses cover each machine you deploy to
+
+NovaSCM does not grant, transfer or sublicense any third-party software licenses.
+
+### Network scanning & data collection
+NovaSCM scans your local network to discover devices (IP addresses, MAC addresses,
+hostnames, open ports). This data is stored locally in a SQLite database on your
+own server — it is never transmitted to external servers.
+
+**If you deploy NovaSCM in a business environment (EU):**
+- Inform users/employees that network discovery is in use, as required by GDPR
+- Ensure your organization's IT policy covers automated network inventory
+- The API key protects access to collected data — keep it confidential
+
+### Disclaimer
+This software is provided **"as is"**, without warranty of any kind.
+The author is not liable for any data loss, system damage, or compliance issues
+arising from the use of NovaSCM. Always test in a non-production environment first.
