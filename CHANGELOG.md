@@ -4,6 +4,20 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.6] - 2026-03-09
+
+### Bug fix
+
+- **M-1**: `agent/novascm-agent.py` — `run_workflow()` ora verifica `pw_id` salvato in `state.json` vs workflow corrente prima di usare `resume_step`; allineato a `Worker.cs` BUG-8 (v1.7.3)
+- **M-2**: `NovaSCMAgent/StepExecutor.cs` — `WindowsUpdate()`: rimosso `$criteria` dead code; aggiunto `$catArgs` passato correttamente a `Get-WindowsUpdate` e `Install-WindowsUpdate` con `-Category`
+
+### Miglioramenti
+
+- **I-1**: `agent/install-windows.ps1` — aggiunto step 3 verifica SHA256 dopo download `NovaSCMAgent.exe`
+- **I-2**: `agent/install-linux.sh` — aggiunto step 5 verifica SHA256 dopo download `novascm-agent.py`; rinumerati passi successivi (6→7, 7→8)
+
+---
+
 ## [1.7.5] - 2026-03-09
 
 ### Bug fix

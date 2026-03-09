@@ -31,6 +31,23 @@ try {
     throw
 }
 
+# ── 3. Verifica SHA256 ────────────────────────────────────────────────────────
+Log "Verifico integrità SHA256..."
+try {
+    $Expected = (Invoke-WebRequest -Uri "$ApiUrl/api/download/agent.sha256" `
+                 -UseBasicParsing).Content.Trim()
+    $Actual   = (Get-FileHash $AgentExe -Algorithm SHA256).Hash
+    if (-not ($Actual -ieq $Expected)) {
+        Log "ERRORE: hash mismatch. Atteso: $Expected  Ottenuto: $Actual"
+        Remove-Item -Force $AgentExe -ErrorAction SilentlyContinue
+        throw "Verifica integrità fallita"
+    }
+    Log "SHA256 verificato: OK"
+} catch {
+    Log "ATTENZIONE: verifica SHA256 fallita: $_"
+    throw
+}
+
 # ── 4. Crea config ────────────────────────────────────────────────────────────
 Log "Scrivo config: $ConfigFile"
 @{

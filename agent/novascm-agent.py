@@ -336,9 +336,16 @@ def run_workflow(cfg, workflow):
     steps      = workflow.get("steps", [])
 
     state = load_state()
+    saved_pw_id = state.get("pw_id", 0)
     resume_from = state.get("resume_step", 0)
 
-    if resume_from:
+    # BUG-8 (Python agent): verifica che lo stato salvato appartenga a questo workflow
+    if resume_from and saved_pw_id and saved_pw_id != pw_id:
+        log.warning(
+            f"Stato resume pw_id={saved_pw_id} != workflow corrente pw_id={pw_id} — reset")
+        clear_state()
+        resume_from = 0
+    elif resume_from:
         log.info(f"Riprendo workflow dopo riavvio — da step_id={resume_from}")
 
     needs_reboot = False

@@ -186,13 +186,13 @@ public class StepExecutor
             }
             Import-Module PSWindowsUpdate -Force
 
-            # Costruisce filtro categoria
-            $criteria = 'IsInstalled=0'
-            {{(category == "security" ? "\"$criteria += ' AND CategoryIDs contains ''36FC9E60-2D2C-4A0B-A0A0-25D4B0C4B8B3'''" : "")}}
-            {{(category == "critical" ? "\"$criteria += ' AND AutoSelectOnWebSites=1'" : "")}}
+            # Filtro categoria per PSWindowsUpdate
+            $catArgs = @()
+            {{(category == "security" ? "$catArgs += '-Category', 'Security Updates'" : "")}}
+            {{(category == "critical" ? "$catArgs += '-Category', 'Critical Updates'" : "")}}
 
             Write-Output "Ricerca aggiornamenti (categoria: {{category}})..."
-            $updates = Get-WindowsUpdate -AcceptAll {{(excludeDrivers ? "-NotCategory 'Drivers'" : "")}} -Verbose 2>&1
+            $updates = Get-WindowsUpdate -AcceptAll @catArgs {{(excludeDrivers ? "-NotCategory 'Drivers'" : "")}} -Verbose 2>&1
             $count = ($updates | Measure-Object).Count
             Write-Output "Aggiornamenti disponibili: $count"
 
@@ -202,7 +202,7 @@ public class StepExecutor
             }
 
             Write-Output 'Installazione aggiornamenti in corso...'
-            $result = Install-WindowsUpdate -AcceptAll {{(excludeDrivers ? "-NotCategory 'Drivers'" : "")}} {{(rebootAfter ? "" : "-IgnoreReboot")}} -Verbose 2>&1
+            $result = Install-WindowsUpdate -AcceptAll @catArgs {{(excludeDrivers ? "-NotCategory 'Drivers'" : "")}} {{(rebootAfter ? "" : "-IgnoreReboot")}} -Verbose 2>&1
             $result | ForEach-Object { Write-Output $_ }
 
             $failed = $result | Where-Object { $_ -match 'failed|error' }
