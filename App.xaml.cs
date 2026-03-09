@@ -18,7 +18,7 @@ public partial class App : Application
                      "PolarisManager", "debug.log");
 
     private const string GitHubIssuesUrl = "https://github.com/ClaudioBecchis/NovaSCM/issues/new";
-    private const string AppVersion      = "1.7.4";
+    private const string AppVersion      = "1.7.5";
 
     private void OnStartup(object sender, StartupEventArgs e)
     {

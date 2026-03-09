@@ -41,7 +41,7 @@ public class NovaSCMApiService(string baseUrl, string apiKey = "", ApiCache? cac
 
     private async Task<string> SendAsync(HttpMethod method, string url, HttpContent? body = null)
     {
-        var resp = await _http.SendAsync(Req(method, url, body));
+        using var resp = await _http.SendAsync(Req(method, url, body));
         // BUG-10: EnsureSuccessStatusCode lancia HttpRequestException — includiamo body dell'errore
         if (!resp.IsSuccessStatusCode)
         {
@@ -141,7 +141,10 @@ public class NovaSCMApiService(string baseUrl, string apiKey = "", ApiCache? cac
         var req = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
         AddAuth(req);
         using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
-        resp.EnsureSuccessStatusCode();
+        if (!resp.IsSuccessStatusCode)
+            throw new HttpRequestException(
+                $"{(int)resp.StatusCode} {resp.ReasonPhrase}: download fallito",
+                null, resp.StatusCode);
         return await resp.Content.ReadAsByteArrayAsync();
     }
 

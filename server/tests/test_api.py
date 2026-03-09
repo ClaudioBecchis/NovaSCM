@@ -67,17 +67,18 @@ class TestHealth:
         assert r.status_code == 200
 
     def test_health_status_ok(self, client):
-        data = r = client.get("/health")
+        r = client.get("/health")
         assert r.get_json()["status"] == "ok"
 
     def test_health_no_auth_required(self, client):
-        """Health endpoint must be reachable without X-Api-Key."""
+        """Health endpoint deve essere raggiungibile senza X-Api-Key."""
         r = client.get("/health")
         assert r.status_code == 200
 
-    def test_health_includes_db_field(self, client):
+    def test_health_does_not_expose_db_path(self, client):
+        """Health non deve esporre il path del DB."""
         data = client.get("/health").get_json()
-        assert "db" in data
+        assert "db" not in data
 
 
 # ══════════════════════════════════════════════════════════════════════════════
