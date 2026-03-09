@@ -83,11 +83,23 @@ def _validate_api_url(url: str) -> str:
         sys.exit(1)
     return url
 
+# INFO-2: cache config con mtime — evita I/O su ogni ciclo di polling
+_cfg_cache: dict | None = None
+_cfg_mtime: float = 0.0
+
 def load_config():
+    global _cfg_cache, _cfg_mtime
     if not os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, "w") as f:
             json.dump(DEFAULT_CONFIG, f, indent=2)
-        log.info(f"Config creata: {CONFIG_FILE}")
+        log.info("Config creata: %s", CONFIG_FILE)
+        _cfg_cache = None  # forza rilettura
+    try:
+        mtime = os.path.getmtime(CONFIG_FILE)
+    except OSError:
+        mtime = 0.0
+    if _cfg_cache is not None and mtime == _cfg_mtime:
+        return _cfg_cache
     with open(CONFIG_FILE) as f:
         cfg = json.load(f)
     cfg.setdefault("pc_name", socket.gethostname().upper())
@@ -97,6 +109,8 @@ def load_config():
         log.error("[ATTENZIONE] agent.json non configurato! Modifica api_url in: %s", CONFIG_FILE)
     # SSRF: valida schema e host prima di usare l'URL
     cfg["api_url"] = _validate_api_url(cfg.get("api_url", ""))
+    _cfg_cache = cfg
+    _cfg_mtime = mtime
     return cfg
 
 # ── State (persistenza tra riavvii) ──────────────────────────────────────────

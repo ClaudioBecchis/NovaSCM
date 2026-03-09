@@ -4,6 +4,34 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.3] - 2026-03-09
+
+### Sicurezza
+
+- **SEC-1**: `server/api.py` — XML injection in `get_autounattend()`: tutti i valori interpolati nel XML (`pc_name`, `admin_pass`, `dc_ip`, `domain`, `join_user`, `join_pass`, `odj_blob`) ora passano per `xml.sax.saxutils.escape()`
+- **SEC-2**: `server/api.py` — RCE tramite pipe-to-shell: `agent-install.ps1` non usa più `Invoke-Expression`; `agent-install.sh` non usa più `curl|bash`; entrambi scaricano in file temporaneo e lo eseguono direttamente
+- **SEC-3**: `server/api.py` — endpoint `/health` protetto con `@require_auth` (evitava fingerprinting senza autenticazione)
+
+### Bug fix
+
+- **BUG-1**: `server/api.py` — `update_step()` non validava il campo `tipo`; aggiunta la stessa whitelist presente in `add_step()`
+- **BUG-2**: `server/api.py` — `update_workflow()` accettava nome vuoto; aggiunto controllo obbligatorio
+- **BUG-3**: `server/api.py` — `report_wf_step()`: workflow non si completava se l'ultimo step aveva status `error`; aggiunto `'error'` al conteggio degli step terminati
+- **BUG-4**: `server/api.py` — `init_db()` catturava tutte le eccezioni di migrazione; ora loga i warning per errori non-`duplicate column name`
+- **BUG-5**: `server/api.py` — aggiunti indici SQLite su `cr(pc_name)`, `pc_workflows(pc_name)`, `pc_workflow_steps(pc_workflow_id)` per query frequenti dell'agent
+- **BUG-6**: `NovaSCMAgent/ApiClient.cs` — `SetApiKey()` modificava `DefaultRequestHeaders` non thread-safe; rimosso in favore di `BuildRequest()` che aggiunge `X-Api-Key` per ogni singola richiesta
+- **BUG-7**: `NovaSCMAgent/Program.cs` — rimossa registrazione DI `AddSingleton<AgentConfig>()` mai usata (Worker usa i metodi statici `AgentConfig.Load()`)
+- **BUG-8**: `NovaSCMAgent/Worker.cs` — resume dopo reboot non verificava che `PwId` salvato corrispondesse al workflow corrente; aggiunto controllo con reset automatico dello stato in caso di mismatch
+- **BUG-9**: `NovaSCMApiService.cs` — `ApiBase` calcolato con `Replace("/api/cr", "")` fragile; ora usa `Uri.Authority` per estrarre l'origine
+- **BUG-10**: `NovaSCMApiService.cs` — `EnsureSuccessStatusCode()` lanciava eccezione generica; sostituito con controllo manuale che include il body della risposta nel messaggio di errore
+
+### Miglioramenti
+
+- **INFO-1**: `server/api.py` — storage rate limiter configurabile via env `NOVASCM_RATE_LIMIT_STORAGE` (default `memory://`, supporta `redis://...` in produzione)
+- **INFO-2**: `agent/novascm-agent.py` — `load_config()` rileggeva il file JSON a ogni ciclo di polling; aggiunto cache con controllo mtime (rilettura solo se il file cambia)
+
+---
+
 ## [1.7.2] - 2026-03-09
 
 ### Fix agente/server/installer

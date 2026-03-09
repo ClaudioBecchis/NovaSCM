@@ -2,7 +2,7 @@ using NovaSCMAgent;
 
 var builder = Host.CreateApplicationBuilder(args);
 
-builder.Services.AddSingleton<AgentConfig>();
+// BUG-7: AgentConfig usa metodi statici (Load/LoadState/SaveState) — nessuna registrazione DI necessaria
 builder.Services.AddSingleton<ApiClient>();
 builder.Services.AddSingleton<StepExecutor>();
 builder.Services.AddHostedService<Worker>();

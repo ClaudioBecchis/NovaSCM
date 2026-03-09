@@ -18,20 +18,22 @@ public class ApiClient
         _http.DefaultRequestHeaders.Add("User-Agent", $"NovaSCMAgent/{AgentVer}");
     }
 
-    private void SetApiKey(string apiKey)
+    // BUG-6: header per-request invece di DefaultRequestHeaders (non thread-safe)
+    private HttpRequestMessage BuildRequest(HttpMethod method, string url, string apiKey, HttpContent? body = null)
     {
-        _http.DefaultRequestHeaders.Remove("X-Api-Key");
+        var req = new HttpRequestMessage(method, url) { Content = body };
         if (!string.IsNullOrEmpty(apiKey))
-            _http.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+            req.Headers.Add("X-Api-Key", apiKey);
+        return req;
     }
 
     public async Task<JsonObject?> GetWorkflowAsync(string apiUrl, string pcName, CancellationToken ct, string apiKey = "")
     {
-        SetApiKey(apiKey);
         try
         {
             var url = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow";
-            var r   = await _http.GetAsync(url, ct);
+            using var req = BuildRequest(HttpMethod.Get, url, apiKey);
+            var r   = await _http.SendAsync(req, ct);
             if (!r.IsSuccessStatusCode) return null;
             var json = await r.Content.ReadAsStringAsync(ct);
             return JsonSerializer.Deserialize<JsonObject>(json);
@@ -46,7 +48,6 @@ public class ApiClient
     public async Task ReportStepAsync(string apiUrl, string pcName, int stepId,
                                       string status, string output, CancellationToken ct, string apiKey = "")
     {
-        SetApiKey(apiKey);
         try
         {
             var url  = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow/step";
@@ -57,7 +58,9 @@ public class ApiClient
                 output  = output.Length > 2000 ? output[^2000..] : output,
                 ts      = DateTime.Now.ToString("o")
             });
-            await _http.PostAsync(url, new StringContent(body, Encoding.UTF8, "application/json"), ct);
+            var content = new StringContent(body, Encoding.UTF8, "application/json");
+            using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);
+            await _http.SendAsync(req, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -67,12 +70,12 @@ public class ApiClient
 
     public async Task CheckinAsync(string apiUrl, string pcName, CancellationToken ct, string apiKey = "")
     {
-        SetApiKey(apiKey);
         try
         {
-            var url  = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow/checkin";
-            var body = new StringContent("{}", Encoding.UTF8, "application/json");
-            await _http.PostAsync(url, body, ct);
+            var url     = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow/checkin";
+            var content = new StringContent("{}", Encoding.UTF8, "application/json");
+            using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);
+            await _http.SendAsync(req, ct);
         }
         catch { /* heartbeat fire-and-forget */ }
     }

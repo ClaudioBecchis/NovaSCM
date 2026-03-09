@@ -66,8 +66,15 @@ public class Worker : BackgroundService
         var steps = workflow["steps"]?.AsArray() ?? [];
 
         // Resume dopo reboot: salta step già completati
-        var state       = AgentConfig.LoadState();
-        var resumeFrom  = state?.ResumeStep ?? 0;
+        var state      = AgentConfig.LoadState();
+        // BUG-8: verifica che lo stato salvato appartenga a questo workflow
+        if (state != null && state.PwId != pwId)
+        {
+            _log.LogWarning("Stato resume pw_id={Saved} != workflow corrente pw_id={Current} — reset", state.PwId, pwId);
+            AgentConfig.ClearState();
+            state = null;
+        }
+        var resumeFrom = state?.ResumeStep ?? 0;
         if (resumeFrom > 0)
             _log.LogInformation("Resume dopo reboot — da step_id={StepId}", resumeFrom);
 
