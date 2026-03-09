@@ -26,7 +26,8 @@
 
 | Versione | Data | Note |
 |---|---|---|
-| **v1.7.1** | 2026-03-09 | 🔒 BUG-NEW: validazione IP in RunScriptOnPc + INFO: ProcessStartInfo→ArgumentList (3 punti) |
+| **v1.7.2** | 2026-03-09 | 🔧 13 fix: agent/server/installer + Deploy timer fasi + bcdedit boot priority + pulizia repo |
+| v1.7.1 | 2026-03-09 | 🔒 BUG-NEW: validazione IP in RunScriptOnPc + INFO: ProcessStartInfo→ArgumentList (3 punti) |
 | v1.7.0 | 2026-03-09 | 🔒 SEC-06: fix path traversal in file_copy (StepExecutor + agent Python) |
 | v1.6.9 | 2026-03-09 | Fix freeze tab PC Gestiti (PerformanceCounter + NetworkInterfaces su background) + auto-report crash GitHub |
 | v1.6.8 | 2026-03-09 | 🔒 SEC-05: rimosso parametro shell da run_cmd() nell'agent (shell=False hardcodato) |

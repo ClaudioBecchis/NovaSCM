@@ -4,6 +4,36 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [1.7.2] - 2026-03-09
+
+### Fix agente/server/installer
+
+- **FIX-1**: `install-windows.ps1` — variabile `$NssmExe` non inizializzata causava crash immediato con `ErrorActionPreference=Stop`; aggiunta `$NssmExe = "$AgentDir\nssm.exe"` prima del blocco `if (-not (Test-Path $NssmExe))`
+- **FIX-2**: `install-windows.ps1` — IP homelab hardcoded `192.168.20.110` nel default di `$ApiUrl`; sostituito con placeholder `YOUR-SERVER-IP` coerente con `install-linux.sh`
+- **FIX-3**: `install-windows.ps1` — `$PollSec` dichiarato `[string]` ma usato come `[int]` nel JSON; corretto in `[int]`
+- **FIX-4**: `server/Dockerfile` — `VOLUME ["/data"]` dichiarato prima di `RUN adduser`; Docker montava il volume prima che l'utente `novascm` esistesse; spostato dopo il blocco `RUN`; `--workers=1` → `--workers=2`
+- **FIX-5**: `server/docker-compose.yml` — API key hardcoded nel file versionato; sostituita con `${NOVASCM_API_KEY}` letta da `.env`; aggiunto `server/.env.example`; aggiornato `.gitignore`
+- **FIX-6**: `agent/install-linux.sh` — servizio systemd girava come `root`; aggiunto `User=novascm`/`Group=novascm`, creazione utente di sistema dedicato, hardening (`ProtectSystem`, `ProtectHome`, `NoNewPrivileges`, `ReadWritePaths`)
+- **FIX-7**: `installer/NovaSCM.iss` — tre percorsi assoluti della macchina sviluppatore rimossi; `SourceDir`, `SetupIconFile`, `OutputDir` ora relativi; commento versione aggiornato
+- **FIX-8**: `server/requirements.txt` — dipendenze Flask/Gunicorn/flask-limiter con versioni fisse; Dockerfile usa `COPY requirements.txt` invece di `pip install` inline
+- **FIX-9**: `server/docker-compose.yml` — aggiunti resource limits (`memory: 256m`, `cpus: 0.50`)
+- **FIX-10**: `installer/NovaSCM-Setup.nsi` — versione `1.0.0` → `1.7.1`; `RMDir` → `RMDir /r` (evita directory non vuota in uninstall)
+- **FIX-11**: `NovaSCMAgent/Worker.cs` — versione hardcoded `v1.0.0` nel log; sostituita con `Assembly.GetExecutingAssembly().GetName().Version`
+- **FIX-12**: `NovaSCMAgent/Worker.cs` — check `wf["error"] is null` fragile; sostituito con `wf.ContainsKey("workflow_nome") && wf["workflow_nome"] != null`
+- **FIX-13**: `win-x64.pubxml` — `PublishReadyToRun=true` + `EnableCompressionInSingleFile=true` si contraddicono (R2R decompresso a ogni avvio); scelto Opzione A: R2R disabilitato, compressione attiva, `DebugType=none`
+
+### Deploy
+
+- Tab Deploy: timer installazione con fasi in tempo reale (▶ fase attiva, ✅ completata)
+- `autounattend.xml specialize`: aggiunto `bcdedit /set {fwbootmgr} displayorder {bootmgr} /addfirst` per garantire boot da disco dopo Phase 1
+- Istruzioni post-generazione aggiornate con le 3 fasi e avviso riavvii multipli normali
+
+### Pulizia repo
+
+- Rimossi dal tracking Git: `publish_v2/`, `publish_release/`, `publish_small/`, zip binari (~259 MB)
+
+---
+
 ## [1.7.1] - 2026-03-09
 
 ### Sicurezza
