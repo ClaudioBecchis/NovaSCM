@@ -51,3 +51,7 @@ publish_v2/
 publish_release/
 publish_small/
 NovaSCM-v*.zip
+
+# Binari dist server (troppo grandi per git — scaricare manualmente)
+server/dist/ipxe.efi
+server/dist/NovaSCMDeployScreen.exe

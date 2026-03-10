@@ -4,6 +4,7 @@ services:
     container_name: novascm-api
     ports:
       - "9091:9091"
+      - "69:69/udp"
     volumes:
       - novascm-data:/data
     environment:
@@ -11,6 +12,9 @@ services:
       PORT: 9091
       NOVASCM_API_KEY: ${NOVASCM_API_KEY:-}
       NOVASCM_PUBLIC_URL: ${NOVASCM_PUBLIC_URL:-}
+      NOVASCM_PXE_ENABLED: ${NOVASCM_PXE_ENABLED:-1}
+      NOVASCM_TFTP_HOST: "0.0.0.0"
+      NOVASCM_TFTP_PORT: "69"
       NOVASCM_RATE_LIMIT_STORAGE: redis://redis:6379/0
     depends_on:
       redis:

@@ -69,6 +69,57 @@ public class ApiClient
         }
     }
 
+    public async Task SendHardwareAsync(string apiUrl, int pwId, HardwareData hw, CancellationToken ct, string apiKey = "")
+    {
+        try
+        {
+            var url  = $"{apiUrl.TrimEnd('/')}/api/pc-workflows/{pwId}/hardware";
+            var body = JsonSerializer.Serialize(new
+            {
+                cpu = hw.Cpu, ram = hw.Ram, disk = hw.Disk, mac = hw.Mac, ip = hw.Ip
+            });
+            var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+            using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);
+            await _http.SendAsync(req, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.LogWarning("POST hardware pw_id={PwId}: {Err}", pwId, ex.Message);
+        }
+    }
+
+    public async Task SendLogAsync(string apiUrl, int pwId, string text, CancellationToken ct, string apiKey = "")
+    {
+        try
+        {
+            var url  = $"{apiUrl.TrimEnd('/')}/api/pc-workflows/{pwId}/log";
+            var body = JsonSerializer.Serialize(new { text });
+            var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+            using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);
+            await _http.SendAsync(req, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.LogWarning("POST log pw_id={PwId}: {Err}", pwId, ex.Message);
+        }
+    }
+
+    public async Task SendScreenshotAsync(string apiUrl, int pwId, string imageB64, CancellationToken ct, string apiKey = "")
+    {
+        try
+        {
+            var url  = $"{apiUrl.TrimEnd('/')}/api/pc-workflows/{pwId}/screenshot";
+            var body = JsonSerializer.Serialize(new { image_b64 = imageB64 });
+            var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+            using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);
+            await _http.SendAsync(req, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.LogWarning("POST screenshot pw_id={PwId}: {Err}", pwId, ex.Message);
+        }
+    }
+
     public async Task CheckinAsync(string apiUrl, string pcName, CancellationToken ct, string apiKey = "")
     {
         try

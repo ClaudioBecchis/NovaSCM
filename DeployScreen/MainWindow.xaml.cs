@@ -302,7 +302,7 @@ namespace NovaSCMDeployScreen
                 UpdateStatsUI();
                 UpdateCurBox(_steps[idx]);
                 ScrollToActive();
-                ColorStepRow(idx, StepStatus.Active);
+                Dispatcher.InvokeAsync(() => ColorStepRow(idx, StepStatus.Active), DispatcherPriority.Loaded);
                 // log
                 _logs.Clear();
                 LogStepName.Text   = _steps[idx].Nome;
@@ -340,7 +340,7 @@ namespace NovaSCMDeployScreen
                         UpdateStatsUI();
                         ColorStepRow(idx, StepStatus.Done);
                     });
-                    Task.Delay(220).ContinueWith(_ => RunDemoStep(idx + 1));
+                    Task.Delay(220).ContinueWith(_ => Dispatcher.Invoke(() => RunDemoStep(idx + 1)));
                 }
             };
             _demoTimer.Start();
@@ -442,7 +442,7 @@ namespace NovaSCMDeployScreen
 
             _logs.Add(new LogLine { Text = text, Color = color });
             LogLinesCount.Text = $"{_logs.Count} {(_logs.Count == 1 ? "riga" : "righe")}";
-            LogScroller.ScrollToEnd();
+            Dispatcher.InvokeAsync(() => LogScroller.ScrollToEnd(), DispatcherPriority.Background);
         }
 
         private void AppendServerLog(string rawLog, string stepName)
@@ -591,7 +591,7 @@ namespace NovaSCMDeployScreen
                         BorderBrush = new SolidColorBrush(Color.FromArgb(80, 40, 55, 90)),
                         BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 6, 6)
                     };
-                    var sp = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+                    var sp = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
                     sp.Children.Add(new System.Windows.Controls.TextBlock { Text = emoji + " ", FontSize = 10 });
                     sp.Children.Add(new System.Windows.Controls.TextBlock
                     {
