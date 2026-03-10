@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using System.Runtime.Versioning;
 
 namespace NovaSCMAgent;
 
@@ -90,6 +91,56 @@ public class Worker : BackgroundService
             // Non critico: il deploy continua anche senza schermata
             Console.Error.WriteLine($"[WARN] LaunchDeployScreen: {ex.Message}");
         }
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static string CaptureScreenshotWindows()
+    {
+        try
+        {
+            int w = GetSystemMetrics(0);
+            int h = GetSystemMetrics(1);
+            if (w <= 0 || h <= 0) { w = 1920; h = 1080; }
+
+            using var bmp = new System.Drawing.Bitmap(w, h,
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using var g = System.Drawing.Graphics.FromImage(bmp);
+            g.CopyFromScreen(0, 0, 0, 0, new System.Drawing.Size(w, h),
+                System.Drawing.CopyPixelOperation.SourceCopy);
+
+            using var ms = new MemoryStream();
+            var encoder = System.Drawing.Imaging.ImageCodecInfo
+                .GetImageEncoders()
+                .FirstOrDefault(e => e.MimeType == "image/jpeg");
+
+            if (encoder == null)
+            {
+                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+            }
+            else
+            {
+                var encoderParams = new System.Drawing.Imaging.EncoderParameters(1);
+                encoderParams.Param[0] = new System.Drawing.Imaging.EncoderParameter(
+                    System.Drawing.Imaging.Encoder.Quality, 60L);
+                bmp.Save(ms, encoder, encoderParams);
+            }
+
+            return Convert.ToBase64String(ms.ToArray());
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[WARN] CaptureScreenshot: {ex.Message}");
+            return "";
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
+    private static string CaptureScreenshot()
+    {
+        if (!OperatingSystem.IsWindows()) return "";
+        return CaptureScreenshotWindows();
     }
 
     private async Task RunWorkflowAsync(AgentConfig cfg, JsonObject workflow, CancellationToken ct)
@@ -197,5 +248,25 @@ public class Worker : BackgroundService
 
         AgentConfig.ClearState();
         _log.LogInformation("Workflow completato");
+
+        // ── Screenshot finale ──────────────────────────────────────────────
+        await Task.Delay(TimeSpan.FromSeconds(2), ct).ConfigureAwait(false);
+        try
+        {
+            var ssB64 = CaptureScreenshot();
+            if (!string.IsNullOrEmpty(ssB64))
+            {
+                await _api.SendScreenshotAsync(cfg.ApiUrl, pwId, ssB64, ct, cfg.ApiKey);
+                _log.LogInformation("Screenshot inviato ({Kb} KB)", ssB64.Length * 3 / 4 / 1024);
+            }
+            else
+            {
+                _log.LogDebug("Screenshot non disponibile (OS non Windows o errore capture)");
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning("SendScreenshot fallito: {Err}", ex.Message);
+        }
     }
 }
