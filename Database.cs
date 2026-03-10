@@ -41,7 +41,8 @@ public static class Database
                 connection_type TEXT NOT NULL DEFAULT '❔',
                 status          TEXT NOT NULL DEFAULT '—',
                 cert_status     TEXT NOT NULL DEFAULT '⬜ No',
-                last_seen       TEXT NOT NULL DEFAULT ''
+                last_seen       TEXT NOT NULL DEFAULT '',
+                notes           TEXT NOT NULL DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS certificates (
@@ -123,6 +124,15 @@ public static class Database
             );
             """;
         cmd.ExecuteNonQuery();
+
+        // Migration: aggiunge colonna notes se il database è precedente alla v1.7.2
+        try
+        {
+            using var migCmd = db.CreateCommand();
+            migCmd.CommandText = "ALTER TABLE devices ADD COLUMN notes TEXT NOT NULL DEFAULT '';";
+            migCmd.ExecuteNonQuery();
+        }
+        catch (SqliteException) { } // colonna già presente — ignorato
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -603,19 +613,19 @@ public static class Database
         cmd.ExecuteNonQuery();
 
         using var cmd2 = db.CreateCommand();
-        cmd2.CommandText = "UPDATE devices SET note=$note WHERE ip=$ip;";
-        cmd2.Parameters.AddWithValue("$note", note);
+        cmd2.CommandText = "UPDATE devices SET notes=$notes WHERE ip=$ip;";
+        cmd2.Parameters.AddWithValue("$notes", note);
         cmd2.Parameters.AddWithValue("$ip", ip);
-        try { cmd2.ExecuteNonQuery(); } catch { } // colonna note potrebbe non esistere ancora
+        cmd2.ExecuteNonQuery();
     }
 
     public static void SaveDeviceTag(string ip, string tag)
     {
         using var db = Open();
         using var cmd2 = db.CreateCommand();
-        cmd2.CommandText = "UPDATE devices SET note=$tag WHERE ip=$ip;";
-        cmd2.Parameters.AddWithValue("$tag", "[tag:" + tag + "]");
+        cmd2.CommandText = "UPDATE devices SET notes=$notes WHERE ip=$ip;";
+        cmd2.Parameters.AddWithValue("$notes", "[tag:" + tag + "]");
         cmd2.Parameters.AddWithValue("$ip", ip);
-        try { cmd2.ExecuteNonQuery(); } catch { }
+        cmd2.ExecuteNonQuery();
     }
 }

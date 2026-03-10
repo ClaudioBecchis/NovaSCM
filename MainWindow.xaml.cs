@@ -160,6 +160,7 @@ class DeployConfig
     public bool   IncludeAgent    { get; set; } = true;
     public string ServerUrl       { get; set; } = "";
     public string NovaSCMCrApiUrl { get; set; } = "";   // per check-in post-install
+    public string NovaSCMApiKey   { get; set; } = "";
     public string PxeServerIp        { get; set; } = "";
     public string PxeServerPath      { get; set; } = "/srv/netboot/novascm/";
     public bool   UseMicrosoftAccount { get; set; } = false;
@@ -197,6 +198,7 @@ class AppConfig
     public string UnifiPassE     { get; set; } = "";
     public string AdminPassE     { get; set; } = "";
     public string NovaSCMApiKeyE { get; set; } = "";
+    public string SshKeyPath     { get; set; } = "";
 }
 
 public class CrRow
@@ -3219,6 +3221,7 @@ public partial class MainWindow : Window
             IncludeAgent      = ChkIncludeAgent.IsChecked == true,
             ServerUrl         = TxtDeployServerUrl.Text.Trim(),
             NovaSCMCrApiUrl   = _config.NovaSCMApiUrl,
+            NovaSCMApiKey     = _config.NovaSCMApiKey,
         };
 
         // Edizione
@@ -3993,7 +3996,7 @@ public partial class MainWindow : Window
                 "USB non trovata", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
-        // Se un solo drive → conferma diretta; più drive → chiede quale
+        // Se un solo drive → conferma diretta; più drive → dialog di selezione
         DriveInfo drive;
         if (removable.Count == 1)
         {
@@ -4006,13 +4009,47 @@ public partial class MainWindow : Window
         }
         else
         {
-            var driveList = string.Join("\n", removable.Select((d, i) =>
-                $"  [{i + 1}]  {d.Name}  {d.VolumeLabel}  ({d.TotalSize / 1_073_741_824L} GB)"));
-            var result = MessageBox.Show(
-                $"USB disponibili:\n{driveList}\n\nVerranno copiati sulla prima: {removable[0].Name}\nProcedere?",
-                "Scrivi su USB", MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (result != MessageBoxResult.Yes) return;
-            drive = removable[0];
+            // Più USB: permette all'utente di scegliere quale usare
+            int selectedIdx = -1;
+            var dlg = new Window
+            {
+                Title = "Seleziona USB di destinazione",
+                Width = 400, Height = 195,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                ResizeMode = ResizeMode.NoResize,
+                Owner = this,
+            };
+            var panel = new System.Windows.Controls.StackPanel { Margin = new System.Windows.Thickness(16, 12, 16, 12) };
+            panel.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = "Trovate più unità rimovibili. Seleziona quella di destinazione:",
+                TextWrapping = System.Windows.TextWrapping.Wrap,
+                Margin = new System.Windows.Thickness(0, 0, 0, 10),
+            });
+            var combo = new System.Windows.Controls.ComboBox
+            {
+                ItemsSource = removable.Select(d =>
+                    $"{d.Name}  {d.VolumeLabel}  ({d.TotalSize / 1_073_741_824L} GB)").ToList(),
+                SelectedIndex = 0,
+                Margin = new System.Windows.Thickness(0, 0, 0, 14),
+            };
+            panel.Children.Add(combo);
+            var btnRow = new System.Windows.Controls.StackPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal,
+                HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
+            };
+            var btnOk  = new System.Windows.Controls.Button { Content = "OK",      Width = 80, Margin = new System.Windows.Thickness(0, 0, 8, 0) };
+            var btnCnl = new System.Windows.Controls.Button { Content = "Annulla", Width = 80 };
+            btnOk.Click  += (_, _) => { selectedIdx = combo.SelectedIndex; dlg.Close(); };
+            btnCnl.Click += (_, _) => dlg.Close();
+            btnRow.Children.Add(btnOk);
+            btnRow.Children.Add(btnCnl);
+            panel.Children.Add(btnRow);
+            dlg.Content = panel;
+            dlg.ShowDialog();
+            if (selectedIdx < 0) return;
+            drive = removable[selectedIdx];
         }
         File.Copy(Path.Combine(_deployTmpDir, "autounattend.xml"),
                   Path.Combine(drive.Name,    "autounattend.xml"), overwrite: true);
@@ -4041,8 +4078,9 @@ public partial class MainWindow : Window
         var cfg     = BuildDeployConfigFromUi();
         var pxeIp   = cfg.PxeServerIp;
         var pxePath = cfg.PxeServerPath;
-        var keyPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh", "id_ed25519");
+        var keyPath = !string.IsNullOrEmpty(_config.SshKeyPath)
+            ? _config.SshKeyPath
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh", "id_ed25519");
 
         TxtDeployStatus.Foreground = System.Windows.Media.Brushes.Yellow;
         TxtDeployStatus.Text       = $"⏳  Upload su PXE {pxeIp}...";
@@ -4090,6 +4128,14 @@ public partial class MainWindow : Window
         finally { BtnDeployPxe.IsEnabled = true; }
     }
 
+    // ── Helpers di escape ────────────────────────────────────────────────────
+    /// <summary>Escape per valori inseriti in testo XML (sostituisce &amp; &lt; &gt; &quot; &apos;)</summary>
+    private static string Xe(string? s) =>
+        System.Security.SecurityElement.Escape(s ?? "") ?? "";
+
+    /// <summary>Escape per valori inseriti in stringhe PowerShell a singoli apici (raddoppia ')</summary>
+    private static string PsEsc(string? s) => (s ?? "").Replace("'", "''");
+
     // ── Builder autounattend.xml ──────────────────────────────────────────────
     private static string BuildAutounattendXml(DeployConfig cfg)
     {
@@ -4109,16 +4155,16 @@ public partial class MainWindow : Window
 
         // Product key (opzionale — lascia vuoto per KMS/MAK/valutazione)
         var keySection = string.IsNullOrWhiteSpace(cfg.ProductKey) ? "" :
-            $"      <ProductKey><Key>{cfg.ProductKey.Trim().ToUpper()}</Key></ProductKey>\n";
+            $"      <ProductKey><Key>{Xe(cfg.ProductKey.Trim().ToUpper())}</Key></ProductKey>\n";
 
         // Utente standard aggiunto come secondo LocalAccount (no wrapper extra)
         var userSection = string.IsNullOrEmpty(cfg.UserName) ? "" :
             $@"
           <LocalAccount wcm:action=""add"">
-            <Name>{cfg.UserName}</Name>
+            <Name>{Xe(cfg.UserName)}</Name>
             <Group>Users</Group>
-            <DisplayName>{cfg.UserName}</DisplayName>
-            <Password><Value>{cfg.UserPassword}</Value><PlainText>true</PlainText></Password>
+            <DisplayName>{Xe(cfg.UserName)}</DisplayName>
+            <Password><Value>{Xe(cfg.UserPassword)}</Value><PlainText>true</PlainText></Password>
           </LocalAccount>";
 
         // OOBE: Client ha schermata skip, Server no
@@ -4171,14 +4217,14 @@ public partial class MainWindow : Window
             _rsSb.Append($@"
         <RunSynchronousCommand wcm:action=""add"">
           <Order>{_rsOrd++}</Order>
-          <Path>powershell.exe -NonInteractive -Command ""for($i=0;$i-lt30;$i++){{$n=Get-NetAdapter|?{{$_.Status-eq'Up'-and$_.HardwareInterface}}|Select -First 1;if($n){{Set-DnsClientServerAddress -InterfaceIndex $n.InterfaceIndex -ServerAddresses '{cfg.DomainControllerIp}';break}};Start-Sleep 2}}""</Path>
+          <Path>powershell.exe -NonInteractive -Command ""for($i=0;$i-lt30;$i++){{$n=Get-NetAdapter|?{{$_.Status-eq'Up'-and$_.HardwareInterface}}|Select -First 1;if($n){{Set-DnsClientServerAddress -InterfaceIndex $n.InterfaceIndex -ServerAddresses '{Xe(PsEsc(cfg.DomainControllerIp))}';break}};Start-Sleep 2}}""</Path>
           <Description>Attendi rete e imposta DNS DC</Description>
         </RunSynchronousCommand>");
         if (cfg.DomainJoin == "AD" && !string.IsNullOrEmpty(cfg.DomainName))
             _rsSb.Append($@"
         <RunSynchronousCommand wcm:action=""add"">
           <Order>{_rsOrd++}</Order>
-          <Path>powershell.exe -NonInteractive -Command ""Add-Computer -DomainName '{cfg.DomainName}' -Credential (New-Object PSCredential('{cfg.DomainName}\{cfg.DomainUser}',(ConvertTo-SecureString '{cfg.DomainPassword}' -AsPlainText -Force))) -Force -ErrorAction SilentlyContinue""</Path>
+          <Path>powershell.exe -NonInteractive -Command ""Add-Computer -DomainName '{Xe(PsEsc(cfg.DomainName))}' -Credential (New-Object PSCredential('{Xe(PsEsc(cfg.DomainName))}\\{Xe(PsEsc(cfg.DomainUser))}',(ConvertTo-SecureString '{Xe(PsEsc(cfg.DomainPassword))}' -AsPlainText -Force))) -Force -ErrorAction SilentlyContinue""</Path>
           <Description>Join dominio AD</Description>
         </RunSynchronousCommand>");
         var runSyncBlock = _rsSb.Length > 0
@@ -4239,7 +4285,7 @@ public partial class MainWindow : Window
           <InstallTo><DiskID>0</DiskID><PartitionID>3</PartitionID></InstallTo>
           <InstallFrom>
             <MetaData wcm:action=""add"">
-              <Key>/IMAGE/NAME</Key><Value>{cfg.WinEdition}</Value>
+              <Key>/IMAGE/NAME</Key><Value>{Xe(cfg.WinEdition)}</Value>
             </MetaData>
           </InstallFrom>
           <WillShowUI>OnError</WillShowUI>
@@ -4259,7 +4305,7 @@ public partial class MainWindow : Window
                processorArchitecture=""amd64""
                publicKeyToken=""31bf3856ad364e35""
                language=""neutral"" versionScope=""nonSxS"">
-      <ComputerName>{pcName}</ComputerName>
+      <ComputerName>{Xe(pcName)}</ComputerName>
       <TimeZone>{cfg.TimeZone}</TimeZone>
       <RegisteredOrganization>NovaSCM</RegisteredOrganization>
       {runSyncBlock}
@@ -4288,14 +4334,14 @@ public partial class MainWindow : Window
             <Name>Administrator</Name>
             <Group>Administrators</Group>
             <Password>
-              <Value>{cfg.AdminPassword}</Value>
+              <Value>{Xe(cfg.AdminPassword)}</Value>
               <PlainText>true</PlainText>
             </Password>
           </LocalAccount>{userSection}
         </LocalAccounts>
       </UserAccounts>
       <AutoLogon>
-        <Password><Value>{cfg.AdminPassword}</Value><PlainText>true</PlainText></Password>
+        <Password><Value>{Xe(cfg.AdminPassword)}</Value><PlainText>true</PlainText></Password>
         <Enabled>true</Enabled>
         <LogonCount>1</LogonCount>
         <Username>Administrator</Username>
@@ -4334,6 +4380,7 @@ public partial class MainWindow : Window
         // Funzione Report-Step (telemetria step-by-step verso NovaSCM API)
         var reportStepFn = !string.IsNullOrEmpty(cfg.NovaSCMCrApiUrl) ? $@"
 $_crApi    = '{cfg.NovaSCMCrApiUrl}'
+$_apiKey   = '{cfg.NovaSCMApiKey}'
 $_hostname = $env:COMPUTERNAME
 function Report-Step {{
     param([string]$Step, [string]$Status = 'done')
@@ -4343,6 +4390,7 @@ function Report-Step {{
             (ConvertTo-Json @{{step=$Step;status=$Status;ts=(Get-Date -Format 'o')}} -Compress))
         $r = [Net.WebRequest]::Create(""$_crApi/by-name/$_hostname/step"")
         $r.Method = 'POST'; $r.ContentType = 'application/json'
+        if ($_apiKey) {{ $r.Headers['X-Api-Key'] = $_apiKey }}
         $r.ContentLength = $b.Length; $r.Timeout = 5000
         $s = $r.GetRequestStream(); $s.Write($b,0,$b.Length); $s.Close()
         $r.GetResponse().Close()
@@ -4395,13 +4443,17 @@ try {{
         // Agente WiFi EAP-TLS (esistente)
         var agentSection = cfg.IncludeAgent && !string.IsNullOrEmpty(cfg.ServerUrl) ? $@"
 # Installa agente NovaSCM (enrollment WiFi EAP-TLS)
+$agentTmp = Join-Path $env:TEMP ""novascm-agent-$([System.IO.Path]::GetRandomFileName()).ps1""
 try {{
     $agentUrl = '{cfg.ServerUrl.TrimEnd('/')}/agent/install.ps1'
     Write-Output ""Download agente da: $agentUrl""
-    Invoke-RestMethod -Uri $agentUrl -UseBasicParsing | Invoke-Expression
+    Invoke-WebRequest -Uri $agentUrl -OutFile $agentTmp -UseBasicParsing
+    powershell.exe -NonInteractive -ExecutionPolicy Bypass -File $agentTmp
     Write-Output 'Agente NovaSCM installato'
 }} catch {{
     Write-Warning ""Agente NovaSCM non raggiungibile: $($_.Exception.Message)""
+}} finally {{
+    if (Test-Path $agentTmp) {{ Remove-Item -Force $agentTmp -ErrorAction SilentlyContinue }}
 }}" : "# Agente WiFi EAP-TLS non incluso";
 
         // NovaSCM Workflow Agent (nuovo — installa il servizio di polling workflow)
@@ -7059,9 +7111,10 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         TxtPveStatus.Text = "🌡️ Lettura temperature...";
         try
         {
-            var keyPath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                ".ssh", "id_ed25519");
+            var keyPath = !string.IsNullOrEmpty(_config.SshKeyPath)
+                ? _config.SshKeyPath
+                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                               ".ssh", "id_ed25519");
             // SEC-03: ArgumentList evita injection da _pveHost (valore UI)
             var psi = new ProcessStartInfo("ssh.exe")
             {
