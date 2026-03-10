@@ -5,7 +5,8 @@ DB:    /data/novascm.db (configurabile con NOVASCM_DB env var)
 """
 from flask import Flask, request, jsonify, Response, send_from_directory
 from werkzeug.middleware.proxy_fix import ProxyFix
-import sqlite3, json, datetime, os, functools, hmac, logging, re, secrets
+import sqlite3, json, datetime, os, functools, hmac, logging, re, secrets, threading, time
+import urllib.request as _urllib_req
 from xml.sax.saxutils import escape as _xe
 from contextlib import contextmanager
 
@@ -31,6 +32,21 @@ except ImportError:
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+
+@app.after_request
+def add_cors(response):
+    response.headers["Access-Control-Allow-Origin"]  = "*"
+    response.headers["Access-Control-Allow-Headers"] = "X-Api-Key, Content-Type"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return response
+
+@app.route("/api/<path:_>", methods=["OPTIONS"])
+def cors_preflight(_):
+    r = Response()
+    r.headers["Access-Control-Allow-Origin"]  = "*"
+    r.headers["Access-Control-Allow-Headers"] = "X-Api-Key, Content-Type"
+    r.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    return r, 204
 
 # ── Rate limiting (facoltativo: richiede flask-limiter) ───────────────────────
 if _limiter_available:
@@ -266,7 +282,9 @@ def init_db():
             ("pc_workflows", "hardware_json",  "TEXT"),
             ("pc_workflows", "log_text",       "TEXT"),
             ("pc_workflows", "screenshot_b64", "TEXT"),
-            ("pc_workflow_steps", "elapsed_sec", "REAL DEFAULT 0"),
+            ("pc_workflow_steps", "elapsed_sec",  "REAL DEFAULT 0"),
+        ("pc_workflows",      "archived",     "INTEGER DEFAULT 0"),
+        ("workflows",         "timeout_min",  "INTEGER DEFAULT 120"),
         ]
         for table, col, typ in migrations:
             try:
@@ -285,6 +303,77 @@ def row_to_dict(row, include_sensitive: bool = False):
         for k in _SENSITIVE:
             d.pop(k, None)
     return d
+
+# ── Webhook notifiche ─────────────────────────────────────────────────────────
+
+def _fire_webhook(event: str, data: dict):
+    """Chiama il webhook configurato in modo fire-and-forget (thread daemon)."""
+    with get_db_ctx() as conn:
+        row_url = conn.execute("SELECT value FROM settings WHERE key='webhook_url'").fetchone()
+        row_en  = conn.execute("SELECT value FROM settings WHERE key='webhook_enabled'").fetchone()
+    url     = row_url["value"] if row_url else ""
+    enabled = (row_en["value"] if row_en else "0") == "1"
+    if not url or not enabled:
+        return
+    payload = json.dumps({
+        "event": event,
+        "ts":    datetime.datetime.utcnow().isoformat(),
+        **data
+    }).encode()
+    def _send():
+        try:
+            req = _urllib_req.Request(
+                url, data=payload,
+                headers={"Content-Type": "application/json"}, method="POST"
+            )
+            _urllib_req.urlopen(req, timeout=5)
+        except Exception as exc:
+            log.warning("Webhook failed (%s): %s", url, exc)
+    threading.Thread(target=_send, daemon=True).start()
+
+
+# ── Cleanup workflow in stallo ─────────────────────────────────────────────────
+
+def _cleanup_stale_workflows():
+    """Marca come 'error' i workflow running da più di timeout_min minuti."""
+    now = datetime.datetime.utcnow()
+    with get_db_ctx() as conn:
+        stale = conn.execute("""
+            SELECT pw.id, pw.pc_name, pw.started_at, COALESCE(w.timeout_min, 120) AS timeout_min
+            FROM pc_workflows pw
+            JOIN workflows w ON w.id = pw.workflow_id
+            WHERE pw.status = 'running'
+              AND pw.started_at IS NOT NULL
+        """).fetchall()
+        for row in stale:
+            try:
+                started = datetime.datetime.fromisoformat(row["started_at"])
+            except (ValueError, TypeError):
+                continue
+            if (now - started).total_seconds() > row["timeout_min"] * 60:
+                log.warning("Workflow timeout: pw_id=%s pc=%s", row["id"], row["pc_name"])
+                conn.execute(
+                    "UPDATE pc_workflows SET status='error', completed_at=? WHERE id=?",
+                    (now.isoformat(), row["id"])
+                )
+                _fire_webhook("workflow_timeout", {
+                    "pc_name": row["pc_name"],
+                    "pw_id":   row["id"],
+                    "status":  "error",
+                })
+        conn.commit()
+
+
+def _start_background_jobs():
+    def _loop():
+        while True:
+            try:
+                _cleanup_stale_workflows()
+            except Exception as exc:
+                log.warning("Background cleanup error: %s", exc)
+            time.sleep(300)
+    threading.Thread(target=_loop, daemon=True).start()
+
 
 # ── CR CRUD ───────────────────────────────────────────────────────────────────
 
@@ -372,10 +461,13 @@ def update_status(cr_id):
 @require_auth
 def delete_cr(cr_id):
     with get_db_ctx() as conn:
-        if not conn.execute("SELECT 1 FROM cr WHERE id=?", (cr_id,)).fetchone():
+        row = conn.execute("SELECT pc_name FROM cr WHERE id=?", (cr_id,)).fetchone()
+        if not row:
             return jsonify({"error": "Non trovato"}), 404
-        conn.execute("DELETE FROM cr_steps WHERE cr_id=?", (cr_id,))
-        conn.execute("DELETE FROM cr       WHERE id=?",   (cr_id,))
+        pc_name = row["pc_name"]
+        conn.execute("DELETE FROM cr_steps    WHERE cr_id=?",    (cr_id,))
+        conn.execute("DELETE FROM pc_workflows WHERE pc_name=?", (pc_name,))
+        conn.execute("DELETE FROM cr           WHERE id=?",      (cr_id,))
         conn.commit()
     return jsonify({"ok": True})
 
@@ -574,19 +666,23 @@ def get_settings():
 
 SETTINGS_SCHEMA = {
     "default_workflow_id": int,
+    "webhook_url":         str,
+    "webhook_enabled":     str,
 }
 
 @app.route("/api/settings", methods=["PUT"])
 @require_auth
 def update_settings():
     data = request.get_json(force=True)
+    for key in data:
+        if key not in SETTINGS_SCHEMA:
+            return jsonify({"error": f"Chiave non valida: {key}. Valori ammessi: {list(SETTINGS_SCHEMA)}"}), 400
     with get_db_ctx() as conn:
         for key, value in data.items():
-            if key in SETTINGS_SCHEMA:
-                try:
-                    value = SETTINGS_SCHEMA[key](value) if value not in (None, "") else None
-                except (ValueError, TypeError):
-                    return jsonify({"error": f"Tipo non valido per {key}"}), 400
+            try:
+                value = SETTINGS_SCHEMA[key](value) if value not in (None, "") else None
+            except (ValueError, TypeError):
+                return jsonify({"error": f"Tipo non valido per {key}"}), 400
             conn.execute(
                 "INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (key, str(value) if value is not None else "")
@@ -596,6 +692,7 @@ def update_settings():
     return jsonify({r["key"]: r["value"] for r in rows})
 
 @app.route("/api/cr/by-name/<pc_name>/step", methods=["POST"])
+@require_auth
 def report_step(pc_name):
     data   = request.get_json(force=True)
     step   = data.get("step", "")
@@ -616,6 +713,7 @@ def report_step(pc_name):
     return jsonify({"ok": True, "step": step, "status": status})
 
 @app.route("/api/cr/by-name/<pc_name>/steps", methods=["GET"])
+@require_auth
 def get_steps_by_name(pc_name):
     """Restituisce CR + steps per hostname — usato da deploy-client.html sul PC client."""
     with get_db_ctx() as conn:
@@ -736,6 +834,76 @@ def list_steps(wf_id):
         ).fetchall()
     return jsonify([dict(r) for r in rows])
 
+@app.route("/api/workflows/<int:wf_id>/export", methods=["GET"])
+@require_auth
+def export_workflow(wf_id):
+    """Esporta workflow completo (metadati + step) come JSON scaricabile."""
+    with get_db_ctx() as conn:
+        wf = conn.execute("SELECT * FROM workflows WHERE id=?", (wf_id,)).fetchone()
+        if not wf:
+            return jsonify({"error": "Non trovato"}), 404
+        steps = conn.execute(
+            "SELECT ordine, nome, tipo, parametri, condizione, su_errore, platform "
+            "FROM workflow_steps WHERE workflow_id=? ORDER BY ordine ASC", (wf_id,)
+        ).fetchall()
+    export_data = {
+        "novascm_export": "1.0",
+        "exported_at":    datetime.datetime.utcnow().isoformat(),
+        "workflow": {
+            "nome":        dict(wf)["nome"],
+            "descrizione": dict(wf).get("descrizione", ""),
+            "steps":       [dict(s) for s in steps],
+        }
+    }
+    return Response(
+        json.dumps(export_data, indent=2, ensure_ascii=False),
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename=workflow-{wf_id}.json"}
+    )
+
+
+@app.route("/api/workflows/import", methods=["POST"])
+@require_auth
+def import_workflow():
+    """Importa workflow da JSON esportato con /export."""
+    data = request.get_json(force=True)
+    if data.get("novascm_export") != "1.0":
+        return jsonify({"error": "Formato non valido (atteso novascm_export=1.0)"}), 400
+    wf_data = data.get("workflow", {})
+    if not wf_data.get("nome"):
+        return jsonify({"error": "Campo obbligatorio: workflow.nome"}), 400
+    now = datetime.datetime.utcnow().isoformat()
+    with get_db_ctx() as conn:
+        try:
+            conn.execute(
+                "INSERT INTO workflows (nome, descrizione, versione, created_at, updated_at) VALUES (?,?,1,?,?)",
+                (wf_data["nome"].strip(), wf_data.get("descrizione", ""), now, now)
+            )
+            conn.commit()
+            wf_id = conn.execute(
+                "SELECT id FROM workflows WHERE nome=?", (wf_data["nome"].strip(),)
+            ).fetchone()["id"]
+            for step in wf_data.get("steps", []):
+                parametri = step.get("parametri", "{}")
+                if isinstance(parametri, dict):
+                    parametri = json.dumps(parametri)
+                conn.execute("""
+                    INSERT INTO workflow_steps
+                        (workflow_id, ordine, nome, tipo, parametri, condizione, su_errore, platform)
+                    VALUES (?,?,?,?,?,?,?,?)
+                """, (
+                    wf_id, step["ordine"], step["nome"], step["tipo"],
+                    parametri, step.get("condizione", ""),
+                    step.get("su_errore", "stop"), step.get("platform", "all")
+                ))
+            conn.commit()
+            return jsonify({"ok": True, "workflow_id": wf_id}), 201
+        except sqlite3.IntegrityError:
+            return jsonify({"error": f"Workflow '{wf_data['nome']}' esiste già"}), 409
+
+
+SU_ERRORE_VALID = ("stop", "continue", "retry")
+
 @app.route("/api/workflows/<int:wf_id>/steps", methods=["POST"])
 @require_auth
 def add_step(wf_id):
@@ -753,6 +921,8 @@ def add_step(wf_id):
     )
     if data["tipo"] not in tipi_validi:
         return jsonify({"error": f"tipo non valido. Valori: {tipi_validi}"}), 400
+    if data.get("su_errore", "stop") not in SU_ERRORE_VALID:
+        return jsonify({"error": f"su_errore non valido. Valori: {SU_ERRORE_VALID}"}), 400
     parametri = data.get("parametri", {})
     if isinstance(parametri, dict):
         parametri = json.dumps(parametri)
@@ -787,6 +957,8 @@ def update_step(wf_id, step_id):
     )
     if data.get("tipo") and data["tipo"] not in tipi_validi:
         return jsonify({"error": f"tipo non valido. Valori: {tipi_validi}"}), 400
+    if data.get("su_errore") and data["su_errore"] not in SU_ERRORE_VALID:
+        return jsonify({"error": f"su_errore non valido. Valori: {SU_ERRORE_VALID}"}), 400
     parametri = data.get("parametri", {})
     if isinstance(parametri, dict):
         parametri = json.dumps(parametri)
@@ -832,8 +1004,27 @@ def list_pc_workflows():
             SELECT pw.*, w.nome as workflow_nome
             FROM pc_workflows pw
             JOIN workflows w ON w.id = pw.workflow_id
+            WHERE COALESCE(pw.archived, 0) = 0
             ORDER BY pw.id DESC
         """).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/pc-workflows/history", methods=["GET"])
+@require_auth
+def pc_workflow_history():
+    """Storico completo deploy per un PC (inclusi archiviati)."""
+    pc_name = request.args.get("pc_name", "").upper().strip()
+    if not pc_name:
+        return jsonify({"error": "Parametro pc_name obbligatorio"}), 400
+    with get_db_ctx() as conn:
+        rows = conn.execute("""
+            SELECT pw.*, w.nome as workflow_nome
+            FROM pc_workflows pw
+            JOIN workflows w ON w.id = pw.workflow_id
+            WHERE pw.pc_name = ?
+            ORDER BY pw.id DESC
+        """, (pc_name,)).fetchall()
     return jsonify([dict(r) for r in rows])
 
 @app.route("/api/pc-workflows", methods=["POST"])
@@ -901,6 +1092,131 @@ def delete_pc_workflow(pw_id):
     if affected == 0:
         return jsonify({"error": "Non trovato"}), 404
     return jsonify({"ok": True})
+
+# ── Deploy auto-start ─────────────────────────────────────────────────────────
+
+DEPLOY_WIN11_STEPS = [
+    ( 1, "Partizionamento disco",         "ps_script"),
+    ( 2, "Formattazione partizioni",       "ps_script"),
+    ( 3, "Installazione Windows 11",       "windows_update"),
+    ( 4, "Configurazione OOBE",            "ps_script"),
+    ( 5, "Driver chipset",                 "winget_install"),
+    ( 6, "Driver scheda di rete",          "winget_install"),
+    ( 7, "Driver audio",                   "winget_install"),
+    ( 8, "Driver GPU",                     "winget_install"),
+    ( 9, "Windows Update — critico",       "windows_update"),
+    (10, "Windows Update — cumulativo",    "windows_update"),
+    (11, "Visual C++ 2022",                "winget_install"),
+    (12, ".NET Runtime 8",                 "winget_install"),
+    (13, "Agente sicurezza",               "winget_install"),
+    (14, "Configurazione firewall",        "ps_script"),
+    (15, "Join dominio / workgroup",       "ps_script"),
+    (16, "Sincronizzazione GPO",           "ps_script"),
+    (17, "Registrazione certificato",      "ps_script"),
+    (18, "Installazione applicazioni",     "winget_install"),
+    (19, "Configurazione Outlook",         "reg_set"),
+    (20, "OneDrive",                       "reg_set"),
+    (21, "Profilo predefinito",            "reg_set"),
+    (22, "Agente NovaSCM",                 "ps_script"),
+    (23, "Pulizia file temporanei",        "shell_script"),
+    (24, "Riavvio finale",                 "reboot"),
+]
+DEPLOY_WF_NAME = "Deploy Windows 11 Pro"
+
+@app.route("/api/deploy/start", methods=["POST"])
+@require_auth
+def deploy_start():
+    """Crea (o riusa) il workflow standard Deploy Win11, assegna al PC, ritorna pw_id.
+    Body: { "pc_name": "PC-XXXXX" }"""
+    data    = request.get_json(force=True)
+    pc_name = data.get("pc_name", "").upper().strip()
+    if not pc_name:
+        return jsonify({"error": "pc_name obbligatorio"}), 400
+    now = datetime.datetime.now().isoformat()
+    with get_db_ctx() as conn:
+        # Trova o crea workflow standard
+        wf = conn.execute("SELECT id FROM workflows WHERE nome=?", (DEPLOY_WF_NAME,)).fetchone()
+        if not wf:
+            conn.execute(
+                "INSERT INTO workflows (nome, descrizione, versione, created_at, updated_at) VALUES (?,?,?,?,?)",
+                (DEPLOY_WF_NAME, "Deploy automatico Windows 11 Pro via PXE/MDT", 1, now, now)
+            )
+            conn.commit()
+            wf = conn.execute("SELECT id FROM workflows WHERE nome=?", (DEPLOY_WF_NAME,)).fetchone()
+            wf_id = wf["id"]
+            for (ordine, nome, tipo) in DEPLOY_WIN11_STEPS:
+                conn.execute(
+                    "INSERT INTO workflow_steps (workflow_id, ordine, nome, tipo, parametri, su_errore) VALUES (?,?,?,?,?,?)",
+                    (wf_id, ordine, nome, tipo, "{}", "continue")
+                )
+            conn.commit()
+        else:
+            wf_id = wf["id"]
+        # Rimuovi eventuale workflow precedente per questo PC (ripartenza pulita)
+        conn.execute("DELETE FROM pc_workflows WHERE pc_name=? AND workflow_id=?", (pc_name, wf_id))
+        conn.commit()
+        # Crea nuovo pc_workflow in stato running
+        conn.execute(
+            "INSERT INTO pc_workflows (pc_name, workflow_id, status, assigned_at) VALUES (?,?,?,?)",
+            (pc_name, wf_id, "running", now)
+        )
+        conn.commit()
+        pw = conn.execute(
+            "SELECT id FROM pc_workflows WHERE pc_name=? AND workflow_id=? ORDER BY id DESC LIMIT 1",
+            (pc_name, wf_id)
+        ).fetchone()
+    return jsonify({"pw_id": pw["id"], "workflow_id": wf_id, "pc_name": pc_name}), 201
+
+
+@app.route("/api/deploy/<int:pw_id>/step", methods=["POST"])
+@require_auth
+def deploy_step(pw_id):
+    """Aggiorna stato di uno step per ordine. Body: { ordine, status, output?, elapsed_sec? }"""
+    data    = request.get_json(force=True)
+    ordine  = data.get("ordine")
+    status  = data.get("status", "done")
+    output  = data.get("output", "")
+    elapsed = data.get("elapsed_sec", 0)
+    now     = datetime.datetime.now().isoformat()
+    if ordine is None:
+        return jsonify({"error": "ordine obbligatorio"}), 400
+    with get_db_ctx() as conn:
+        pw = conn.execute("SELECT workflow_id FROM pc_workflows WHERE id=?", (pw_id,)).fetchone()
+        if not pw:
+            return jsonify({"error": "pc_workflow non trovato"}), 404
+        ws = conn.execute(
+            "SELECT id FROM workflow_steps WHERE workflow_id=? AND ordine=?",
+            (pw["workflow_id"], ordine)
+        ).fetchone()
+        if not ws:
+            return jsonify({"ok": True, "skipped": True})
+        conn.execute("""
+            INSERT INTO pc_workflow_steps
+                (pc_workflow_id, step_id, status, output, timestamp, elapsed_sec)
+            VALUES (?,?,?,?,?,?)
+            ON CONFLICT(pc_workflow_id, step_id) DO UPDATE SET
+                status=excluded.status, output=excluded.output,
+                timestamp=excluded.timestamp, elapsed_sec=excluded.elapsed_sec
+        """, (pw_id, ws["id"], status, output, now, elapsed))
+        # Aggiorna stato globale pc_workflow
+        if status == "error":
+            conn.execute("UPDATE pc_workflows SET status='failed' WHERE id=?", (pw_id,))
+        else:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM workflow_steps WHERE workflow_id=?", (pw["workflow_id"],)
+            ).fetchone()[0]
+            done = conn.execute(
+                "SELECT COUNT(*) FROM pc_workflow_steps WHERE pc_workflow_id=? AND status='done'",
+                (pw_id,)
+            ).fetchone()[0]
+            if done >= total:
+                conn.execute(
+                    "UPDATE pc_workflows SET status='completed', completed_at=? WHERE id=?",
+                    (now, pw_id)
+                )
+        conn.commit()
+    return jsonify({"ok": True})
+
 
 # ── DeployScreen endpoints ────────────────────────────────────────────────────
 
@@ -1026,11 +1342,12 @@ def get_pc_assigned_workflow(pc_name):
 @require_auth
 def report_wf_step(pc_name):
     """Agent: riporta lo stato di uno step di un workflow."""
-    data    = request.get_json(force=True)
-    step_id = data.get("step_id")
-    status  = data.get("status", "done")  # running | done | error | skipped
-    output  = data.get("output", "")
-    ts      = datetime.datetime.now().isoformat()
+    data        = request.get_json(force=True)
+    step_id     = data.get("step_id")
+    status      = data.get("status", "done")  # running | done | error | skipped
+    output      = data.get("output", "")
+    elapsed_sec = float(data.get("elapsed_sec") or 0)
+    ts          = datetime.datetime.now().isoformat()
     if not step_id:
         return jsonify({"error": "Campo obbligatorio: step_id"}), 400
     with get_db_ctx() as conn:
@@ -1042,11 +1359,12 @@ def report_wf_step(pc_name):
             return jsonify({"error": "Nessun workflow in esecuzione"}), 404
         pw_id = pw["id"]
         conn.execute("""
-            INSERT INTO pc_workflow_steps (pc_workflow_id, step_id, status, output, timestamp)
-            VALUES (?,?,?,?,?)
+            INSERT INTO pc_workflow_steps (pc_workflow_id, step_id, status, output, timestamp, elapsed_sec)
+            VALUES (?,?,?,?,?,?)
             ON CONFLICT(pc_workflow_id, step_id)
-            DO UPDATE SET status=excluded.status, output=excluded.output, timestamp=excluded.timestamp
-        """, (pw_id, step_id, status, output, ts))
+            DO UPDATE SET status=excluded.status, output=excluded.output,
+                          timestamp=excluded.timestamp, elapsed_sec=excluded.elapsed_sec
+        """, (pw_id, step_id, status, output, ts, elapsed_sec))
         conn.execute("UPDATE pc_workflows SET last_seen=? WHERE id=?", (ts, pw_id))
         # Se tutti gli step sono done/skipped → completa workflow
         total = conn.execute(
@@ -1056,10 +1374,18 @@ def report_wf_step(pc_name):
             SELECT COUNT(*) FROM pc_workflow_steps
             WHERE pc_workflow_id=? AND status IN ('done','skipped','error')
         """, (pw_id,)).fetchone()[0]
+        workflow_completed = False
         if total > 0 and done >= total:
             conn.execute("UPDATE pc_workflows SET status='completed', completed_at=? WHERE id=?",
                          (ts, pw_id))
+            workflow_completed = True
         conn.commit()
+    if workflow_completed:
+        _fire_webhook("workflow_completed", {
+            "pc_name": pc_name.upper().strip(),
+            "pw_id":   pw_id,
+            "status":  "completed",
+        })
     return jsonify({"ok": True, "step_id": step_id, "status": status})
 
 @app.route("/api/pc/<pc_name>/workflow/checkin", methods=["POST"])
@@ -1332,6 +1658,7 @@ poweroff
 # ── PXE BOOT SCRIPT ───────────────────────────────────────────────────────────
 
 @app.route("/api/boot/<mac>", methods=["GET"])
+@limiter.limit("30 per minute; 200 per hour")
 def pxe_boot_script(mac: str):
     """
     Endpoint iPXE — NESSUNA autenticazione (iPXE non può inviare header).
@@ -1619,6 +1946,7 @@ def update_pxe_settings_api():
 DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
 
 @app.route("/api/download/deploy-screen", methods=["GET"])
+@require_auth
 def download_deploy_screen():
     """Scarica NovaSCMDeployScreen.exe — usato dall'agent/installer durante il deploy."""
     exe_path = os.path.join(DIST_DIR, "NovaSCMDeployScreen.exe")
@@ -1662,6 +1990,7 @@ def health():
 
 # ── Avvio ─────────────────────────────────────────────────────────────────────
 init_db()
+_start_background_jobs()
 
 # ── TFTP Server PXE (opzionale — richiede tftpy e porta 69) ──────────────────
 _PXE_ENABLED = os.environ.get("NOVASCM_PXE_ENABLED", "1").lower() not in ("0", "false", "no")

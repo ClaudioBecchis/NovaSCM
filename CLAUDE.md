@@ -1,12 +1,47 @@
 # NovaSCM — CLAUDE.md
 
 ## Versione corrente
-**v1.8.1** (target) — base analisi: v1.8.0 commit `87afb5fb47`
-Test suite attuale: 81/81 ✅ · Target dopo fix: 84/84
+**v2.1.0** (target) — base: commit `3b79018` (v2.0.0-alpha.1)
+Test suite: 112/112 ✅ · Round 8 + v2.1.0 features + test v2.1.0 completati
+
+### Fix aggiuntivo v2.1.0
+- `PUT /api/settings` ora rifiuta (400) chiavi non in `SETTINGS_SCHEMA` (whitelist)
 
 ---
 
-## Bug aperti — Round 7
+## Bug aperti — Round 8 (v2.0.0-alpha.1)
+
+### 🔴 C-1 · `server/api.py` riga 598 — CRITICAL ✅ FIXATO
+`@require_auth` aggiunto a `report_step`
+
+### 🔴 C-2 · `server/api.py` riga 618 — CRITICAL ✅ FIXATO
+`@require_auth` aggiunto a `get_steps_by_name`
+
+### 🔴 C-3 · `server/api.py` riga 1621 — CRITICAL ✅ FIXATO
+`@require_auth` aggiunto a `download_deploy_screen`
+
+### 🟡 M-1 · `server/api.py` riga 371 — MEDIUM ✅ FIXATO
+`delete_cr` ora elimina anche `pc_workflows` per `pc_name`
+
+### 🟡 M-2 · `server/version.json` — MEDIUM ✅ FIXATO
+IP privato rimosso, `url: ""`
+
+### 🔵 I-1 · `ApiClient.cs` + `api.py` — INFO ✅ FIXATO
+`elapsed_sec` misurato in Worker.cs, inviato da ApiClient, salvato in api.py
+
+### 🔵 I-2 · `Worker.cs` riga 74 — INFO ✅ FIXATO
+API key passata via `EnvironmentVariables["NOVASCM_API_KEY"]` invece di arg CLI
+
+### 🔵 I-3 · `test_api.py` riga 661 — INFO ✅ FIXATO
+Test usa endpoint corretto `/api/cr/by-name/STEP-PC/step`
+
+**NOTA C-1/C-2:** endpoint `report_step` e `get_steps_by_name` ora richiedono auth.
+Il `postinstall.ps1` su CT110 (`/var/www/html/postinstall.ps1`) deve passare X-Api-Key.
+Aggiornare il file con l'API key del server NovaSCM.
+
+---
+
+## Bug chiusi — Round 7
 
 ### 🔴 C-1 · `server/web/index.html` + `server/api.py` — CRITICAL
 **UI rotta in produzione: `api()` non invia `X-Api-Key`.**

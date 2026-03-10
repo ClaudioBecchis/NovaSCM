@@ -2,6 +2,6 @@
   "version": "2.0.0-alpha.1",
   "channel": "alpha",
   "stable": "1.9.2",
-  "url": "http://192.168.20.110:9091/api/download/NovaSCM.exe",
+  "url": "",
   "notes": "v2.0.0-alpha.1: PXE Boot + TFTP Server + DeployScreen integration. Testing in progress."
 }

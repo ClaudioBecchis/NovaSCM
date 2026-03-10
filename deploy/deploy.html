@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Configurazione in corso…</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#05080f;
+  --ok:#00d97e;
+  --run:#4d9fff;
+  --warn:#f5a623;
+  --err:#ff4757;
+  --muted:rgba(140,160,200,.45);
+  --dim:rgba(80,100,140,.3);
+  --txt:rgba(200,215,240,.9);
+  --hi:#e8f0ff;
+}
+
+html,body{
+  height:100%;width:100%;overflow:hidden;
+  background:var(--bg);
+  font-family:'IBM Plex Sans',sans-serif;
+  color:var(--txt);
+  cursor:none;
+}
+
+/* ── SFONDO ANIMATO ── */
+.bg{
+  position:fixed;inset:0;z-index:0;
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 80%, rgba(0,80,160,.18) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 80% 20%, rgba(0,50,120,.12) 0%, transparent 70%),
+    var(--bg);
+}
+.grid-lines{
+  position:fixed;inset:0;z-index:0;
+  background-image:
+    linear-gradient(rgba(77,159,255,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(77,159,255,.04) 1px,transparent 1px);
+  background-size:64px 64px;
+  animation:grid-drift 40s linear infinite;
+}
+@keyframes grid-drift{
+  from{background-position:0 0}
+  to  {background-position:64px 64px}
+}
+.scanlines{
+  position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:repeating-linear-gradient(
+    0deg,transparent,transparent 3px,
+    rgba(0,0,0,.06) 3px,rgba(0,0,0,.06) 4px
+  );
+}
+.vignette{
+  position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse 100% 100% at 50% 50%,
+    transparent 55%,rgba(2,4,10,.85) 100%);
+}
+
+/* ── LAYOUT ── */
+.shell{
+  position:relative;z-index:2;
+  height:100vh;width:100vw;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  gap:0;
+  padding:60px 80px;
+}
+
+/* ── LOGO AREA ── */
+.logo-wrap{
+  display:flex;flex-direction:column;align-items:center;gap:10px;
+  margin-bottom:60px;
+  animation:fade-up .8s ease both;
+}
+.logo-mark{
+  width:56px;height:56px;
+  border:2px solid rgba(77,159,255,.4);
+  border-radius:14px;
+  display:flex;align-items:center;justify-content:center;
+  position:relative;
+  background:rgba(77,159,255,.06);
+}
+.logo-mark::before{
+  content:'';position:absolute;inset:-1px;border-radius:14px;
+  background:linear-gradient(135deg,rgba(77,159,255,.3),transparent 60%);
+  z-index:-1;
+}
+.logo-inner{
+  font-family:'DM Mono',monospace;font-size:18px;font-weight:500;
+  color:var(--run);letter-spacing:-1px;
+}
+.logo-name{
+  font-family:'DM Mono',monospace;font-size:13px;letter-spacing:3px;
+  color:rgba(140,160,200,.5);text-transform:uppercase;
+}
+
+/* ── HOSTNAME ── */
+.hostname-wrap{
+  text-align:center;margin-bottom:50px;
+  animation:fade-up .8s .15s ease both;
+}
+.hostname{
+  font-family:'DM Mono',monospace;
+  font-size:clamp(28px,4vw,48px);
+  font-weight:500;
+  color:var(--hi);
+  letter-spacing:-1px;
+  line-height:1;
+}
+.domain{
+  font-family:'DM Mono',monospace;
+  font-size:clamp(13px,1.5vw,16px);
+  color:var(--muted);
+  margin-top:8px;
+  letter-spacing:.5px;
+}
+
+/* ── STATO CORRENTE ── */
+.status-wrap{
+  text-align:center;margin-bottom:48px;
+  animation:fade-up .8s .25s ease both;
+  min-height:50px;
+}
+.status-label{
+  font-size:clamp(14px,1.8vw,18px);
+  font-weight:300;
+  color:var(--txt);
+  letter-spacing:.2px;
+  margin-bottom:6px;
+}
+.status-sub{
+  font-family:'DM Mono',monospace;
+  font-size:clamp(11px,1.2vw,13px);
+  color:var(--run);
+  animation:blink-txt 2s ease-in-out infinite;
+}
+@keyframes blink-txt{0%,100%{opacity:.8}50%{opacity:.35}}
+
+/* ── BARRA PROGRESSO ── */
+.progress-wrap{
+  width:min(640px,80vw);
+  margin-bottom:40px;
+  animation:fade-up .8s .35s ease both;
+}
+.progress-header{
+  display:flex;justify-content:space-between;align-items:baseline;
+  margin-bottom:10px;
+  font-family:'DM Mono',monospace;
+  font-size:11px;color:var(--muted);
+}
+.pct-num{
+  font-size:16px;font-weight:500;color:var(--run);
+  transition:color .5s;
+}
+.pct-num.done{color:var(--ok)}
+.bar-outer{
+  height:6px;background:rgba(77,159,255,.1);
+  border-radius:6px;overflow:hidden;
+  border:1px solid rgba(77,159,255,.12);
+  position:relative;
+}
+.bar-fill{
+  height:100%;border-radius:6px;
+  background:linear-gradient(90deg,var(--run) 0%,rgba(120,200,255,.7) 100%);
+  transition:width .8s cubic-bezier(.25,.46,.45,.94);
+  position:relative;
+}
+.bar-fill::after{
+  content:'';position:absolute;top:0;right:0;bottom:0;width:60px;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.35));
+  animation:shimmer-bar 2s linear infinite;
+}
+@keyframes shimmer-bar{
+  0%  {opacity:1;transform:translateX(-60px)}
+  100%{opacity:0;transform:translateX(0)}
+}
+.bar-fill.done{
+  background:linear-gradient(90deg,var(--ok),rgba(0,220,140,.6));
+}
+.bar-fill.done::after{display:none}
+
+/* ── STEP LIST ── */
+.steps-wrap{
+  width:min(640px,80vw);
+  display:flex;flex-direction:column;gap:0;
+  animation:fade-up .8s .45s ease both;
+}
+.step{
+  display:flex;align-items:center;gap:16px;
+  padding:10px 0;
+  border-bottom:1px solid var(--dim);
+  transition:opacity .3s;
+}
+.step:last-child{border-bottom:none}
+.step.future{opacity:.28}
+.step.done  {opacity:.55}
+.step.active{opacity:1}
+
+.step-icon{
+  width:22px;height:22px;flex-shrink:0;
+  border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:9px;position:relative;
+}
+.step-icon.done  {background:rgba(0,217,126,.15);border:1.5px solid var(--ok)}
+.step-icon.active{background:rgba(77,159,255,.15);border:1.5px solid var(--run);animation:pulse-icon 1.6s ease-in-out infinite}
+.step-icon.future{background:rgba(255,255,255,.04);border:1.5px solid var(--dim)}
+.step-icon.error {background:rgba(255,71,87,.15);border:1.5px solid var(--err)}
+@keyframes pulse-icon{
+  0%,100%{box-shadow:0 0 0 0 rgba(77,159,255,.4)}
+  50%    {box-shadow:0 0 0 5px rgba(77,159,255,0)}
+}
+
+.step-info{flex:1;min-width:0}
+.step-name{
+  font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:color .3s;
+}
+.step.done   .step-name{color:var(--muted)}
+.step.active .step-name{color:var(--hi)}
+.step.future .step-name{color:var(--muted)}
+.step-tipo{
+  font-family:'DM Mono',monospace;font-size:10px;color:var(--dim);
+  margin-top:1px;
+}
+
+.step-time{
+  font-family:'DM Mono',monospace;font-size:10.5px;flex-shrink:0;
+}
+.step.done  .step-time{color:var(--ok)}
+.step.active .step-time{color:var(--run)}
+.step.future .step-time{color:var(--dim)}
+
+/* check / spinner */
+.ico-check::before{content:'✓';color:var(--ok)}
+.ico-spin{
+  width:10px;height:10px;border-radius:50%;
+  border:1.5px solid rgba(77,159,255,.25);
+  border-top-color:var(--run);
+  animation:spin .8s linear infinite;display:inline-block;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ico-dot::before{content:'○';color:var(--dim);font-size:9px}
+.ico-err::before{content:'✕';color:var(--err)}
+
+/* ── FOOTER ── */
+.footer{
+  position:fixed;bottom:28px;left:0;right:0;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 48px;z-index:3;
+  animation:fade-up .8s .6s ease both;
+}
+.footer-left{
+  font-family:'DM Mono',monospace;font-size:10.5px;color:var(--dim);
+  display:flex;flex-direction:column;gap:3px;
+}
+.footer-right{
+  font-family:'DM Mono',monospace;font-size:10.5px;color:var(--dim);
+  text-align:right;
+  display:flex;flex-direction:column;gap:3px;
+}
+.f-val{color:rgba(140,160,200,.5)}
+
+/* ── SCHERMATA COMPLETATO ── */
+.done-overlay{
+  position:fixed;inset:0;z-index:10;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:24px;
+  opacity:0;pointer-events:none;transition:opacity .6s ease;
+}
+.done-overlay.show{opacity:1;pointer-events:all}
+.done-circle{
+  width:100px;height:100px;border-radius:50%;
+  background:rgba(0,217,126,.1);
+  border:2px solid var(--ok);
+  display:flex;align-items:center;justify-content:center;
+  font-size:44px;
+  animation:done-pop .5s cubic-bezier(.175,.885,.32,1.275) both;
+  box-shadow:0 0 40px rgba(0,217,126,.2);
+}
+@keyframes done-pop{
+  from{transform:scale(.5);opacity:0}
+  to  {transform:scale(1);opacity:1}
+}
+.done-title{
+  font-family:'IBM Plex Sans',sans-serif;
+  font-size:clamp(22px,3vw,34px);font-weight:300;
+  color:var(--hi);letter-spacing:.5px;
+}
+.done-sub{
+  font-family:'DM Mono',monospace;font-size:13px;
+  color:var(--ok);letter-spacing:.5px;
+}
+.done-reboot{
+  margin-top:16px;
+  font-family:'DM Mono',monospace;font-size:11px;
+  color:var(--muted);
+}
+.reboot-count{color:var(--warn);margin-left:4px}
+
+/* ── SCHERMATA ERRORE ── */
+.err-overlay{
+  position:fixed;inset:0;z-index:10;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:20px;
+  opacity:0;pointer-events:none;transition:opacity .6s ease;
+}
+.err-overlay.show{opacity:1;pointer-events:all}
+.err-circle{
+  width:90px;height:90px;border-radius:50%;
+  background:rgba(255,71,87,.1);border:2px solid var(--err);
+  display:flex;align-items:center;justify-content:center;
+  font-size:38px;
+  animation:done-pop .5s .1s cubic-bezier(.175,.885,.32,1.275) both;
+  box-shadow:0 0 40px rgba(255,71,87,.15);
+}
+.err-title{
+  font-size:clamp(18px,2.5vw,28px);font-weight:300;color:var(--hi);
+}
+.err-step{
+  font-family:'DM Mono',monospace;font-size:12px;
+  color:var(--err);padding:8px 18px;
+  background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);
+  border-radius:6px;max-width:500px;text-align:center;
+}
+.err-code{
+  font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);
+}
+
+/* ── ANIMAZIONI ── */
+@keyframes fade-up{
+  from{opacity:0;transform:translateY(18px)}
+  to  {opacity:1;transform:translateY(0)}
+}
+</style>
+</head>
+<body>
+
+<!-- BG -->
+<div class="bg"></div>
+<div class="grid-lines"></div>
+<div class="scanlines"></div>
+<div class="vignette"></div>
+
+<!-- MAIN -->
+<div class="shell" id="main">
+
+  <!-- Logo -->
+  <div class="logo-wrap">
+    <div class="logo-mark"><span class="logo-inner">N</span></div>
+    <div class="logo-name">NovaSCM</div>
+  </div>
+
+  <!-- Hostname -->
+  <div class="hostname-wrap">
+    <div class="hostname" id="hostname">WKS-MKTG-042</div>
+    <div class="domain"   id="domain">polariscore.local</div>
+  </div>
+
+  <!-- Status -->
+  <div class="status-wrap">
+    <div class="status-label" id="status-label">Configurazione sistema in corso</div>
+    <div class="status-sub"   id="status-sub">Esecuzione step in corso…</div>
+  </div>
+
+  <!-- Progress bar -->
+  <div class="progress-wrap">
+    <div class="progress-header">
+      <span id="wf-name">Deploy Base Win 11</span>
+      <span class="pct-num" id="pct">0%</span>
+    </div>
+    <div class="bar-outer">
+      <div class="bar-fill" id="bar" style="width:0%"></div>
+    </div>
+  </div>
+
+  <!-- Step list -->
+  <div class="steps-wrap" id="steps-wrap"></div>
+
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <div class="footer-left">
+    <span>Versione <span class="f-val" id="f-ver">2.1.0</span></span>
+    <span>Server <span class="f-val" id="f-server">192.168.20.110</span></span>
+  </div>
+  <div class="footer-right">
+    <span id="f-clock" class="f-val"></span>
+    <span>Non spegnere il PC</span>
+  </div>
+</div>
+
+<!-- Overlay: COMPLETATO -->
+<div class="done-overlay" id="done-overlay">
+  <div class="done-circle">&#x2713;</div>
+  <div class="done-title">Configurazione completata</div>
+  <div class="done-sub" id="done-hostname"></div>
+  <div class="done-reboot">Riavvio automatico tra <span class="reboot-count" id="reboot-count">30</span>s</div>
+</div>
+
+<!-- Overlay: ERRORE -->
+<div class="err-overlay" id="err-overlay">
+  <div class="err-circle">&#x2715;</div>
+  <div class="err-title">Errore durante la configurazione</div>
+  <div class="err-step"  id="err-step">—</div>
+  <div class="err-code"  id="err-code">Contattare il supporto IT</div>
+</div>
+
+<script>
+const CFG = (() => {
+  const p = new URLSearchParams(location.search);
+  return {
+    hostname: p.get("hostname") || "WKS-MKTG-042",
+    domain:   p.get("domain")   || "polariscore.local",
+    wf_name:  p.get("wf")       || "Deploy Windows 11 Pro",
+    server:   p.get("server")   || "http://192.168.20.110:9091",
+    api_key:  p.get("key")      || "",
+    pw_id:    p.get("pw_id")    || "",
+    version:  p.get("ver")      || "2.1.0",
+    demo:     p.get("demo")     === "1",
+  };
+})();
+
+const DEMO_STEPS = [
+  { id:1,  nome:"Partizionamento disco",       tipo:"ps_script",      dur:18  },
+  { id:2,  nome:"Formattazione partizioni",    tipo:"ps_script",      dur:8   },
+  { id:3,  nome:"Installazione Windows 11",    tipo:"windows_update", dur:240 },
+  { id:4,  nome:"Configurazione OOBE",         tipo:"ps_script",      dur:35  },
+  { id:5,  nome:"Driver chipset",              tipo:"winget_install", dur:20  },
+  { id:6,  nome:"Driver scheda di rete",       tipo:"winget_install", dur:14  },
+  { id:7,  nome:"Driver audio",                tipo:"winget_install", dur:10  },
+  { id:8,  nome:"Driver GPU",                  tipo:"winget_install", dur:25  },
+  { id:9,  nome:"Windows Update — critico",    tipo:"windows_update", dur:200 },
+  { id:10, nome:"Windows Update — cumulativo", tipo:"windows_update", dur:180 },
+  { id:11, nome:"Visual C++ 2022",             tipo:"winget_install", dur:18  },
+  { id:12, nome:".NET Runtime 8",              tipo:"winget_install", dur:22  },
+  { id:13, nome:"Agente sicurezza",            tipo:"winget_install", dur:30  },
+  { id:14, nome:"Configurazione firewall",     tipo:"ps_script",      dur:8   },
+  { id:15, nome:"Join dominio / workgroup",    tipo:"ps_script",      dur:28  },
+  { id:16, nome:"Sincronizzazione GPO",        tipo:"ps_script",      dur:12  },
+  { id:17, nome:"Registrazione certificato",   tipo:"ps_script",      dur:10  },
+  { id:18, nome:"Installazione applicazioni",  tipo:"winget_install", dur:95  },
+  { id:19, nome:"Configurazione Outlook",      tipo:"reg_set",        dur:6   },
+  { id:20, nome:"OneDrive",                    tipo:"reg_set",        dur:5   },
+  { id:21, nome:"Profilo predefinito",         tipo:"reg_set",        dur:4   },
+  { id:22, nome:"Agente NovaSCM",              tipo:"ps_script",      dur:8   },
+  { id:23, nome:"Pulizia file temporanei",     tipo:"shell_script",   dur:5   },
+  { id:24, nome:"Riavvio finale",              tipo:"reboot",         dur:3   },
+];
+
+let steps      = [];
+let activeStep = 0;
+let pct        = 0;
+let polling    = null;
+let stepTimer  = null;
+
+// init UI
+document.getElementById("hostname").textContent    = CFG.hostname;
+document.getElementById("domain").textContent      = CFG.domain;
+document.getElementById("wf-name").textContent     = CFG.wf_name;
+document.getElementById("f-ver").textContent       = CFG.version;
+document.getElementById("f-server").textContent    = CFG.server.replace(/https?:\/\//,"");
+document.getElementById("done-hostname").textContent = CFG.hostname;
+
+if (CFG.demo || !CFG.pw_id) {
+  steps = DEMO_STEPS.map((s,i) => ({...s, status:i===0?"active":"pending", elapsed:null}));
+  renderSteps(); runDemo();
+} else {
+  steps = DEMO_STEPS.map(s => ({...s, status:"pending", elapsed:null}));
+  renderSteps(); startPolling();
+}
+
+// ── POLLING ──────────────────────────────────────────────────────
+async function startPolling() {
+  await fetchStatus();
+  polling = setInterval(fetchStatus, 3000);
+}
+
+async function fetchStatus() {
+  try {
+    const r = await fetch(
+      `${CFG.server}/api/pc-workflows/${CFG.pw_id}`,
+      { headers: CFG.api_key ? {"X-Api-Key": CFG.api_key} : {} }
+    );
+    if (!r.ok) return;
+    applyServerState(await r.json());
+  } catch(e) {}
+}
+
+function applyServerState(data) {
+  if (data.steps && data.steps.length > 0) {
+    steps = data.steps.map(s => ({
+      id:      s.step_id,
+      nome:    s.nome,
+      tipo:    s.tipo,
+      status:  s.status,
+      elapsed: s.elapsed_sec > 0 ? fmtSec(s.elapsed_sec) : null,
+    }));
+  }
+  const done = steps.filter(s => s.status==="done"||s.status==="skipped").length;
+  pct = steps.length ? Math.round(done/steps.length*100) : 0;
+  const running = steps.find(s => s.status==="running");
+  activeStep = running ? steps.indexOf(running) : done;
+
+  if (data.status==="completed") { clearInterval(polling); showDone(); return; }
+  if (data.status==="failed")    { clearInterval(polling); showError(running); return; }
+
+  updateUI(); renderSteps();
+}
+
+// ── DEMO ─────────────────────────────────────────────────────────
+function runDemo() { runDemoStep(0); }
+
+function runDemoStep(idx) {
+  if (idx >= steps.length) { showDone(); return; }
+  steps[idx].status = "active";
+  activeStep = idx;
+  pct = Math.round(idx/steps.length*100);
+  updateUI(); renderSteps();
+
+  let elapsed = 0;
+  const dur = Math.max(1.5, (steps[idx].dur||10)*0.05);
+  stepTimer = setInterval(() => {
+    elapsed += 0.1;
+    steps[idx].elapsed = fmtSec(elapsed);
+    const el = document.getElementById("step-time-"+steps[idx].id);
+    if (el) el.textContent = steps[idx].elapsed;
+    if (elapsed >= dur) {
+      clearInterval(stepTimer);
+      steps[idx].status = "done";
+      steps[idx].elapsed = fmtSec(elapsed);
+      pct = Math.round((idx+1)/steps.length*100);
+      updateUI(); renderSteps();
+      setTimeout(() => runDemoStep(idx+1), 300);
+    }
+  }, 100);
+}
+
+// ── RENDER ────────────────────────────────────────────────────────
+function updateUI() {
+  const bar = document.getElementById("bar");
+  bar.style.width = pct+"%";
+  if (pct>=100) bar.classList.add("done");
+  document.getElementById("pct").textContent = pct+"%";
+  if (pct>=100) document.getElementById("pct").classList.add("done");
+
+  const running = steps.find(s=>s.status==="active"||s.status==="running");
+  if (running) {
+    document.getElementById("status-label").textContent = running.nome;
+    document.getElementById("status-sub").textContent   = running.tipo;
+  }
+}
+
+function renderSteps() {
+  const wrap   = document.getElementById("steps-wrap");
+  const total  = steps.length;
+  const center = Math.max(2, Math.min(total-3, activeStep));
+  const start  = Math.max(0, center-2);
+  const end    = Math.min(total, start+5);
+
+  wrap.innerHTML = steps.slice(start, end).map(s => {
+    const cls = (s.status==="active"||s.status==="running") ? "active"
+              : s.status==="done"    ? "done"
+              : s.status==="error"   ? "active"
+              : "future";
+    const icon =
+      s.status==="done"                               ? `<span class="ico-check"></span>` :
+      (s.status==="active"||s.status==="running")     ? `<span class="ico-spin"></span>` :
+      s.status==="error"                              ? `<span class="ico-err"></span>` :
+                                                        `<span class="ico-dot"></span>`;
+    const t = s.elapsed || (s.status==="pending"||s.status==="future" ? "—" : "");
+    return `<div class="step ${cls}">
+  <div class="step-icon ${cls}">${icon}</div>
+  <div class="step-info">
+    <div class="step-name">${s.nome}</div>
+    <div class="step-tipo">${s.tipo}</div>
+  </div>
+  <div class="step-time" id="step-time-${s.id}">${t}</div>
+</div>`;
+  }).join("");
+}
+
+// ── OVERLAY ───────────────────────────────────────────────────────
+function showDone() {
+  pct=100;
+  document.getElementById("bar").style.width="100%";
+  document.getElementById("bar").classList.add("done");
+  document.getElementById("pct").textContent="100%";
+  document.getElementById("pct").classList.add("done");
+  document.getElementById("status-label").textContent="Configurazione completata";
+  document.getElementById("status-sub").textContent="Riavvio in corso…";
+  setTimeout(()=>{
+    document.getElementById("done-overlay").classList.add("show");
+    let n=30;
+    const el=document.getElementById("reboot-count");
+    setInterval(()=>{ el.textContent=--n; },1000);
+  },600);
+}
+
+function showError(step) {
+  document.getElementById("err-step").textContent = "Errore in: "+(step?step.nome:"step sconosciuto");
+  document.getElementById("err-code").textContent = "Segnalare al supporto IT · NovaSCM v"+CFG.version;
+  document.getElementById("err-overlay").classList.add("show");
+}
+
+// ── CLOCK ─────────────────────────────────────────────────────────
+function updateClock(){
+  document.getElementById("f-clock").textContent =
+    new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"});
+}
+setInterval(updateClock,1000); updateClock();
+</script>
+</body>
+</html>

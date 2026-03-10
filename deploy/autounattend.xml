@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+  <!-- ========== windowsPE — partizionamento e selezione edizione ========== -->
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <InputLocale>it-IT</InputLocale>
+      <SystemLocale>it-IT</SystemLocale>
+      <UILanguage>it-IT</UILanguage>
+      <UserLocale>it-IT</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <!-- WDS: connessione automatica al server, selezione immagine senza UI -->
+      <WindowsDeploymentServices>
+        <Login>
+          <WillShowUI>Never</WillShowUI>
+          <Credentials>
+            <Username>Administrator</Username>
+            <Domain>192.168.10.199</Domain>
+            <Password>Admin2026!</Password>
+          </Credentials>
+        </Login>
+        <ImageSelection>
+          <WillShowUI>Never</WillShowUI>
+          <InstallImage>
+            <ImageName>Windows 11 Pro</ImageName>
+            <ImageGroup>Windows 11</ImageGroup>
+          </InstallImage>
+        </ImageSelection>
+      </WindowsDeploymentServices>
+      <DiskConfiguration>
+        <WillShowUI>OnError</WillShowUI>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add">
+              <Order>1</Order>
+              <Type>EFI</Type>
+              <Size>100</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>2</Order>
+              <Type>MSR</Type>
+              <Size>16</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>3</Order>
+              <Type>Primary</Type>
+              <Extend>true</Extend>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order>
+              <PartitionID>1</PartitionID>
+              <Label>System</Label>
+              <Format>FAT32</Format>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order>
+              <PartitionID>2</PartitionID>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>3</Order>
+              <PartitionID>3</PartitionID>
+              <Label>Windows</Label>
+              <Format>NTFS</Format>
+              <Letter>C</Letter>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+      <ImageInstall>
+        <OSImage>
+          <InstallFrom>
+            <MetaData wcm:action="add">
+              <Key>/IMAGE/NAME</Key>
+              <Value>Windows 11 Pro</Value>
+            </MetaData>
+          </InstallFrom>
+          <InstallTo>
+            <DiskID>0</DiskID>
+            <PartitionID>3</PartitionID>
+          </InstallTo>
+          <WillShowUI>OnError</WillShowUI>
+        </OSImage>
+      </ImageInstall>
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+        <FullName>Admin</FullName>
+        <Organization>PolarisCore</Organization>
+      </UserData>
+    </component>
+  </settings>
+
+  <!-- ========== specialize — nome PC temporaneo, fuso orario ========== -->
+  <!-- M-1: ComputerName=* → Windows genera nome temp; postinstall.ps1 rinomina con MAC6 -->
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <ComputerName>*</ComputerName>
+      <TimeZone>W. Europe Standard Time</TimeZone>
+      <OEMInformation>
+        <Manufacturer>PolarisCore</Manufacturer>
+        <Model>NovaSCM Deploy</Model>
+      </OEMInformation>
+    </component>
+  </settings>
+
+  <!-- ========== oobeSystem — account, OOBE silenziosa, firstlogon ========== -->
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-International-Core"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <InputLocale>it-IT</InputLocale>
+      <SystemLocale>it-IT</SystemLocale>
+      <UILanguage>it-IT</UILanguage>
+      <UserLocale>it-IT</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <NetworkLocation>Work</NetworkLocation>
+        <ProtectYourPC>3</ProtectYourPC>
+        <SkipMachineOOBE>true</SkipMachineOOBE>
+        <SkipUserOOBE>true</SkipUserOOBE>
+      </OOBE>
+      <!-- C-1: password ofuscata con PlainText=false (base64 UTF-16LE) -->
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <LogonCount>1</LogonCount>
+        <Username>Administrator</Username>
+        <Password>
+          <Value>QQBkAG0AaQBuADIAMAAyADYAIQBQAGEAcwBzAHcAbwByAGQA</Value>
+          <PlainText>false</PlainText>
+        </Password>
+      </AutoLogon>
+      <UserAccounts>
+        <AdministratorPassword>
+          <Value>QQBkAG0AaQBuADIAMAAyADYAIQBBAGQAbQBpAG4AaQBzAHQAcgBhAHQAbwByAFAAYQBzAHMAdwBvAHIAZAA=</Value>
+          <PlainText>false</PlainText>
+        </AdministratorPassword>
+      </UserAccounts>
+      <FirstLogonCommands>
+        <!-- Step 1: scarica postinstall.ps1 -->
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Description>Download postinstall</Description>
+          <CommandLine>cmd /c "curl -s -o C:\Windows\Temp\postinstall.ps1 http://192.168.10.122/postinstall.ps1"</CommandLine>
+          <RequiresUserInput>false</RequiresUserInput>
+        </SynchronousCommand>
+        <!-- C-2: verifica SHA-256 prima di eseguire -->
+        <SynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Description>Verify postinstall SHA256</Description>
+          <CommandLine>powershell -NonInteractive -Command "
+            $expected = '67bffc46ef5267ede1f167be58ac8126753f2cf07d0ccfee6d13d5280c7238ae';
+            $actual = (Get-FileHash 'C:\Windows\Temp\postinstall.ps1' -Algorithm SHA256).Hash.ToLower();
+            if ($actual -ne $expected) { Write-Error 'SHA256 mismatch'; exit 1 }
+          "</CommandLine>
+          <RequiresUserInput>false</RequiresUserInput>
+        </SynchronousCommand>
+        <!-- Step 3: esegui solo se hash verificato -->
+        <SynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <Description>Run postinstall</Description>
+          <CommandLine>powershell -ExecutionPolicy Bypass -NonInteractive -File C:\Windows\Temp\postinstall.ps1</CommandLine>
+          <RequiresUserInput>false</RequiresUserInput>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>
+
+</unattend>
