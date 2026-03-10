@@ -3010,7 +3010,7 @@ public partial class MainWindow : Window
         TxtSearchHint.Visibility = Visibility.Visible;
     }
 
-    private const string CurrentVersion = "1.7.2";
+    private const string CurrentVersion = "2.1.0";
     private string? _updateDownloadUrl;
 
     // BUG-09: confronto semver corretto — string.Compare è lessicografico ("1.10" < "1.9")
@@ -4056,12 +4056,13 @@ public partial class MainWindow : Window
         File.Copy(Path.Combine(_deployTmpDir, "postinstall.ps1"),
                   Path.Combine(drive.Name,    "postinstall.ps1"),  overwrite: true);
 
-        // Copia NovaSCM.exe per la schermata OSD
-        var publishExe = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "NovaSCM.exe");
+        // Copia NovaSCMDeployScreen.exe come NovaSCM.exe per la schermata OSD sul PC target
+        var appDir     = AppDomain.CurrentDomain.BaseDirectory;
+        var publishExe = Path.Combine(appDir, "NovaSCMDeployScreen.exe");
         if (!File.Exists(publishExe))
             publishExe = Path.Combine(
                 Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!,
-                "NovaSCM.exe");
+                "NovaSCMDeployScreen.exe");
         if (File.Exists(publishExe))
             File.Copy(publishExe, Path.Combine(drive.Name, "NovaSCM.exe"), overwrite: true);
 
@@ -4505,8 +4506,9 @@ if ($usbDrive) {{
     $osdExe = 'C:\Windows\Temp\NovaSCM-OSD.exe'
     Copy-Item ""$usbDrive\NovaSCM.exe"" $osdExe -Force -ErrorAction SilentlyContinue
     if (Test-Path $osdExe) {{
-        $apiArg = if ($_crApi) {{ ""--osd $env:COMPUTERNAME $_crApi"" }} else {{ ""--osd $env:COMPUTERNAME"" }}
-        Start-Process $osdExe $apiArg -WindowStyle Normal -ErrorAction SilentlyContinue
+        $serverBase = if ($_crApi) {{ ($_crApi -replace '/api/cr.*','').TrimEnd('/') }} else {{ '' }}
+        $apiArg = if ($serverBase) {{ ""hostname=$env:COMPUTERNAME domain=WORKGROUP server=$serverBase demo=0"" }} else {{ ""hostname=$env:COMPUTERNAME demo=1"" }}
+        Start-Process $osdExe -ArgumentList $apiArg -WindowStyle Normal -ErrorAction SilentlyContinue
         Start-Sleep 2
     }}
 }}
