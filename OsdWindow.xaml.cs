@@ -536,6 +536,7 @@ public partial class OsdWindow : Window
 
     private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        // Ctrl+Shift+Esc → chiudi
         if (e.Key == System.Windows.Input.Key.Escape &&
             System.Windows.Input.Keyboard.Modifiers.HasFlag(
                 System.Windows.Input.ModifierKeys.Control |
@@ -543,6 +544,12 @@ public partial class OsdWindow : Window
         {
             _completed = true;
             Close();
+        }
+        // Esc semplice → minimizza (per accedere al desktop senza chiudere)
+        else if (e.Key == System.Windows.Input.Key.Escape &&
+                 System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.None)
+        {
+            WindowState = System.Windows.WindowState.Minimized;
         }
     }
 }

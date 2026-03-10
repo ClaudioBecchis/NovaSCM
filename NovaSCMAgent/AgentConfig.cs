@@ -22,6 +22,7 @@ public class AgentConfig
     public string ApiUrl  { get; set; } = "http://YOUR-NOVASCM-SERVER:9091";
     public string ApiKey  { get; set; } = "";
     public string PcName  { get; set; } = Environment.MachineName.ToUpperInvariant();
+    public string Domain  { get; set; } = "WORKGROUP";
     public int    PollSec { get; set; } = 60;
 
     private static readonly JsonSerializerOptions _opts = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };
@@ -59,7 +60,7 @@ public class AgentConfig
     }
 
     // ── Stato persistente (per resume dopo reboot) ────────────────────────────
-    public record AgentState(int PwId, int ResumeStep);
+    public record AgentState(int PwId, int ResumeStep, bool HwSent = false);
 
     public static AgentState? LoadState()
     {
@@ -70,6 +71,9 @@ public class AgentConfig
 
     public static void SaveState(AgentState state)
         => File.WriteAllText(StatePath, JsonSerializer.Serialize(state, _opts));
+
+    public static void MarkHwSent(int pwId, int resumeStep)
+        => SaveState(new AgentState(pwId, resumeStep, HwSent: true));
 
     public static void ClearState()
     {

@@ -1,18 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net6.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
     <Nullable>enable</Nullable>
     <AssemblyName>NovaSCMDeployScreen</AssemblyName>
     <RootNamespace>NovaSCMDeployScreen</RootNamespace>
-    <ApplicationIcon>deploy.ico</ApplicationIcon>
+    <ApplicationIcon>..\Assets\novascm.ico</ApplicationIcon>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="7.0.0" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
   </ItemGroup>
 </Project>

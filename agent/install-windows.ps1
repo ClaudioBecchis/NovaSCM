@@ -6,6 +6,7 @@ param(
     [string]$ApiUrl  = "http://YOUR-SERVER-IP:9091",
     [string]$ApiKey  = "",
     [string]$PcName  = $env:COMPUTERNAME,
+    [string]$Domain  = "WORKGROUP",
     [int]$PollSec    = 60
 )
 
@@ -32,6 +33,16 @@ try {
     throw
 }
 
+# ── 2b. Scarica NovaSCMDeployScreen.exe (opzionale) ──────────────────────────
+$DeployScreenExe = "$AgentDir\NovaSCMDeployScreen.exe"
+Log "Scarico NovaSCMDeployScreen.exe..."
+try {
+    Invoke-WebRequest -Uri "$ApiUrl/api/download/deploy-screen" -OutFile $DeployScreenExe -UseBasicParsing
+    Log "DeployScreen scaricato: $DeployScreenExe"
+} catch {
+    Log "ATTENZIONE: DeployScreen non disponibile — il deploy procede senza schermata grafica"
+}
+
 # ── 3. Verifica SHA256 ────────────────────────────────────────────────────────
 Log "Verifico integrità SHA256..."
 try {
@@ -55,6 +66,7 @@ Log "Scrivo config: $ConfigFile"
     api_url  = $ApiUrl
     api_key  = $ApiKey
     pc_name  = $PcName.ToUpper()
+    domain   = $Domain
     poll_sec = [int]$PollSec
 } | ConvertTo-Json | Set-Content -Path $ConfigFile -Encoding UTF8
 

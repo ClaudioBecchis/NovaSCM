@@ -423,6 +423,9 @@ select option { background: var(--surface-2); }
     <a :class="{active: section==='settings'}" @click="section='settings'; loadSettings()">
       <span class="nav-dot" x-text="section==='settings' ? '●' : '○'"></span> Settings
     </a>
+    <a :class="{active: section==='pxe'}" @click="section='pxe'; loadPxeData()">
+      <span class="nav-dot" x-text="section==='pxe' ? '●' : '○'"></span> PXE / Boot
+    </a>
   </nav>
   <div class="sidebar-footer">
     <span class="led" :class="liveOk ? 'led-ok' : 'led-err'"></span>
@@ -837,6 +840,103 @@ select option { background: var(--surface-2); }
         <span class="muted">— NovaSCM v1.8.0</span>
       </div>
     </div>
+  </div>
+
+  <!-- ─── TAB PXE / BOOT ─── -->
+  <div class="content" x-show="section==='pxe'">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div>
+        <div style="font-size:18px;font-weight:600;margin-bottom:2px">PXE / Boot Manager</div>
+        <div class="muted" style="font-size:13px">Gestione boot di rete — iPXE chainload → iVentoy</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="tftp-status" style="font-size:11px;padding:3px 10px;border-radius:99px;background:var(--border);color:var(--text)">TFTP ...</span>
+        <button class="btn btn-sm" @click="openPxeHostModal()">+ Host</button>
+        <button class="btn btn-sm" @click="loadPxeData()">↻</button>
+      </div>
+    </div>
+
+    <!-- Settings rapide PXE -->
+    <div class="card" style="margin-bottom:14px;padding:14px 16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:10px">
+        <div>
+          <div class="muted" style="font-size:11px;margin-bottom:4px">iVentoy IP</div>
+          <input type="text" id="pxe-iventoy-ip" placeholder="192.168.20.110"
+                 style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        </div>
+        <div>
+          <div class="muted" style="font-size:11px;margin-bottom:4px">iVentoy Porta</div>
+          <input type="text" id="pxe-iventoy-port" placeholder="10809"
+                 style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        </div>
+        <div>
+          <div class="muted" style="font-size:11px;margin-bottom:4px">Prefisso PC auto</div>
+          <input type="text" id="pxe-pc-prefix" placeholder="PC"
+                 style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+        </div>
+        <div>
+          <div class="muted" style="font-size:11px;margin-bottom:4px">Auto-provision</div>
+          <select id="pxe-auto-provision"
+                  style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
+            <option value="1">Abilitato</option>
+            <option value="0">Disabilitato</option>
+          </select>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <button class="btn btn-sm" style="background:var(--accent);color:#fff" @click="savePxeSettings()">Salva impostazioni PXE</button>
+      </div>
+    </div>
+
+    <!-- Sub-tab Host / Log -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:8px">
+      <button id="pxe-tab-hosts-btn" style="background:var(--accent);color:#fff;border:none;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px"
+              @click="showPxeSubTab('hosts')">Host registrati</button>
+      <button id="pxe-tab-log-btn" style="background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:5px 14px;cursor:pointer;font-size:13px"
+              @click="showPxeSubTab('log')">Boot log</button>
+    </div>
+
+    <!-- Tabella host -->
+    <div id="pxe-hosts-panel">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="color:var(--muted);text-align:left">
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">MAC</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Nome PC</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Azione</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Workflow</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Ultimo boot</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Boot #</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">IP</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)"></th>
+          </tr>
+        </thead>
+        <tbody id="pxe-hosts-tbody">
+          <tr><td colspan="8" style="padding:20px;text-align:center;color:var(--muted)">Caricamento...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Boot log -->
+    <div id="pxe-log-panel" style="display:none">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="color:var(--muted);text-align:left">
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Timestamp</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">MAC</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Nome PC</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">IP</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">Azione</th>
+            <th style="padding:6px 10px;border-bottom:1px solid var(--border)">pw_id</th>
+          </tr>
+        </thead>
+        <tbody id="pxe-log-tbody">
+          <tr><td colspan="6" style="padding:20px;text-align:center;color:var(--muted)">Caricamento...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
   </div>
 
 </div><!-- /main -->
@@ -1377,6 +1477,118 @@ function app() {
       if (sec < 3600) return `${Math.floor(sec/60)}m fa`;
       if (sec < 86400) return `${Math.floor(sec/3600)}h fa`;
       return d.toLocaleDateString('it-IT');
+    },
+
+    // ── PXE Manager ───────────────────────────────────────────
+    async loadPxeData() {
+      await this.loadPxeHosts();
+      await this.loadPxeSettings();
+      await this.loadPxeLog();
+      this.checkTftpStatus();
+    },
+    async loadPxeHosts() {
+      const rows = await this.api('/api/pxe/hosts');
+      const tbody = document.getElementById('pxe-hosts-tbody');
+      if (!tbody) return;
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--muted)">Nessun host registrato</td></tr>';
+        return;
+      }
+      const actionColor = { deploy:'var(--accent)', local:'var(--muted)', block:'var(--error)', auto:'var(--ok)' };
+      tbody.innerHTML = rows.map(h => `
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:7px 10px;font-family:monospace">${h.mac}</td>
+          <td style="padding:7px 10px">${h.pc_name || '<span style="color:var(--muted)">—</span>'}</td>
+          <td style="padding:7px 10px"><span style="color:${actionColor[h.boot_action]||'var(--muted)'};font-size:12px">${h.boot_action}</span></td>
+          <td style="padding:7px 10px;color:var(--muted)">${h.workflow_nome || '—'}</td>
+          <td style="padding:7px 10px;color:var(--muted);font-size:12px">${h.last_boot_at ? this.ago(h.last_boot_at) : '—'}</td>
+          <td style="padding:7px 10px">${h.boot_count || 0}</td>
+          <td style="padding:7px 10px;color:var(--muted);font-size:12px">${h.last_ip || '—'}</td>
+          <td style="padding:7px 10px">
+            <button style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 8px;cursor:pointer;font-size:12px"
+                    onclick="document.querySelector('[x-data]').__x.$data.editPxeHost('${h.mac}')">✎</button>
+            <button style="background:transparent;border:1px solid var(--error);color:var(--error);border-radius:3px;padding:2px 8px;cursor:pointer;font-size:12px;margin-left:4px"
+                    onclick="document.querySelector('[x-data]').__x.$data.deletePxeHost('${h.mac}')">✕</button>
+          </td>
+        </tr>
+      `).join('');
+    },
+    async loadPxeLog() {
+      const rows = await this.api('/api/pxe/boot-log');
+      const tbody = document.getElementById('pxe-log-tbody');
+      if (!tbody) return;
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="padding:20px;text-align:center;color:var(--muted)">Nessun boot registrato</td></tr>';
+        return;
+      }
+      const actionColor = { deploy:'var(--accent)', local:'var(--muted)', block:'var(--error)', auto:'var(--ok)' };
+      tbody.innerHTML = rows.map(r => `
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 10px;color:var(--muted);font-size:12px">${r.ts ? this.ago(r.ts) : '—'}</td>
+          <td style="padding:6px 10px;font-family:monospace;font-size:12px">${r.mac}</td>
+          <td style="padding:6px 10px">${r.pc_name || '—'}</td>
+          <td style="padding:6px 10px;color:var(--muted);font-size:12px">${r.ip || '—'}</td>
+          <td style="padding:6px 10px"><span style="color:${actionColor[r.action]||'var(--muted)'};font-size:12px">${r.action}</span></td>
+          <td style="padding:6px 10px;color:var(--muted)">${r.pw_id || '—'}</td>
+        </tr>
+      `).join('');
+    },
+    async loadPxeSettings() {
+      const cfg = await this.api('/api/pxe/settings');
+      if (!cfg) return;
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
+      set('pxe-iventoy-ip',    cfg.pxe_iventoy_ip   || cfg.iventoy_ip   || '');
+      set('pxe-iventoy-port',  cfg.pxe_iventoy_port || cfg.iventoy_port || '10809');
+      set('pxe-pc-prefix',     cfg.pxe_pc_prefix    || cfg.pc_prefix    || 'PC');
+      const sel = document.getElementById('pxe-auto-provision');
+      if (sel) sel.value = cfg.pxe_auto_provision || cfg.auto_provision || '1';
+    },
+    async savePxeSettings() {
+      const get = id => document.getElementById(id)?.value || '';
+      const data = {
+        pxe_iventoy_ip:     get('pxe-iventoy-ip'),
+        pxe_iventoy_port:   get('pxe-iventoy-port'),
+        pxe_pc_prefix:      get('pxe-pc-prefix'),
+        pxe_auto_provision: get('pxe-auto-provision'),
+      };
+      await this.api('/api/pxe/settings', 'PUT', data);
+    },
+    async deletePxeHost(mac) {
+      if (!confirm(`Eliminare host ${mac}?`)) return;
+      await this.api(`/api/pxe/hosts/${mac}`, 'DELETE');
+      await this.loadPxeHosts();
+    },
+    editPxeHost(mac) {
+      // TODO: aprire modal di modifica
+      alert(`Edit: ${mac} — TODO`);
+    },
+    openPxeHostModal() {
+      // TODO: modal creazione nuovo host
+      alert('TODO: aggiungi host PXE');
+    },
+    async checkTftpStatus() {
+      const badge = document.getElementById('tftp-status');
+      if (!badge) return;
+      const r = await this.api('/health');
+      if (r) {
+        badge.textContent = 'Server ON';
+        badge.style.background = 'rgba(0,180,80,0.15)';
+        badge.style.color = 'var(--ok)';
+      } else {
+        badge.textContent = 'Server OFF';
+        badge.style.background = 'rgba(255,60,60,0.15)';
+        badge.style.color = 'var(--error)';
+      }
+    },
+    showPxeSubTab(name) {
+      const hosts = document.getElementById('pxe-hosts-panel');
+      const logp  = document.getElementById('pxe-log-panel');
+      const hBtn  = document.getElementById('pxe-tab-hosts-btn');
+      const lBtn  = document.getElementById('pxe-tab-log-btn');
+      if (hosts) hosts.style.display = name === 'hosts' ? '' : 'none';
+      if (logp)  logp.style.display  = name === 'log'   ? '' : 'none';
+      if (hBtn) { hBtn.style.background = name==='hosts' ? 'var(--accent)' : 'transparent'; hBtn.style.color = name==='hosts' ? '#fff' : 'var(--muted)'; }
+      if (lBtn) { lBtn.style.background = name==='log'   ? 'var(--accent)' : 'transparent'; lBtn.style.color = name==='log'   ? '#fff' : 'var(--muted)'; }
     },
   }
 }

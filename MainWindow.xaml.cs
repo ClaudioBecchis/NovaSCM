@@ -4408,15 +4408,21 @@ try {{
         var novaSCMBaseUrl = !string.IsNullOrEmpty(cfg.NovaSCMCrApiUrl)
             ? cfg.NovaSCMCrApiUrl.Replace("/api/cr", "").TrimEnd('/')
             : (!string.IsNullOrEmpty(cfg.ServerUrl) ? cfg.ServerUrl.TrimEnd('/') : "");
+        var domainParam = cfg.DomainJoin switch
+        {
+            "AD"      => !string.IsNullOrEmpty(cfg.DomainName) ? cfg.DomainName : "WORKGROUP",
+            "AzureAD" => "AzureAD",
+            _         => "WORKGROUP",
+        };
         var workflowAgentSection = !string.IsNullOrEmpty(novaSCMBaseUrl) ? $@"
 # Installa NovaSCM Workflow Agent (servizio di esecuzione workflow)
 Report-Step 'workflow_agent_install' 'running'
 try {{
-    $wfAgentInstaller = '{novaSCMBaseUrl}/api/download/agent-install.ps1'
+    $wfAgentInstaller = '{novaSCMBaseUrl}/agent/install-windows.ps1'
+    $installerPath    = ""$env:TEMP\novascm-install.ps1""
     Write-Output ""Download NovaSCM Workflow Agent da: $wfAgentInstaller""
-    $installerScript = (Invoke-WebRequest -Uri $wfAgentInstaller -UseBasicParsing).Content
-    $installerScript = $installerScript -replace '\$ApiUrl\s*=.*', '$ApiUrl = ""{novaSCMBaseUrl}""'
-    Invoke-Expression $installerScript
+    Invoke-WebRequest -Uri $wfAgentInstaller -OutFile $installerPath -UseBasicParsing
+    & $installerPath -ApiUrl '{novaSCMBaseUrl}' -Domain '{domainParam}' -PcName $env:COMPUTERNAME
     Write-Output 'NovaSCM Workflow Agent installato come servizio Windows'
     Report-Step 'workflow_agent_install' 'done'
 }} catch {{

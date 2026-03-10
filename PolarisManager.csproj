@@ -36,6 +36,9 @@
     <Compile Remove="NovaSCMAgent.Tests\**" />
     <EmbeddedResource Remove="NovaSCMAgent.Tests\**" />
     <None Remove="NovaSCMAgent.Tests\**" />
+    <Compile Remove="DeployScreen\**" />
+    <EmbeddedResource Remove="DeployScreen\**" />
+    <None Remove="DeployScreen\**" />
   </ItemGroup>
 
 </Project>

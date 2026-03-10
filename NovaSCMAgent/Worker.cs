@@ -60,10 +60,43 @@ public class Worker : BackgroundService
         }
     }
 
+    private static void LaunchDeployScreen(AgentConfig cfg, int pwId, string wfNome)
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            var exeDir   = AppContext.BaseDirectory;
+            var exePaths = new[]
+            {
+                Path.Combine(exeDir, "NovaSCMDeployScreen.exe"),
+                Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                    "NovaSCM", "NovaSCMDeployScreen.exe"),
+            };
+            var exePath = exePaths.FirstOrDefault(File.Exists);
+            if (exePath == null) return;
+
+            var args = $"hostname={cfg.PcName} domain={cfg.Domain} pw_id={pwId} " +
+                       $"server={cfg.ApiUrl} key={cfg.ApiKey} wf={Uri.EscapeDataString(wfNome)}";
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName        = exePath,
+                Arguments       = args,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            // Non critico: il deploy continua anche senza schermata
+            Console.Error.WriteLine($"[WARN] LaunchDeployScreen: {ex.Message}");
+        }
+    }
+
     private async Task RunWorkflowAsync(AgentConfig cfg, JsonObject workflow, CancellationToken ct)
     {
-        var pwId  = workflow["id"]?.GetValue<int>() ?? 0;
-        var steps = workflow["steps"]?.AsArray() ?? [];
+        var pwId   = workflow["id"]?.GetValue<int>()          ?? 0;
+        var wfNome = workflow["workflow_nome"]?.GetValue<string>() ?? "Deploy";
+        var steps  = workflow["steps"]?.AsArray() ?? [];
 
         // Resume dopo reboot: salta step già completati
         var state      = AgentConfig.LoadState();
@@ -77,6 +110,23 @@ public class Worker : BackgroundService
         var resumeFrom = state?.ResumeStep ?? 0;
         if (resumeFrom > 0)
             _log.LogInformation("Resume dopo reboot — da step_id={StepId}", resumeFrom);
+
+        // Lancia DeployScreen sul PC in deploy (solo primo avvio, non su resume)
+        if (resumeFrom == 0)
+            LaunchDeployScreen(cfg, pwId, wfNome);
+
+        // Invia hardware info se non già inviato
+        if (!(state?.HwSent ?? false))
+        {
+            try
+            {
+                var hw = HardwareCollector.Collect();
+                await _api.SendHardwareAsync(cfg.ApiUrl, pwId, hw, ct, cfg.ApiKey);
+                AgentConfig.MarkHwSent(pwId, resumeFrom);
+                _log.LogInformation("Hardware inviato: CPU={Cpu} RAM={Ram}", hw.Cpu, hw.Ram);
+            }
+            catch (Exception ex) { _log.LogWarning("HW collect: {Err}", ex.Message); }
+        }
 
         foreach (var node in steps)
         {
@@ -126,6 +176,8 @@ public class Worker : BackgroundService
                 result.Output.Length > 200 ? result.Output[..200] + "..." : result.Output);
 
             await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, status, result.Output, ct, cfg.ApiKey);
+            if (!string.IsNullOrWhiteSpace(result.Output))
+                await _api.SendLogAsync(cfg.ApiUrl, pwId, result.Output, ct, cfg.ApiKey);
 
             if (!result.Ok.Value && suErr == "stop")
             {

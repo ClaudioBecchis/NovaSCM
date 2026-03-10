@@ -10,6 +10,12 @@ from xml.sax.saxutils import escape as _xe
 from contextlib import contextmanager
 
 try:
+    from pxe_server import start_tftp_server as _start_tftp
+    _pxe_server_available = True
+except ImportError:
+    _pxe_server_available = False
+
+try:
     from pythonjsonlogger import jsonlogger as _jsonlogger
     _json_log_available = True
 except ImportError:
@@ -212,6 +218,32 @@ def init_db():
                 UNIQUE(pc_workflow_id, step_id)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pxe_hosts (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                mac          TEXT    NOT NULL UNIQUE,
+                pc_name      TEXT    DEFAULT '',
+                cr_id        INTEGER REFERENCES cr(id) ON DELETE SET NULL,
+                workflow_id  INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
+                boot_action  TEXT    DEFAULT 'auto',
+                last_boot_at TEXT,
+                boot_count   INTEGER DEFAULT 0,
+                last_ip      TEXT    DEFAULT '',
+                notes        TEXT    DEFAULT '',
+                created_at   TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pxe_boot_log (
+                id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                mac      TEXT NOT NULL,
+                pc_name  TEXT DEFAULT '',
+                ip       TEXT DEFAULT '',
+                action   TEXT DEFAULT '',
+                pw_id    INTEGER,
+                ts       TEXT
+            )
+        """)
         conn.commit()
         # Indici per query frequenti
         _idx = [
@@ -219,6 +251,8 @@ def init_db():
             ("idx_pw_pc_name",            "CREATE INDEX IF NOT EXISTS idx_pw_pc_name ON pc_workflows(pc_name)"),
             ("idx_pw_status",             "CREATE INDEX IF NOT EXISTS idx_pw_status ON pc_workflows(status)"),
             ("idx_pws_pc_workflow_id",    "CREATE INDEX IF NOT EXISTS idx_pws_pc_workflow_id ON pc_workflow_steps(pc_workflow_id)"),
+            ("idx_pxe_mac",               "CREATE INDEX IF NOT EXISTS idx_pxe_mac ON pxe_hosts(mac)"),
+            ("idx_pxe_cr",                "CREATE INDEX IF NOT EXISTS idx_pxe_cr  ON pxe_hosts(cr_id)"),
         ]
         for _name, _sql in _idx:
             conn.execute(_sql)
@@ -229,6 +263,10 @@ def init_db():
             ("cr", "odj_blob",    "TEXT"),
             ("cr", "workflow_id", "INTEGER"),
             ("workflow_steps", "platform", "TEXT DEFAULT 'all'"),
+            ("pc_workflows", "hardware_json",  "TEXT"),
+            ("pc_workflows", "log_text",       "TEXT"),
+            ("pc_workflows", "screenshot_b64", "TEXT"),
+            ("pc_workflow_steps", "elapsed_sec", "REAL DEFAULT 0"),
         ]
         for table, col, typ in migrations:
             try:
@@ -558,7 +596,6 @@ def update_settings():
     return jsonify({r["key"]: r["value"] for r in rows})
 
 @app.route("/api/cr/by-name/<pc_name>/step", methods=["POST"])
-@require_auth
 def report_step(pc_name):
     data   = request.get_json(force=True)
     step   = data.get("step", "")
@@ -579,7 +616,6 @@ def report_step(pc_name):
     return jsonify({"ok": True, "step": step, "status": status})
 
 @app.route("/api/cr/by-name/<pc_name>/steps", methods=["GET"])
-@require_auth
 def get_steps_by_name(pc_name):
     """Restituisce CR + steps per hostname — usato da deploy-client.html sul PC client."""
     with get_db_ctx() as conn:
@@ -838,15 +874,21 @@ def get_pc_workflow(pw_id):
         if not pw:
             return jsonify({"error": "Non trovato"}), 404
         steps = conn.execute("""
-            SELECT ws.ordine, ws.nome, ws.tipo, ws.parametri, ws.su_errore,
+            SELECT ws.id as step_id, ws.ordine, ws.nome, ws.tipo, ws.parametri, ws.su_errore,
                    COALESCE(pws.status,'pending') as status,
-                   pws.output, pws.timestamp
+                   COALESCE(pws.elapsed_sec, 0) as elapsed_sec,
+                   0 as est_sec,
+                   pws.output as log, pws.timestamp
             FROM workflow_steps ws
             LEFT JOIN pc_workflow_steps pws ON pws.step_id=ws.id AND pws.pc_workflow_id=?
             WHERE ws.workflow_id=?
             ORDER BY ws.ordine ASC
         """, (pw_id, dict(pw)["workflow_id"])).fetchall()
     result = dict(pw)
+    hw_raw = result.pop("hardware_json", None)
+    result["hardware"]   = json.loads(hw_raw) if hw_raw else None
+    result["screenshot"] = result.pop("screenshot_b64", None)
+    result["log"]        = result.pop("log_text", None)
     result["steps"] = [dict(s) for s in steps]
     return jsonify(result)
 
@@ -855,6 +897,52 @@ def get_pc_workflow(pw_id):
 def delete_pc_workflow(pw_id):
     with get_db_ctx() as conn:
         affected = conn.execute("DELETE FROM pc_workflows WHERE id=?", (pw_id,)).rowcount
+        conn.commit()
+    if affected == 0:
+        return jsonify({"error": "Non trovato"}), 404
+    return jsonify({"ok": True})
+
+# ── DeployScreen endpoints ────────────────────────────────────────────────────
+
+@app.route("/api/pc-workflows/<int:pw_id>/hardware", methods=["POST"])
+@require_auth
+def post_pc_workflow_hardware(pw_id):
+    data = request.get_json(force=True)
+    with get_db_ctx() as conn:
+        affected = conn.execute(
+            "UPDATE pc_workflows SET hardware_json=? WHERE id=?",
+            (json.dumps(data), pw_id)
+        ).rowcount
+        conn.commit()
+    if affected == 0:
+        return jsonify({"error": "Non trovato"}), 404
+    return jsonify({"ok": True})
+
+@app.route("/api/pc-workflows/<int:pw_id>/log", methods=["POST"])
+@require_auth
+def post_pc_workflow_log(pw_id):
+    data = request.get_json(force=True)
+    text = data.get("text", "")
+    with get_db_ctx() as conn:
+        affected = conn.execute(
+            "UPDATE pc_workflows SET log_text=? WHERE id=?",
+            (text, pw_id)
+        ).rowcount
+        conn.commit()
+    if affected == 0:
+        return jsonify({"error": "Non trovato"}), 404
+    return jsonify({"ok": True})
+
+@app.route("/api/pc-workflows/<int:pw_id>/screenshot", methods=["POST"])
+@require_auth
+def post_pc_workflow_screenshot(pw_id):
+    data = request.get_json(force=True)
+    b64 = data.get("image_b64", "")
+    with get_db_ctx() as conn:
+        affected = conn.execute(
+            "UPDATE pc_workflows SET screenshot_b64=? WHERE id=?",
+            (b64, pw_id)
+        ).rowcount
         conn.commit()
     if affected == 0:
         return jsonify({"error": "Non trovato"}), 404
@@ -1185,6 +1273,357 @@ echo "[NovaSCM] Installato. Config: $CONFIG_DIR/agent.json"
     return Response(sh, mimetype="text/plain",
                     headers={"Content-Disposition": "attachment; filename=agent-install.sh"})
 
+# ── PXE helpers ───────────────────────────────────────────────────────────────
+
+def _normalize_mac(mac: str) -> str:
+    """Normalizza MAC in formato AA:BB:CC:DD:EE:FF uppercase."""
+    clean = re.sub(r"[^0-9a-fA-F]", "", mac)
+    if len(clean) != 12:
+        return ""
+    return ":".join(clean[i:i+2].upper() for i in range(0, 12, 2))
+
+
+def _get_pxe_settings() -> dict:
+    """Legge tutte le settings con prefisso 'pxe_' dalla tabella settings."""
+    with get_db_ctx() as conn:
+        rows = conn.execute(
+            "SELECT key, value FROM settings WHERE key LIKE 'pxe_%'"
+        ).fetchall()
+    return {r["key"][4:]: r["value"] for r in rows}  # rimuove prefisso 'pxe_'
+
+
+def _generate_pc_name(mac: str, cfg: dict) -> str:
+    """Genera nome PC da MAC: prefisso + ultimi 6 char MAC senza ':'."""
+    prefix = cfg.get("pc_prefix", "PC")
+    suffix = mac.replace(":", "")[-6:].upper()
+    return f"{prefix}-{suffix}"
+
+
+def _ipxe_deploy(pc_name: str, iventoy_ip: str, iventoy_port: str) -> str:
+    return f"""#!ipxe
+echo NovaSCM Deploy -- {pc_name}
+echo Connessione a iVentoy {iventoy_ip}:{iventoy_port}...
+set iventoy http://{iventoy_ip}:{iventoy_port}
+chain ${{iventoy}}/boot.ipxe || goto local_boot
+
+:local_boot
+echo iVentoy non raggiungibile -- boot da disco locale
+sanboot --no-describe --drive 0x80
+"""
+
+
+def _ipxe_local(label: str) -> str:
+    return f"""#!ipxe
+echo NovaSCM -- {label}
+echo Nessun deploy assegnato -- boot da disco locale
+sanboot --no-describe --drive 0x80
+"""
+
+
+def _ipxe_block(pc_name: str) -> str:
+    return f"""#!ipxe
+echo NovaSCM -- {pc_name}
+echo ATTENZIONE: questo PC e' bloccato -- contattare l'amministratore
+prompt Premi Invio per spegnere...
+poweroff
+"""
+
+
+# ── PXE BOOT SCRIPT ───────────────────────────────────────────────────────────
+
+@app.route("/api/boot/<mac>", methods=["GET"])
+def pxe_boot_script(mac: str):
+    """
+    Endpoint iPXE — NESSUNA autenticazione (iPXE non può inviare header).
+    Risponde con script iPXE testuale.
+    """
+    norm_mac = _normalize_mac(mac)
+    if not norm_mac:
+        log.warning("Boot PXE: MAC non valido: %s", mac)
+        return _ipxe_local("MAC non valido"), 200, {"Content-Type": "text/plain"}
+
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    now = datetime.datetime.utcnow().isoformat()
+    pxe_cfg = _get_pxe_settings()
+
+    with get_db_ctx() as conn:
+        host = conn.execute(
+            "SELECT * FROM pxe_hosts WHERE mac=?", (norm_mac,)
+        ).fetchone()
+
+        if not host:
+            pc_name = _generate_pc_name(norm_mac, pxe_cfg)
+            log.info("PXE: MAC sconosciuto %s — auto-creo host '%s'", norm_mac, pc_name)
+            cr_id = None
+            if pxe_cfg.get("auto_provision", "1") == "1":
+                try:
+                    conn.execute("""
+                        INSERT OR IGNORE INTO cr
+                            (pc_name, domain, ou, dc_ip, join_user, join_pass,
+                             admin_pass, software, status, created_at, workflow_id)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        pc_name,
+                        pxe_cfg.get("default_domain", ""),
+                        pxe_cfg.get("default_ou", ""),
+                        pxe_cfg.get("default_dc_ip", ""),
+                        pxe_cfg.get("default_join_user", ""),
+                        pxe_cfg.get("default_join_pass", ""),
+                        pxe_cfg.get("default_admin_pass", ""),
+                        "[]", "open", now,
+                        int(pxe_cfg["default_workflow_id"])
+                        if pxe_cfg.get("default_workflow_id") else None,
+                    ))
+                    cr_row = conn.execute(
+                        "SELECT id FROM cr WHERE pc_name=?", (pc_name,)
+                    ).fetchone()
+                    cr_id = cr_row["id"] if cr_row else None
+                except Exception as exc:
+                    log.warning("PXE auto-provision CR fallito: %s", exc)
+
+            wf_id = int(pxe_cfg["default_workflow_id"]) if pxe_cfg.get("default_workflow_id") else None
+            conn.execute("""
+                INSERT OR IGNORE INTO pxe_hosts
+                    (mac, pc_name, cr_id, workflow_id, boot_action,
+                     last_boot_at, boot_count, last_ip, created_at)
+                VALUES (?,?,?,?,'auto',?,1,?,?)
+            """, (norm_mac, pc_name, cr_id, wf_id, now, client_ip, now))
+            conn.commit()
+            host = conn.execute(
+                "SELECT * FROM pxe_hosts WHERE mac=?", (norm_mac,)
+            ).fetchone()
+
+        conn.execute("""
+            UPDATE pxe_hosts
+            SET last_boot_at=?, boot_count=boot_count+1, last_ip=?
+            WHERE mac=?
+        """, (now, client_ip, norm_mac))
+
+        host_dict  = dict(host)
+        action     = host_dict.get("boot_action", "auto")
+        wf_id      = host_dict.get("workflow_id")
+        pc_name    = host_dict.get("pc_name") or norm_mac
+
+        if action == "auto":
+            action = "deploy" if wf_id else "local"
+
+        pw_id = None
+        if action == "deploy" and wf_id:
+            try:
+                conn.execute("""
+                    INSERT OR IGNORE INTO pc_workflows
+                        (pc_name, workflow_id, status, assigned_at)
+                    VALUES (?,?,'pending',?)
+                """, (pc_name, wf_id, now))
+                pw_row = conn.execute("""
+                    SELECT id FROM pc_workflows
+                    WHERE pc_name=? AND status IN ('pending','running')
+                    ORDER BY id DESC LIMIT 1
+                """, (pc_name,)).fetchone()
+                pw_id = pw_row["id"] if pw_row else None
+            except Exception as exc:
+                log.warning("PXE: creazione pc_workflow fallita: %s", exc)
+
+        conn.execute("""
+            INSERT INTO pxe_boot_log (mac, pc_name, ip, action, pw_id, ts)
+            VALUES (?,?,?,?,?,?)
+        """, (norm_mac, pc_name, client_ip, action, pw_id, now))
+        conn.commit()
+
+    log.info("PXE boot: MAC=%s PC=%s IP=%s action=%s pw_id=%s",
+             norm_mac, pc_name, client_ip, action, pw_id)
+
+    iventoy_ip   = pxe_cfg.get("iventoy_ip",   "192.168.20.110")
+    iventoy_port = pxe_cfg.get("iventoy_port",  "10809")
+
+    if action == "block":
+        script = _ipxe_block(pc_name)
+    elif action == "deploy":
+        script = _ipxe_deploy(pc_name, iventoy_ip, iventoy_port)
+    else:
+        script = _ipxe_local(pc_name)
+
+    return script, 200, {"Content-Type": "text/plain"}
+
+
+# ── PXE HOSTS CRUD ────────────────────────────────────────────────────────────
+
+@app.route("/api/pxe/hosts", methods=["GET"])
+@require_auth
+def list_pxe_hosts():
+    with get_db_ctx() as conn:
+        rows = conn.execute("""
+            SELECT h.*,
+                   w.nome AS workflow_nome
+            FROM pxe_hosts h
+            LEFT JOIN workflows w ON h.workflow_id = w.id
+            ORDER BY h.last_boot_at DESC
+        """).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/pxe/hosts/<mac>", methods=["GET"])
+@require_auth
+def get_pxe_host(mac: str):
+    norm = _normalize_mac(mac)
+    if not norm:
+        return jsonify({"error": "MAC non valido"}), 400
+    with get_db_ctx() as conn:
+        row = conn.execute("SELECT * FROM pxe_hosts WHERE mac=?", (norm,)).fetchone()
+    if not row:
+        return jsonify({"error": "Host non trovato"}), 404
+    return jsonify(dict(row))
+
+
+@app.route("/api/pxe/hosts", methods=["POST"])
+@require_auth
+def create_pxe_host():
+    data = request.get_json(silent=True) or {}
+    mac = _normalize_mac(data.get("mac", ""))
+    if not mac:
+        return jsonify({"error": "MAC non valido o mancante"}), 400
+    now = datetime.datetime.utcnow().isoformat()
+    with get_db_ctx() as conn:
+        try:
+            conn.execute("""
+                INSERT INTO pxe_hosts
+                    (mac, pc_name, cr_id, workflow_id, boot_action, notes, created_at)
+                VALUES (?,?,?,?,?,?,?)
+            """, (
+                mac,
+                data.get("pc_name", "").upper().strip(),
+                data.get("cr_id") or None,
+                data.get("workflow_id") or None,
+                data.get("boot_action", "auto"),
+                data.get("notes", ""),
+                now,
+            ))
+            conn.commit()
+            row = conn.execute("SELECT * FROM pxe_hosts WHERE mac=?", (mac,)).fetchone()
+            return jsonify(dict(row)), 201
+        except Exception as exc:
+            if "UNIQUE" in str(exc):
+                return jsonify({"error": f"MAC {mac} già registrato"}), 409
+            raise
+
+
+@app.route("/api/pxe/hosts/<mac>", methods=["PUT"])
+@require_auth
+def update_pxe_host(mac: str):
+    norm = _normalize_mac(mac)
+    if not norm:
+        return jsonify({"error": "MAC non valido"}), 400
+    data    = request.get_json(silent=True) or {}
+    allowed = ("pc_name", "cr_id", "workflow_id", "boot_action", "notes")
+    updates = {k: v for k, v in data.items() if k in allowed}
+    if not updates:
+        return jsonify({"error": "Nessun campo aggiornabile fornito"}), 400
+    set_clause = ", ".join(f"{k}=?" for k in updates)
+    values     = list(updates.values()) + [norm]
+    with get_db_ctx() as conn:
+        rowcount = conn.execute(
+            f"UPDATE pxe_hosts SET {set_clause} WHERE mac=?", values
+        ).rowcount
+        if rowcount == 0:
+            return jsonify({"error": "Host non trovato"}), 404
+        conn.commit()
+        row = conn.execute("SELECT * FROM pxe_hosts WHERE mac=?", (norm,)).fetchone()
+    return jsonify(dict(row))
+
+
+@app.route("/api/pxe/hosts/<mac>", methods=["DELETE"])
+@require_auth
+def delete_pxe_host(mac: str):
+    norm = _normalize_mac(mac)
+    if not norm:
+        return jsonify({"error": "MAC non valido"}), 400
+    with get_db_ctx() as conn:
+        rowcount = conn.execute(
+            "DELETE FROM pxe_hosts WHERE mac=?", (norm,)
+        ).rowcount
+        if rowcount == 0:
+            return jsonify({"error": "Host non trovato"}), 404
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/pxe/boot-log", methods=["GET"])
+@require_auth
+def get_pxe_boot_log():
+    with get_db_ctx() as conn:
+        rows = conn.execute(
+            "SELECT * FROM pxe_boot_log ORDER BY id DESC LIMIT 200"
+        ).fetchall()
+    return jsonify([dict(r) for r in rows])
+
+
+# ── PXE SETTINGS ──────────────────────────────────────────────────────────────
+
+_PXE_SETTINGS_DEFAULTS = {
+    "pxe_enabled":             "1",
+    "pxe_iventoy_ip":          "192.168.20.110",
+    "pxe_iventoy_port":        "10809",
+    "pxe_auto_provision":      "1",
+    "pxe_pc_prefix":           "PC",
+    "pxe_default_domain":      "",
+    "pxe_default_ou":          "",
+    "pxe_default_dc_ip":       "",
+    "pxe_default_join_user":   "",
+    "pxe_default_join_pass":   "",
+    "pxe_default_admin_pass":  "",
+    "pxe_default_workflow_id": "",
+}
+
+
+@app.route("/api/pxe/settings", methods=["GET"])
+@require_auth
+def get_pxe_settings_api():
+    with get_db_ctx() as conn:
+        rows = conn.execute(
+            "SELECT key, value FROM settings WHERE key LIKE 'pxe_%'"
+        ).fetchall()
+    result = dict(_PXE_SETTINGS_DEFAULTS)
+    result.update({r["key"]: r["value"] for r in rows})
+    for k in ("pxe_default_join_pass", "pxe_default_admin_pass"):
+        if result.get(k):
+            result[k] = "••••••••"
+    return jsonify(result)
+
+
+@app.route("/api/pxe/settings", methods=["PUT"])
+@require_auth
+def update_pxe_settings_api():
+    data        = request.get_json(silent=True) or {}
+    allowed_keys = set(_PXE_SETTINGS_DEFAULTS.keys())
+    now         = datetime.datetime.utcnow().isoformat()
+    with get_db_ctx() as conn:
+        for key, value in data.items():
+            if key not in allowed_keys:
+                continue
+            if value == "••••••••":
+                continue
+            conn.execute("""
+                INSERT INTO settings (key, value) VALUES (?,?)
+                ON CONFLICT(key) DO UPDATE SET value=excluded.value
+            """, (key, str(value)))
+        conn.commit()
+    return jsonify({"ok": True})
+
+
+# ── Download dist binaries ────────────────────────────────────────────────────
+
+DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
+
+@app.route("/api/download/deploy-screen", methods=["GET"])
+def download_deploy_screen():
+    """Scarica NovaSCMDeployScreen.exe — usato dall'agent/installer durante il deploy."""
+    exe_path = os.path.join(DIST_DIR, "NovaSCMDeployScreen.exe")
+    if not os.path.isfile(exe_path):
+        return jsonify({"error": "NovaSCMDeployScreen.exe non trovato in server/dist/"}), 404
+    return send_from_directory(DIST_DIR, "NovaSCMDeployScreen.exe",
+                               as_attachment=True,
+                               mimetype="application/octet-stream")
+
 # ── Web UI ────────────────────────────────────────────────────────────────────
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
@@ -1219,6 +1658,16 @@ def health():
 
 # ── Avvio ─────────────────────────────────────────────────────────────────────
 init_db()
+
+# ── TFTP Server PXE (opzionale — richiede tftpy e porta 69) ──────────────────
+_PXE_ENABLED = os.environ.get("NOVASCM_PXE_ENABLED", "1").lower() not in ("0", "false", "no")
+if _PXE_ENABLED and _pxe_server_available:
+    _start_tftp(
+        dist_dir = DIST_DIR,
+        host     = os.environ.get("NOVASCM_TFTP_HOST", "0.0.0.0"),
+        port     = int(os.environ.get("NOVASCM_TFTP_PORT", "69")),
+    )
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 9091))
     app.run(host="0.0.0.0", port=port, debug=False)
