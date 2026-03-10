@@ -1433,8 +1433,12 @@ def pxe_boot_script(mac: str):
     log.info("PXE boot: MAC=%s PC=%s IP=%s action=%s pw_id=%s",
              norm_mac, pc_name, client_ip, action, pw_id)
 
-    iventoy_ip   = pxe_cfg.get("iventoy_ip",   "192.168.20.110")
-    iventoy_port = pxe_cfg.get("iventoy_port",  "10809")
+    iventoy_ip   = pxe_cfg.get("iventoy_ip",  "").strip()
+    iventoy_port = pxe_cfg.get("iventoy_port", "10809")
+
+    if action == "deploy" and not iventoy_ip:
+        log.warning("PXE: iVentoy IP non configurato — fallback local boot per MAC=%s", norm_mac)
+        return _ipxe_local(f"{pc_name} (iVentoy non configurato)"), 200, {"Content-Type": "text/plain"}
 
     if action == "block":
         script = _ipxe_block(pc_name)
@@ -1561,7 +1565,7 @@ def get_pxe_boot_log():
 
 _PXE_SETTINGS_DEFAULTS = {
     "pxe_enabled":             "1",
-    "pxe_iventoy_ip":          "192.168.20.110",
+    "pxe_iventoy_ip":          "",
     "pxe_iventoy_port":        "10809",
     "pxe_auto_provision":      "1",
     "pxe_pc_prefix":           "PC",

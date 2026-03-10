@@ -135,6 +135,7 @@ public class Worker : BackgroundService
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private static extern int GetSystemMetrics(int nIndex);
 
     private static string CaptureScreenshot()
