@@ -4446,7 +4446,7 @@ try {{
 # Installa agente NovaSCM (enrollment WiFi EAP-TLS)
 $agentTmp = Join-Path $env:TEMP ""novascm-agent-$([System.IO.Path]::GetRandomFileName()).ps1""
 try {{
-    $agentUrl = '{cfg.ServerUrl.TrimEnd('/')}/agent/install.ps1'
+    $agentUrl = '{cfg.ServerUrl.TrimEnd('/')}/api/download/agent-install.ps1'
     Write-Output ""Download agente da: $agentUrl""
     Invoke-WebRequest -Uri $agentUrl -OutFile $agentTmp -UseBasicParsing
     powershell.exe -NonInteractive -ExecutionPolicy Bypass -File $agentTmp
@@ -4471,7 +4471,7 @@ try {{
 # Installa NovaSCM Workflow Agent (servizio di esecuzione workflow)
 Report-Step 'workflow_agent_install' 'running'
 try {{
-    $wfAgentInstaller = '{novaSCMBaseUrl}/agent/install-windows.ps1'
+    $wfAgentInstaller = '{novaSCMBaseUrl}/api/download/agent-install.ps1'
     $installerPath    = ""$env:TEMP\novascm-install.ps1""
     Write-Output ""Download NovaSCM Workflow Agent da: $wfAgentInstaller""
     Invoke-WebRequest -Uri $wfAgentInstaller -OutFile $installerPath -UseBasicParsing
@@ -5376,7 +5376,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             "Cos'è EAP-TLS|EAP-TLS è un metodo di autenticazione WiFi enterprise che usa certificati digitali invece di password. Ogni device ha un certificato unico firmato dalla CA dell'organizzazione.",
             "Prerequisiti|• FreeRADIUS configurato con la tua CA (es. CT 105: 192.168.20.105)\n• SSID WPA2-Enterprise sul controller WiFi\n• Certportal in esecuzione (CT 103: 192.168.20.110:9090)",
             "Generare un certificato|1. Esegui una scansione di rete\n2. Seleziona il device\n3. Clicca 🔐 Genera Cert\n4. Il certificato viene generato dal Certportal e salvato nel database",
-            "Enrollment automatico|Su Windows, esegui da PowerShell admin:\n\n  iwr http://192.168.20.110:9090/agent/install.ps1 | iex\n\nIl device si registrerà automaticamente ad ogni avvio."
+            "Enrollment automatico|Su Windows, esegui da PowerShell admin:\n\n  iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex\n\nIl device si registrerà automaticamente ad ogni avvio."
         ]),
         ["deploy"] = ("Deploy Windows", "💿", [
             "Zero-touch deployment|NovaSCM genera automaticamente i file necessari per installare Windows senza alcun intervento manuale:\n• autounattend.xml — risponde a tutte le domande di setup\n• postinstall.ps1 — installa software e agenti dopo il riavvio",
@@ -5439,7 +5439,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         ]),
         ["agent"] = ("NovaSCM Agent", "🤖", [
             "Cos'è l'agent|NovaSCM Agent è un Windows Service (.NET Worker Service) che gira in background sui PC gestiti. Si connette al server ogni 30 secondi, scarica i workflow assegnati ed esegue gli step.",
-            "Installazione|Da PowerShell come amministratore:\n  iwr http://<SERVER>:9091/agent/install.ps1 | iex\nL'installer crea il servizio Windows 'NovaSCMAgent' con avvio automatico.",
+            "Installazione|Da PowerShell come amministratore:\n  iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex\nL'installer crea il servizio Windows 'NovaSCMAgent' con avvio automatico.",
             "Configurazione|File: C:\\ProgramData\\NovaSCMAgent\\agent.json\n  {\n    \"ApiUrl\": \"http://192.168.20.110:9091\",\n    \"ApiKey\": \"chiave-segreta\",\n    \"PollIntervalSeconds\": 30\n  }",
             "Tipi di step supportati|• winget_install — installa pacchetto via winget\n• powershell — esegue script PowerShell\n• cmd / shell — esegue comando shell\n• reg_set — imposta chiave di registro\n• reboot — riavvia il PC\n• wait — attende N secondi\n• file_copy — copia file localmente\n• systemd_service — gestisce servizi (Linux)",
             "Condizioni step|Ogni step può avere una condizione:\n• windows — esegue solo su Windows\n• linux — esegue solo su Linux\n• os=windows / os=linux — alias\n• hostname=NOME-PC — solo su quel PC",

@@ -389,8 +389,8 @@ html,body{
 <!-- Footer -->
 <div class="footer">
   <div class="footer-left">
-    <span>Versione <span class="f-val" id="f-ver">2.1.0</span></span>
-    <span>Server <span class="f-val" id="f-server">192.168.20.110</span></span>
+    <span>Versione <span class="f-val" id="f-ver">2.2.0</span></span>
+    <span>Server <span class="f-val" id="f-server">—</span></span>
   </div>
   <div class="footer-right">
     <span id="f-clock" class="f-val"></span>
@@ -421,10 +421,10 @@ const CFG = (() => {
     hostname: p.get("hostname") || "WKS-MKTG-042",
     domain:   p.get("domain")   || "polariscore.local",
     wf_name:  p.get("wf")       || "Deploy Windows 11 Pro",
-    server:   p.get("server")   || "http://192.168.20.110:9091",
+    server:   p.get("server")   || "",
     api_key:  p.get("key")      || "",
     pw_id:    p.get("pw_id")    || "",
-    version:  p.get("ver")      || "2.1.0",
+    version:  p.get("ver")      || "2.2.0",
     demo:     p.get("demo")     === "1",
   };
 })();

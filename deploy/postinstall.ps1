@@ -180,7 +180,7 @@ foreach ($s in @("outlook_cfg","onedrive_cfg","default_profile")) { Report-Step 
 Step-Start 22; Report-Step "agent_install" "running"
 try {
     $agentTmp = "$env:TEMP\novascm-agent-install.ps1"
-    Invoke-WebRequest -Uri "$SERVER/agent/install.ps1" `
+    Invoke-WebRequest -Uri "$SERVER/api/download/agent-install.ps1" `
         -OutFile $agentTmp -UseBasicParsing `
         -Headers @{ "X-Api-Key" = $APIKEY }
     powershell.exe -ExecutionPolicy Bypass -NonInteractive -File $agentTmp

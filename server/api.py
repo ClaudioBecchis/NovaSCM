@@ -138,22 +138,29 @@ def require_auth(fn):
     return wrapper
 
 # ── DB ────────────────────────────────────────────────────────────────────────
+# I-7: connessione thread-local — evita riapertura per ogni richiesta
+_db_local = threading.local()
+
 def get_db():
-    conn = sqlite3.connect(DB, timeout=30, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=5000")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    conn = getattr(_db_local, "conn", None)
+    if conn is None:
+        conn = sqlite3.connect(DB, timeout=30, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA busy_timeout=5000")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        conn.execute("PRAGMA foreign_keys = ON")
+        _db_local.conn = conn
     return conn
 
 @contextmanager
 def get_db_ctx():
     conn = get_db()
-    conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
-    finally:
-        conn.close()
+    except Exception:
+        conn.rollback()
+        raise
 
 def init_db():
     os.makedirs(os.path.dirname(DB), exist_ok=True)
@@ -294,6 +301,15 @@ def init_db():
         ("pc_workflows",      "archived",     "INTEGER DEFAULT 0"),
         ("workflows",         "timeout_min",  "INTEGER DEFAULT 120"),
         ]
+        # M-7: tabella enrollment token monouso
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS enrollment_tokens (
+                token      TEXT PRIMARY KEY,
+                expires_at REAL NOT NULL,
+                used       INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+        """)
         for table, col, typ in migrations:
             try:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
@@ -1484,12 +1500,50 @@ def download_agent():
     return send_file(fpath, as_attachment=True, download_name=fname,
                      mimetype="application/octet-stream")
 
+@app.route("/api/enrollment-token", methods=["POST"])
+@require_auth
+def create_enrollment_token():
+    """Genera un token monouso (1h) per l'enrollment agent — M-7."""
+    import uuid as _uuid
+    token = str(_uuid.uuid4())
+    now   = datetime.datetime.utcnow().isoformat()
+    exp   = time.time() + 3600
+    with get_db_ctx() as conn:
+        conn.execute(
+            "INSERT INTO enrollment_tokens (token, expires_at, used, created_at) VALUES (?,?,0,?)",
+            (token, exp, now)
+        )
+        conn.commit()
+    return jsonify({"token": token, "expires_at": exp, "expires_in_sec": 3600})
+
+def _validate_enrollment_token(token: str) -> bool:
+    """Verifica token monouso: deve esistere, non essere scaduto e non essere già usato."""
+    with get_db_ctx() as conn:
+        row = conn.execute(
+            "SELECT expires_at, used FROM enrollment_tokens WHERE token=?", (token,)
+        ).fetchone()
+        if not row or row["used"] or time.time() > row["expires_at"]:
+            return False
+        conn.execute("UPDATE enrollment_tokens SET used=1 WHERE token=?", (token,))
+        conn.commit()
+    return True
+
 @app.route("/api/download/agent-install.ps1", methods=["GET"])
 @require_auth
 def download_agent_installer_ps1():
-    """Genera install-windows.ps1 con API URL e API Key pre-configurati."""
+    """Genera install-windows.ps1 con token enrollment monouso (M-7)."""
     api_url = _get_public_url()
-    api_key = API_KEY
+    # M-7: genera token monouso invece di iniettare API key master
+    import uuid as _uuid
+    token = str(_uuid.uuid4())
+    exp   = time.time() + 3600
+    with get_db_ctx() as conn:
+        conn.execute(
+            "INSERT INTO enrollment_tokens (token, expires_at, used, created_at) VALUES (?,?,0,?)",
+            (token, exp, datetime.datetime.utcnow().isoformat())
+        )
+        conn.commit()
+    api_key = token  # token monouso al posto della chiave master
     # SEC-2 + C-7 + M-1: scarica in temp, verifica SHA256, scrivi config con api_key, installa via sc.exe
     ps1 = f"""#Requires -RunAsAdministrator
 # NovaSCM Agent Installer — generato automaticamente
@@ -1537,9 +1591,18 @@ Write-Host "[NovaSCM] Installato. Config: $CfgFile"
 @app.route("/api/download/agent-install.sh", methods=["GET"])
 @require_auth
 def download_agent_installer_sh():
-    """Genera install-linux.sh con API URL e API Key pre-configurati."""
+    """Genera install-linux.sh con token enrollment monouso (M-7)."""
     api_url = _get_public_url()
-    api_key = API_KEY
+    import uuid as _uuid
+    token = str(_uuid.uuid4())
+    exp   = time.time() + 3600
+    with get_db_ctx() as conn:
+        conn.execute(
+            "INSERT INTO enrollment_tokens (token, expires_at, used, created_at) VALUES (?,?,0,?)",
+            (token, exp, datetime.datetime.utcnow().isoformat())
+        )
+        conn.commit()
+    api_key = token
     # SEC-2 + C-7 + M-1: scarica in temp, verifica SHA256, scrivi config con api_key, installa via systemd
     sh = f"""#!/bin/bash
 # NovaSCM Agent Installer — generato automaticamente
@@ -1668,11 +1731,26 @@ poweroff
 
 # ── PXE BOOT SCRIPT ───────────────────────────────────────────────────────────
 
+_PXE_ALLOWED_NETS = [
+    s.strip() for s in os.environ.get("NOVASCM_PXE_ALLOWED_NETS", "192.168.0.0/16,10.0.0.0/8,172.16.0.0/12").split(",")
+    if s.strip()
+]
+
+def _ip_in_allowed_nets(ip: str) -> bool:
+    """C-6: verifica che l'IP client sia in una delle subnet consentite per PXE."""
+    import ipaddress
+    try:
+        client = ipaddress.ip_address(ip)
+        return any(client in ipaddress.ip_network(net, strict=False) for net in _PXE_ALLOWED_NETS)
+    except ValueError:
+        return False
+
 @app.route("/api/boot/<mac>", methods=["GET"])
 @limiter.limit("30 per minute; 200 per hour")
 def pxe_boot_script(mac: str):
     """
     Endpoint iPXE — NESSUNA autenticazione (iPXE non può inviare header).
+    C-6: accettato solo da subnet LAN configurate (NOVASCM_PXE_ALLOWED_NETS).
     Risponde con script iPXE testuale.
     """
     norm_mac = _normalize_mac(mac)
@@ -1681,6 +1759,10 @@ def pxe_boot_script(mac: str):
         return _ipxe_local("MAC non valido"), 200, {"Content-Type": "text/plain"}
 
     client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    # C-6: rifiuta richieste da IP non in subnet LAN consentite
+    if not _ip_in_allowed_nets(client_ip):
+        log.warning("Boot PXE: IP non autorizzato: %s MAC: %s", client_ip, mac)
+        return _ipxe_local("IP non autorizzato"), 200, {"Content-Type": "text/plain"}
     now = datetime.datetime.utcnow().isoformat()
     pxe_cfg = _get_pxe_settings()
 
@@ -1984,6 +2066,7 @@ def ui_token():
     return jsonify({"token": token, "expires_at": exp})
 
 @app.route("/deploy-client")
+@require_auth
 def ui_deploy_client():
     html_path = os.path.join(WEB_DIR, "deploy-client.html")
     with open(html_path, encoding="utf-8") as f:
@@ -1991,6 +2074,7 @@ def ui_deploy_client():
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 @app.route("/web/<path:path>")
+@require_auth
 def ui_static(path):
     return send_from_directory(WEB_DIR, path)
 
