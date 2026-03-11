@@ -70,12 +70,45 @@ if _limiter_available:
     )
 else:
     # Stub no-op quando flask-limiter non è installato
-    class _NoOpLimiter:
-        def limit(self, *a, **kw):
-            return lambda f: f
+    # Rate limiter built-in (sliding window in-memory) usato quando flask-limiter non è disponibile
+    import collections
+    _rl_lock   = threading.Lock()
+    _rl_window: dict[str, collections.deque] = {}
+
+    def _rl_check(key: str, limit: int, window_sec: int) -> bool:
+        """Ritorna True se la richiesta è permessa, False se rate limit superato."""
+        now = time.time()
+        with _rl_lock:
+            dq = _rl_window.setdefault(key, collections.deque())
+            cutoff = now - window_sec
+            while dq and dq[0] < cutoff:
+                dq.popleft()
+            if len(dq) >= limit:
+                return False
+            dq.append(now)
+            return True
+
+    class _BuiltinLimiter:
+        def limit(self, spec: str, *a, **kw):
+            # Parsing semplice di "N per unit" (es. "300 per minute", "30 per minute")
+            def decorator(fn):
+                import functools
+                parts   = spec.split(";")[0].strip().split()  # usa solo il primo limite
+                count   = int(parts[0])
+                unit    = parts[2].lower() if len(parts) >= 3 else "minute"
+                seconds = {"second": 1, "minute": 60, "hour": 3600, "day": 86400}.get(unit, 60)
+                @functools.wraps(fn)
+                def wrapper(*args, **kwargs):
+                    ip_key = f"{fn.__name__}:{request.remote_addr}"
+                    if not _rl_check(ip_key, count, seconds):
+                        return jsonify({"error": "Too Many Requests"}), 429
+                    return fn(*args, **kwargs)
+                return wrapper
+            return decorator
         def exempt(self, f):
             return f
-    limiter = _NoOpLimiter()
+
+    limiter = _BuiltinLimiter()
 
 # Percorso DB: variabile d'ambiente NOVASCM_DB, default /data/novascm.db
 DB = os.environ.get("NOVASCM_DB", "/data/novascm.db")
@@ -125,7 +158,7 @@ if not API_KEY:
             log.warning("NOVASCM_API_KEY non impostata — generata e salvata in %s", _key_file)
         except OSError:
             log.warning("NOVASCM_API_KEY non impostata — generata in memoria (non persistita)")
-        log.warning("API Key generata: %s", API_KEY)
+        log.warning("API Key generata (prime 8 cifre): %s...", API_KEY[:8])
 
 # ── Session token store (ui-token) ──────────────────────────────────────────
 _ui_tokens: dict[str, float] = {}  # {token_hex: expiry_timestamp}
@@ -181,6 +214,18 @@ def get_db_ctx():
     except Exception:
         conn.rollback()
         raise
+
+def _generate_deploy_token(conn, pc_name: str, pw_id) -> str:
+    """Genera un enrollment token monouso per il deploy di pc_name (validità 24h)."""
+    token = secrets.token_hex(32)
+    now   = datetime.datetime.utcnow()
+    exp   = (now + datetime.timedelta(hours=24)).isoformat()
+    conn.execute(
+        "INSERT INTO deploy_tokens (token, pc_name, pw_id, created_at, expires_at) VALUES (?,?,?,?,?)",
+        (token, pc_name, pw_id, now.isoformat(), exp)
+    )
+    return token
+
 
 def init_db():
     os.makedirs(os.path.dirname(DB), exist_ok=True)
@@ -295,6 +340,18 @@ def init_db():
                 ts       TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS deploy_tokens (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                token      TEXT NOT NULL UNIQUE,
+                pc_name    TEXT NOT NULL,
+                pw_id      INTEGER,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                used       INTEGER DEFAULT 0
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_deploy_tokens_token ON deploy_tokens(token)")
         conn.commit()
         # Indici per query frequenti
         _idx = [
@@ -342,7 +399,10 @@ _SENSITIVE = {"join_pass", "admin_pass"}
 
 def row_to_dict(row, include_sensitive: bool = False):
     d = dict(row)
-    d["software"] = json.loads(d.get("software") or "[]")
+    try:
+        d["software"] = json.loads(d.get("software") or "[]")
+    except (json.JSONDecodeError, TypeError):
+        d["software"] = []
     if not include_sensitive:
         for k in _SENSITIVE:
             d.pop(k, None)
@@ -379,9 +439,10 @@ def _fire_webhook(event: str, data: dict):
 # ── Cleanup workflow in stallo ─────────────────────────────────────────────────
 
 def _cleanup_stale_workflows():
-    """Marca come 'error' i workflow running da più di timeout_min minuti."""
+    """Marca come 'error' i workflow running da più di timeout_min minuti (atomico)."""
     now = datetime.datetime.utcnow()
     with get_db_ctx() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         stale = conn.execute("""
             SELECT pw.id, pw.pc_name, pw.started_at, COALESCE(w.timeout_min, 120) AS timeout_min
             FROM pc_workflows pw
@@ -389,23 +450,31 @@ def _cleanup_stale_workflows():
             WHERE pw.status = 'running'
               AND pw.started_at IS NOT NULL
         """).fetchall()
+        timed_out = []
         for row in stale:
             try:
                 started = datetime.datetime.fromisoformat(row["started_at"])
             except (ValueError, TypeError):
                 continue
             if (now - started).total_seconds() > row["timeout_min"] * 60:
-                log.warning("Workflow timeout: pw_id=%s pc=%s", row["id"], row["pc_name"])
-                conn.execute(
-                    "UPDATE pc_workflows SET status='error', completed_at=? WHERE id=?",
-                    (now.isoformat(), row["id"])
-                )
-                _fire_webhook("workflow_timeout", {
-                    "pc_name": row["pc_name"],
-                    "pw_id":   row["id"],
-                    "status":  "error",
-                })
-        conn.commit()
+                timed_out.append(dict(row))
+        if timed_out:
+            ids = [r["id"] for r in timed_out]
+            placeholders = ",".join("?" * len(ids))
+            conn.execute(
+                f"UPDATE pc_workflows SET status='error', completed_at=? WHERE id IN ({placeholders})",
+                [now.isoformat()] + ids
+            )
+            conn.commit()
+        else:
+            conn.rollback()
+    for row in timed_out:
+        log.warning("Workflow timeout: pw_id=%s pc=%s", row["id"], row["pc_name"])
+        _fire_webhook("workflow_timeout", {
+            "pc_name": row["pc_name"],
+            "pw_id":   row["id"],
+            "status":  "error",
+        })
 
 
 def _start_background_jobs():
@@ -421,6 +490,15 @@ def _start_background_jobs():
 
 # ── CR CRUD ───────────────────────────────────────────────────────────────────
 
+_PC_NAME_RE = re.compile(r'^[A-Z0-9][A-Z0-9\-]{0,14}$')
+
+def _validate_pc_name(name: str) -> str | None:
+    """Valida e normalizza pc_name. Ritorna il nome normalizzato o None se non valido."""
+    n = (name or "").strip().upper()
+    if not _PC_NAME_RE.match(n):
+        return None
+    return n
+
 @app.route("/api/cr", methods=["GET"])
 @require_auth
 def list_cr():
@@ -431,10 +509,12 @@ def list_cr():
 @app.route("/api/cr", methods=["POST"])
 @require_auth
 def create_cr():
-    data = request.get_json(force=True)
-    for f in ("pc_name", "domain"):
-        if not data.get(f):
-            return jsonify({"error": f"Campo obbligatorio: {f}"}), 400
+    data    = request.get_json(force=True)
+    pc_name = _validate_pc_name(data.get("pc_name", ""))
+    if not pc_name:
+        return jsonify({"error": "pc_name non valido (1-15 char, alfanumerico/trattino, maiuscolo)"}), 400
+    if not data.get("domain"):
+        return jsonify({"error": "Campo obbligatorio: domain"}), 400
     now = datetime.datetime.now().isoformat()
     with get_db_ctx() as conn:
         try:
@@ -443,7 +523,7 @@ def create_cr():
                                 odj_blob, admin_pass, software, assigned_user, notes, status, created_at, workflow_id)
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
-                data["pc_name"].upper().strip(),
+                pc_name,
                 data["domain"],
                 data.get("ou", ""),
                 data.get("dc_ip", ""),
@@ -460,7 +540,7 @@ def create_cr():
             ))
             conn.commit()
             row = conn.execute("SELECT * FROM cr WHERE pc_name=?",
-                               (data["pc_name"].upper().strip(),)).fetchone()
+                               (pc_name,)).fetchone()
             return jsonify(row_to_dict(row)), 201
         except sqlite3.IntegrityError:
             return jsonify({"error": f"PC '{data['pc_name']}' esiste già"}), 409
@@ -573,6 +653,17 @@ def get_autounattend(pc_name):
         </RunSynchronousCommand>
       </RunSynchronousCommands>"""
 
+    # Genera enrollment token per questo PC (usato da postinstall.ps1 al posto dell'API key)
+    enroll_token_str = ""
+    enroll_server_str = _get_public_url()
+    with get_db_ctx() as conn:
+        try:
+            _tok = _generate_deploy_token(conn, d["pc_name"], None)
+            conn.commit()
+            enroll_token_str = _tok
+        except Exception as _e:
+            log.warning("get_autounattend: enrollment token fallito: %s", _e)
+
     xml = f"""<?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend"
           xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State"
@@ -670,6 +761,16 @@ def get_autounattend(pc_name):
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>2</Order>
+          <CommandLine>reg add &quot;HKLM\\SOFTWARE\\NovaSCM&quot; /v EnrollToken /t REG_SZ /d &quot;{enroll_token_str}&quot; /f</CommandLine>
+          <Description>NovaSCM: scrive enrollment token nel registry</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <CommandLine>reg add &quot;HKLM\\SOFTWARE\\NovaSCM&quot; /v EnrollServer /t REG_SZ /d &quot;{enroll_server_str}&quot; /f</CommandLine>
+          <Description>NovaSCM: scrive server URL nel registry</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>4</Order>
           <CommandLine>powershell.exe -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\\Windows\\postinstall.ps1</CommandLine>
           <Description>NovaSCM post-install</Description>
         </SynchronousCommand>
@@ -1719,7 +1820,7 @@ def _generate_pc_name(mac: str, cfg: dict) -> str:
     return f"{prefix}-{suffix}"
 
 
-def _ipxe_deploy(pc_name: str, iventoy_ip: str, iventoy_port: str) -> str:
+def _ipxe_deploy(pc_name: str, iventoy_ip: str, iventoy_port: str, enroll_token: str = "") -> str:
     return f"""#!ipxe
 echo NovaSCM Deploy -- {pc_name}
 echo Connessione a iVentoy {iventoy_ip}:{iventoy_port}...
@@ -1860,6 +1961,14 @@ def pxe_boot_script(mac: str):
             except Exception as exc:
                 log.warning("PXE: creazione pc_workflow fallita: %s", exc)
 
+        # Genera enrollment token monouso per postinstall.ps1
+        enroll_token = None
+        if action == "deploy" and pw_id:
+            try:
+                enroll_token = _generate_deploy_token(conn, pc_name, pw_id)
+            except Exception as exc:
+                log.warning("PXE: generazione enrollment token fallita: %s", exc)
+
         conn.execute("""
             INSERT INTO pxe_boot_log (mac, pc_name, ip, action, pw_id, ts)
             VALUES (?,?,?,?,?,?)
@@ -1879,7 +1988,7 @@ def pxe_boot_script(mac: str):
     if action == "block":
         script = _ipxe_block(pc_name)
     elif action == "deploy":
-        script = _ipxe_deploy(pc_name, iventoy_ip, iventoy_port)
+        script = _ipxe_deploy(pc_name, iventoy_ip, iventoy_port, enroll_token or "")
     else:
         script = _ipxe_local(pc_name)
 
@@ -1887,6 +1996,50 @@ def pxe_boot_script(mac: str):
 
 
 # ── PXE HOSTS CRUD ────────────────────────────────────────────────────────────
+
+@app.route("/api/deploy/enroll", methods=["POST"])
+@limiter.limit("10 per minute; 50 per hour")
+def deploy_enroll():
+    """
+    Endpoint OSD — nessuna autenticazione API key.
+    Accetta un enrollment token monouso e restituisce session key + server info.
+    Body: { "token": "<hex>" }
+    """
+    data  = request.get_json(force=True)
+    token = (data.get("token") or "").strip()
+    if not token or len(token) != 64:
+        return jsonify({"error": "Token non valido"}), 400
+    now = datetime.datetime.utcnow().isoformat()
+    with get_db_ctx() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT * FROM deploy_tokens WHERE token=? AND used=0",
+            (token,)
+        ).fetchone()
+        if not row:
+            conn.rollback()
+            log.warning("Enroll: token non trovato o già usato da %s", request.remote_addr)
+            return jsonify({"error": "Token non valido o già usato"}), 401
+        if row["expires_at"] < now:
+            conn.rollback()
+            return jsonify({"error": "Token scaduto"}), 401
+        conn.execute("UPDATE deploy_tokens SET used=1 WHERE id=?", (row["id"],))
+        conn.commit()
+    # Genera session token valido 24h per questo deploy
+    session_key = secrets.token_hex(32)
+    exp = time.time() + 86400
+    with _ui_tokens_lock:
+        _purge_expired_tokens()
+        _ui_tokens[session_key] = exp
+    log.info("Enroll OK: pc=%s pw_id=%s ip=%s", row["pc_name"], row["pw_id"], request.remote_addr)
+    return jsonify({
+        "session_key": session_key,
+        "pc_name":     row["pc_name"],
+        "pw_id":       row["pw_id"],
+        "server_url":  _get_public_url(),
+        "expires_at":  exp,
+    })
+
 
 @app.route("/api/pxe/hosts", methods=["GET"])
 @require_auth

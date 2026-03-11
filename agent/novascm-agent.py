@@ -72,6 +72,7 @@ DEFAULT_CONFIG = {
 
 # Host bloccati: metadata service AWS/Azure/GCP, loopback (il server NovaSCM è su LAN, non localhost)
 _BLOCKED_HOSTS = {
+    "127.0.0.1", "127.0.1.1", "localhost", "::1", "0.0.0.0",  # loopback
     "169.254.169.254",           # AWS/Azure/Alibaba metadata
     "metadata.google.internal",  # GCP metadata
     "metadata.internal",         # GCP alias

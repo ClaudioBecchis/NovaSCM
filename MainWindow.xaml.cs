@@ -363,6 +363,31 @@ public partial class MainWindow : Window
         if (!string.IsNullOrEmpty(_config.UnifiPassE))     _config.UnifiPass     = DpapiDecrypt(_config.UnifiPassE);
         if (!string.IsNullOrEmpty(_config.AdminPassE))     _config.AdminPass     = DpapiDecrypt(_config.AdminPassE);
         if (!string.IsNullOrEmpty(_config.NovaSCMApiKeyE)) _config.NovaSCMApiKey = DpapiDecrypt(_config.NovaSCMApiKeyE);
+        // Migrazione automatica plain→DPAPI per config precedenti alla v2.0
+        bool needsMigration = false;
+        if (!string.IsNullOrEmpty(_config.UnifiPass) && string.IsNullOrEmpty(_config.UnifiPassE))
+        {
+            _config.UnifiPassE = DpapiEncrypt(_config.UnifiPass);
+            _config.UnifiPass  = "";
+            needsMigration = true;
+        }
+        if (!string.IsNullOrEmpty(_config.AdminPass) && string.IsNullOrEmpty(_config.AdminPassE))
+        {
+            _config.AdminPassE = DpapiEncrypt(_config.AdminPass);
+            _config.AdminPass  = "";
+            needsMigration = true;
+        }
+        if (!string.IsNullOrEmpty(_config.NovaSCMApiKey) && string.IsNullOrEmpty(_config.NovaSCMApiKeyE))
+        {
+            _config.NovaSCMApiKeyE = DpapiEncrypt(_config.NovaSCMApiKey);
+            _config.NovaSCMApiKey  = "";
+            needsMigration = true;
+        }
+        if (needsMigration)
+        {
+            try { SaveConfig(); App.Log("Migrazione config plain→DPAPI completata"); }
+            catch (Exception ex) { App.Log($"Migrazione DPAPI fallita: {ex.Message}"); }
+        }
         // ARCH-01: ricrea il servizio API con i nuovi parametri di configurazione
         _apiSvc = string.IsNullOrWhiteSpace(_config.NovaSCMApiUrl)
             ? null
@@ -445,15 +470,23 @@ public partial class MainWindow : Window
     // ── Scansione rete ────────────────────────────────────────────────────────
     private async void BtnScan_Click(object s, RoutedEventArgs e)
     {
-        if (!IPAddress.TryParse(TxtScanIp.Text.Trim(), out var baseIp))
-        { SetStatus("⚠️ IP non valido"); return; }
-        if (!int.TryParse(TxtScanSubnet.Text.Trim(), out int cidr) || cidr < 1 || cidr > 30)
-        { SetStatus("⚠️ Subnet non valida (1-30)"); return; }
-        List<IPAddress> ips;
-        try { ips = GetHostsInSubnet(baseIp, cidr); }
-        catch (Exception ex) { App.Log($"GetHostsInSubnet error: {ex}"); SetStatus($"❌ {ex.Message}"); return; }
-        App.Log($"Scansione avviata — /{cidr} → {ips.Count} host");
-        await RunScanAsync(ips);
+        try
+        {
+            if (!IPAddress.TryParse(TxtScanIp.Text.Trim(), out var baseIp))
+            { SetStatus("⚠️ IP non valido"); return; }
+            if (!int.TryParse(TxtScanSubnet.Text.Trim(), out int cidr) || cidr < 1 || cidr > 30)
+            { SetStatus("⚠️ Subnet non valida (1-30)"); return; }
+            List<IPAddress> ips;
+            try { ips = GetHostsInSubnet(baseIp, cidr); }
+            catch (Exception ex) { App.Log($"GetHostsInSubnet error: {ex}"); SetStatus($"❌ {ex.Message}"); return; }
+            App.Log($"Scansione avviata — /{cidr} → {ips.Count} host");
+            await RunScanAsync(ips);
+        }
+        catch (Exception ex)
+        {
+            App.Log($"Errore BtnScan_Click: {ex.Message}");
+            SetStatus($"⚠️ Errore: {ex.Message}");
+        }
     }
 
     private async void BtnScanAll_Click(object s, RoutedEventArgs e)
@@ -2321,6 +2354,8 @@ public partial class MainWindow : Window
 
     private async void BtnSccmConnect_Click(object s, RoutedEventArgs e)
     {
+        try
+        {
         var server = TxtSccmServer.Text.Trim();
         var userFull = TxtSccmUser.Text.Trim();
         var pass   = TxtSccmPass.Password;
@@ -2369,6 +2404,12 @@ public partial class MainWindow : Window
             TxtSccmConnStatus.Text = $"❌  {ex.Message}";
             TxtSccmConnStatus.Foreground = System.Windows.Media.Brushes.Red;
             TxtSccmStatus.Text = "Connessione fallita";
+        }
+        } // outer try
+        catch (Exception ex)
+        {
+            App.Log($"Errore BtnSccmConnect_Click: {ex.Message}");
+            SetStatus($"⚠️ Errore: {ex.Message}");
         }
     }
 
@@ -3794,10 +3835,30 @@ public partial class MainWindow : Window
     private CrRow? GetSelectedCr() => CrGrid.SelectedItem as CrRow;
 
     private async void MenuCrComplete_Click(object s, RoutedEventArgs e)
-        => await UpdateCrStatusAsync(GetSelectedCr(), "completed");
+    {
+        try
+        {
+            await UpdateCrStatusAsync(GetSelectedCr(), "completed");
+        }
+        catch (Exception ex)
+        {
+            App.Log($"Errore MenuCrComplete_Click: {ex.Message}");
+            SetStatus($"⚠️ Errore: {ex.Message}");
+        }
+    }
 
     private async void MenuCrInProgress_Click(object s, RoutedEventArgs e)
-        => await UpdateCrStatusAsync(GetSelectedCr(), "in_progress");
+    {
+        try
+        {
+            await UpdateCrStatusAsync(GetSelectedCr(), "in_progress");
+        }
+        catch (Exception ex)
+        {
+            App.Log($"Errore MenuCrInProgress_Click: {ex.Message}");
+            SetStatus($"⚠️ Errore: {ex.Message}");
+        }
+    }
 
     private async Task UpdateCrStatusAsync(CrRow? cr, string status)
     {
