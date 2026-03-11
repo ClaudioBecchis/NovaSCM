@@ -2,10 +2,46 @@
 Set-ExecutionPolicy Bypass -Scope Process -Force
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# ── Configurazione ────────────────────────────────────────────────────────────
-$SERVER = "http://192.168.1.100:9091"
-$APIKEY = "YOUR_API_KEY_HERE"
-$PXE    = "http://192.168.1.122"
+# ── Enrollment: legge token e server URL dal registry (scritti da autounattend.xml) ──
+$ENROLL_TOKEN  = (Get-ItemProperty -Path "HKLM:\SOFTWARE\NovaSCM" -Name "EnrollToken"  -ErrorAction SilentlyContinue)?.EnrollToken
+$ENROLL_SERVER = (Get-ItemProperty -Path "HKLM:\SOFTWARE\NovaSCM" -Name "EnrollServer" -ErrorAction SilentlyContinue)?.EnrollServer
+
+$SERVER = $null
+$APIKEY = $null
+$PXE    = $null
+
+if ($ENROLL_TOKEN -and $ENROLL_SERVER) {
+    try {
+        $body = [Text.Encoding]::UTF8.GetBytes(
+            (ConvertTo-Json @{ token = $ENROLL_TOKEN } -Compress))
+        $req  = [Net.WebRequest]::Create("$ENROLL_SERVER/api/deploy/enroll")
+        $req.Method        = 'POST'
+        $req.ContentType   = 'application/json'
+        $req.ContentLength = $body.Length
+        $req.Timeout       = 15000
+        $s = $req.GetRequestStream(); $s.Write($body,0,$body.Length); $s.Close()
+        $resp   = $req.GetResponse()
+        $reader = New-Object IO.StreamReader($resp.GetResponseStream())
+        $json   = $reader.ReadToEnd() | ConvertFrom-Json
+        $resp.Close()
+        $SERVER = $json.server_url
+        $APIKEY = $json.session_key
+        Write-Output "NovaSCM enroll OK: pc=$($json.pc_name) server=$SERVER"
+        # Rimuovi token dal registry dopo l'uso
+        Remove-ItemProperty -Path "HKLM:\SOFTWARE\NovaSCM" -Name "EnrollToken"  -ErrorAction SilentlyContinue
+        Remove-ItemProperty -Path "HKLM:\SOFTWARE\NovaSCM" -Name "EnrollServer" -ErrorAction SilentlyContinue
+    } catch {
+        Write-Warning "NovaSCM enroll fallito: $_"
+    }
+}
+
+if (-not $SERVER -or -not $APIKEY) {
+    Write-Warning "NovaSCM: credenziali non disponibili — continuazione in modalità demo"
+    $SERVER = ""
+    $APIKEY = ""
+}
+
+$PXE = $SERVER  # Il PXE server è sulla stessa macchina del server NovaSCM
 
 # ── M-1: Rinomina PC con template MAC6 ───────────────────────────────────────
 $adapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.HardwareInterface } |
