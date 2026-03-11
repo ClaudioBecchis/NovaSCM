@@ -11,6 +11,7 @@
     <Product>NovaSCM</Product>
     <Version>2.2.0</Version>
     <ApplicationIcon>Assets\novascm.ico</ApplicationIcon>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
   </PropertyGroup>
 
   <ItemGroup>

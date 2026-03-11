@@ -5643,6 +5643,9 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
     {
         var user = _config.AdminUser;
         if (string.IsNullOrWhiteSpace(user)) user = "root";
+        // Sanifica: solo caratteri validi per SSH username (alfanumerico, punto, trattino, underscore)
+        user = Regex.Replace(user, @"[^\w.\-]", "");
+        if (string.IsNullOrWhiteSpace(user)) user = "root";
         var target = $"{user}@{dev.Ip}";
 
         // Prova Windows Terminal, poi PowerShell, poi cmd

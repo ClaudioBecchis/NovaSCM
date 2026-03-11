@@ -8,6 +8,10 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3, json, datetime, os, functools, hmac, logging, re, secrets, threading, time
 import urllib.request as _urllib_req
 from xml.sax.saxutils import escape as _xe
+
+def _xe_ps(val: str) -> str:
+    """XML-escape + escape apici singoli per stringhe PowerShell single-quoted."""
+    return _xe(str(val).replace("'", "''"))
 from contextlib import contextmanager
 
 try:
@@ -123,18 +127,34 @@ if not API_KEY:
             log.warning("NOVASCM_API_KEY non impostata — generata in memoria (non persistita)")
         log.warning("API Key generata: %s", API_KEY)
 
+# ── Session token store (ui-token) ──────────────────────────────────────────
+_ui_tokens: dict[str, float] = {}  # {token_hex: expiry_timestamp}
+_ui_tokens_lock = threading.Lock()
+
+def _purge_expired_tokens() -> None:
+    now = time.time()
+    expired = [t for t, exp in list(_ui_tokens.items()) if exp < now]
+    for t in expired:
+        del _ui_tokens[t]
+
 def require_auth(fn):
-    """Decorator: richiede header X-Api-Key corrispondente a NOVASCM_API_KEY."""
+    """Decorator: richiede header X-Api-Key (API key o session token da /api/ui-token)."""
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         if not API_KEY:
             log.error("NOVASCM_API_KEY non configurata — accesso bloccato")
             return jsonify({"error": "Server non configurato: NOVASCM_API_KEY mancante"}), 500
         token = request.headers.get("X-Api-Key", "")
-        if not hmac.compare_digest(token, API_KEY):
-            log.warning("Accesso non autorizzato da %s", request.remote_addr)
-            return jsonify({"error": "Non autorizzato"}), 401
-        return fn(*args, **kwargs)
+        # Controlla API key diretta
+        if hmac.compare_digest(token, API_KEY):
+            return fn(*args, **kwargs)
+        # Controlla session token (emesso da /api/ui-token)
+        with _ui_tokens_lock:
+            exp = _ui_tokens.get(token)
+        if exp and exp > time.time():
+            return fn(*args, **kwargs)
+        log.warning("Accesso non autorizzato da %s", request.remote_addr)
+        return jsonify({"error": "Non autorizzato"}), 401
     return wrapper
 
 # ── DB ────────────────────────────────────────────────────────────────────────
@@ -518,10 +538,10 @@ def get_autounattend(pc_name):
     # SEC-1: escape di tutti i valori interpolati nel XML
     xpc_name   = _xe(d.get("pc_name") or "")
     xadmin_pw  = _xe(d.get("admin_pass") or "")
-    xdc_ip     = _xe(d.get("dc_ip") or "")
-    xdomain    = _xe(d.get("domain") or "")
-    xjoin_user = _xe(d.get("join_user") or "")
-    xjoin_pass = _xe(d.get("join_pass") or "")
+    xdc_ip     = _xe_ps(d.get("dc_ip") or "")  # usato in PS string
+    xdomain    = _xe_ps(d.get("domain") or "")  # usato in PS string
+    xjoin_user = _xe_ps(d.get("join_user") or "")  # usato in PS string
+    xjoin_pass = _xe_ps(d.get("join_pass") or "")  # usato in PS string
     odj_blob   = _xe((d.get("odj_blob") or "").strip())
 
     has_domain = bool(d.get("domain") and d.get("dc_ip") and d.get("join_user"))
@@ -2060,9 +2080,14 @@ def ui_index():
 @app.route("/api/ui-token", methods=["GET"])
 @require_auth
 def ui_token():
-    """Restituisce un session token breve (8h) per la UI, dopo aver verificato l'API key."""
+    """Emette un session token (8h) per la UI, verificata l'API key. Il token
+    può essere usato come X-Api-Key nelle chiamate successive.
+    """
     token = secrets.token_hex(32)
     exp   = time.time() + 28800
+    with _ui_tokens_lock:
+        _purge_expired_tokens()
+        _ui_tokens[token] = exp
     return jsonify({"token": token, "expires_at": exp})
 
 @app.route("/deploy-client")
