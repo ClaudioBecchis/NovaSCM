@@ -33,19 +33,27 @@ except ImportError:
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
+_CORS_ORIGINS = [o.strip() for o in os.environ.get("NOVASCM_CORS_ORIGINS", "").split(",") if o.strip()]
+
 @app.after_request
 def add_cors(response):
-    response.headers["Access-Control-Allow-Origin"]  = "*"
-    response.headers["Access-Control-Allow-Headers"] = "X-Api-Key, Content-Type"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    origin = request.headers.get("Origin", "")
+    if _CORS_ORIGINS and origin in _CORS_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"]  = origin
+        response.headers["Access-Control-Allow-Headers"] = "X-Api-Key, Content-Type"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        response.headers["Vary"] = "Origin"
     return response
 
 @app.route("/api/<path:_>", methods=["OPTIONS"])
 def cors_preflight(_):
     r = Response()
-    r.headers["Access-Control-Allow-Origin"]  = "*"
-    r.headers["Access-Control-Allow-Headers"] = "X-Api-Key, Content-Type"
-    r.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+    origin = request.headers.get("Origin", "")
+    if _CORS_ORIGINS and origin in _CORS_ORIGINS:
+        r.headers["Access-Control-Allow-Origin"]  = origin
+        r.headers["Access-Control-Allow-Headers"] = "X-Api-Key, Content-Type"
+        r.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        r.headers["Vary"] = "Origin"
     return r, 204
 
 # ── Rate limiting (facoltativo: richiede flask-limiter) ───────────────────────
@@ -1152,8 +1160,11 @@ def deploy_start():
             conn.commit()
         else:
             wf_id = wf["id"]
-        # Rimuovi eventuale workflow precedente per questo PC (ripartenza pulita)
-        conn.execute("DELETE FROM pc_workflows WHERE pc_name=? AND workflow_id=?", (pc_name, wf_id))
+        # M-6: archivia il workflow precedente invece di cancellarlo
+        conn.execute(
+            "UPDATE pc_workflows SET archived=1 WHERE pc_name=? AND workflow_id=? AND archived=0",
+            (pc_name, wf_id)
+        )
         conn.commit()
         # Crea nuovo pc_workflow in stato running
         conn.execute(
@@ -1682,22 +1693,16 @@ def pxe_boot_script(mac: str):
             pc_name = _generate_pc_name(norm_mac, pxe_cfg)
             log.info("PXE: MAC sconosciuto %s — auto-creo host '%s'", norm_mac, pc_name)
             cr_id = None
-            if pxe_cfg.get("auto_provision", "1") == "1":
+            if pxe_cfg.get("auto_provision", "0") == "1":
                 try:
+                    # M-5: non salvare credenziali nelle CR auto; richiedere approvazione manuale
                     conn.execute("""
                         INSERT OR IGNORE INTO cr
-                            (pc_name, domain, ou, dc_ip, join_user, join_pass,
-                             admin_pass, software, status, created_at, workflow_id)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                            (pc_name, software, status, created_at, workflow_id)
+                        VALUES (?,?,?,?,?)
                     """, (
                         pc_name,
-                        pxe_cfg.get("default_domain", ""),
-                        pxe_cfg.get("default_ou", ""),
-                        pxe_cfg.get("default_dc_ip", ""),
-                        pxe_cfg.get("default_join_user", ""),
-                        pxe_cfg.get("default_join_pass", ""),
-                        pxe_cfg.get("default_admin_pass", ""),
-                        "[]", "open", now,
+                        "[]", "pending_approval", now,
                         int(pxe_cfg["default_workflow_id"])
                         if pxe_cfg.get("default_workflow_id") else None,
                     ))
@@ -1720,6 +1725,8 @@ def pxe_boot_script(mac: str):
                 "SELECT * FROM pxe_hosts WHERE mac=?", (norm_mac,)
             ).fetchone()
 
+        # I-6: aggiornamento atomico boot_count
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute("""
             UPDATE pxe_hosts
             SET last_boot_at=?, boot_count=boot_count+1, last_ip=?
@@ -1894,7 +1901,7 @@ _PXE_SETTINGS_DEFAULTS = {
     "pxe_enabled":             "1",
     "pxe_iventoy_ip":          "",
     "pxe_iventoy_port":        "10809",
-    "pxe_auto_provision":      "1",
+    "pxe_auto_provision":      "0",
     "pxe_pc_prefix":           "PC",
     "pxe_default_domain":      "",
     "pxe_default_ou":          "",
@@ -1965,11 +1972,16 @@ def ui_index():
     html_path = os.path.join(WEB_DIR, "index.html")
     with open(html_path, encoding="utf-8") as f:
         html = f.read()
-    html = html.replace(
-        "</head>",
-        f'<meta name="x-api-key" content="{API_KEY}">\n</head>'
-    )
+    # C-4: non iniettare l'API key nel DOM — il client la legge via /api/ui-token
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
+
+@app.route("/api/ui-token", methods=["GET"])
+@require_auth
+def ui_token():
+    """Restituisce un session token breve (8h) per la UI, dopo aver verificato l'API key."""
+    token = secrets.token_hex(32)
+    exp   = time.time() + 28800
+    return jsonify({"token": token, "expires_at": exp})
 
 @app.route("/deploy-client")
 def ui_deploy_client():
