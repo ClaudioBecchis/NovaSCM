@@ -218,7 +218,7 @@ def get_db_ctx():
 def _generate_deploy_token(conn, pc_name: str, pw_id) -> str:
     """Genera un enrollment token monouso per il deploy di pc_name (validità 24h)."""
     token = secrets.token_hex(32)
-    now   = datetime.datetime.utcnow()
+    now   = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     exp   = (now + datetime.timedelta(hours=24)).isoformat()
     conn.execute(
         "INSERT INTO deploy_tokens (token, pc_name, pw_id, created_at, expires_at) VALUES (?,?,?,?,?)",
@@ -421,7 +421,7 @@ def _fire_webhook(event: str, data: dict):
         return
     payload = json.dumps({
         "event": event,
-        "ts":    datetime.datetime.utcnow().isoformat(),
+        "ts":    datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat(),
         **data
     }).encode()
     def _send():
@@ -440,7 +440,7 @@ def _fire_webhook(event: str, data: dict):
 
 def _cleanup_stale_workflows():
     """Marca come 'error' i workflow running da più di timeout_min minuti (atomico)."""
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
     with get_db_ctx() as conn:
         conn.execute("BEGIN IMMEDIATE")
         stale = conn.execute("""
@@ -993,7 +993,7 @@ def export_workflow(wf_id):
         ).fetchall()
     export_data = {
         "novascm_export": "1.0",
-        "exported_at":    datetime.datetime.utcnow().isoformat(),
+        "exported_at":    datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat(),
         "workflow": {
             "nome":        dict(wf)["nome"],
             "descrizione": dict(wf).get("descrizione", ""),
@@ -1017,7 +1017,7 @@ def import_workflow():
     wf_data = data.get("workflow", {})
     if not wf_data.get("nome"):
         return jsonify({"error": "Campo obbligatorio: workflow.nome"}), 400
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     with get_db_ctx() as conn:
         try:
             conn.execute(
@@ -1627,7 +1627,7 @@ def create_enrollment_token():
     """Genera un token monouso (1h) per l'enrollment agent — M-7."""
     import uuid as _uuid
     token = str(_uuid.uuid4())
-    now   = datetime.datetime.utcnow().isoformat()
+    now   = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     exp   = time.time() + 3600
     with get_db_ctx() as conn:
         conn.execute(
@@ -1661,7 +1661,7 @@ def download_agent_installer_ps1():
     with get_db_ctx() as conn:
         conn.execute(
             "INSERT INTO enrollment_tokens (token, expires_at, used, created_at) VALUES (?,?,0,?)",
-            (token, exp, datetime.datetime.utcnow().isoformat())
+            (token, exp, datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat())
         )
         conn.commit()
     api_key = token  # token monouso al posto della chiave master
@@ -1720,7 +1720,7 @@ def download_agent_installer_sh():
     with get_db_ctx() as conn:
         conn.execute(
             "INSERT INTO enrollment_tokens (token, expires_at, used, created_at) VALUES (?,?,0,?)",
-            (token, exp, datetime.datetime.utcnow().isoformat())
+            (token, exp, datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat())
         )
         conn.commit()
     api_key = token
@@ -1884,7 +1884,7 @@ def pxe_boot_script(mac: str):
     if not _ip_in_allowed_nets(client_ip):
         log.warning("Boot PXE: IP non autorizzato: %s MAC: %s", client_ip, mac)
         return _ipxe_local("IP non autorizzato"), 200, {"Content-Type": "text/plain"}
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     pxe_cfg = _get_pxe_settings()
 
     with get_db_ctx() as conn:
@@ -2009,7 +2009,7 @@ def deploy_enroll():
     token = (data.get("token") or "").strip()
     if not token or len(token) != 64:
         return jsonify({"error": "Token non valido"}), 400
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     with get_db_ctx() as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
@@ -2075,7 +2075,7 @@ def create_pxe_host():
     mac = _normalize_mac(data.get("mac", ""))
     if not mac:
         return jsonify({"error": "MAC non valido o mancante"}), 400
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     with get_db_ctx() as conn:
         try:
             conn.execute("""
@@ -2188,7 +2188,7 @@ def get_pxe_settings_api():
 def update_pxe_settings_api():
     data        = request.get_json(silent=True) or {}
     allowed_keys = set(_PXE_SETTINGS_DEFAULTS.keys())
-    now         = datetime.datetime.utcnow().isoformat()
+    now         = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     with get_db_ctx() as conn:
         for key, value in data.items():
             if key not in allowed_keys:

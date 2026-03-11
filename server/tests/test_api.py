@@ -30,12 +30,28 @@ def client(tmp_path):
     api.DB = db_file
     api.API_KEY = TEST_KEY
 
+    # Reset connessione thread-local cached — ogni test deve avere il suo DB fresco
+    if hasattr(api._db_local, "conn") and api._db_local.conn is not None:
+        try:
+            api._db_local.conn.close()
+        except Exception:
+            pass
+        api._db_local.conn = None
+
     # Ensure os.makedirs won't fail for :memory: – db_file is a real path
     api.init_db()
 
     api.app.config["TESTING"] = True
     with api.app.test_client() as c:
         yield c
+
+    # Teardown: chiudi e resetta connessione dopo ogni test
+    if hasattr(api._db_local, "conn") and api._db_local.conn is not None:
+        try:
+            api._db_local.conn.close()
+        except Exception:
+            pass
+        api._db_local.conn = None
 
 
 # ── Helper ───────────────────────────────────────────────────────────────────
@@ -456,37 +472,38 @@ class TestSettings:
         assert r.get_json() == {}
 
     def test_put_settings_stores_key(self, client):
-        client.put("/api/settings", headers=AUTH,
-                   data=json.dumps({"novascm_url": "http://example.com"}),
+        r = client.put("/api/settings", headers=AUTH,
+                   data=json.dumps({"webhook_url": "http://example.com"}),
                    content_type="application/json")
+        assert r.status_code == 200
         data = client.get("/api/settings", headers=AUTH).get_json()
-        assert data.get("novascm_url") == "http://example.com"
+        assert data.get("webhook_url") == "http://example.com"
 
     def test_put_settings_returns_all_settings(self, client):
         r = client.put("/api/settings", headers=AUTH,
-                       data=json.dumps({"key1": "v1", "key2": "v2"}),
+                       data=json.dumps({"webhook_url": "http://a.com", "webhook_enabled": "1"}),
                        content_type="application/json")
         assert r.status_code == 200
         data = r.get_json()
-        assert data["key1"] == "v1"
-        assert data["key2"] == "v2"
+        assert data["webhook_url"] == "http://a.com"
+        assert data["webhook_enabled"] == "1"
 
     def test_put_settings_upserts_existing_key(self, client):
         client.put("/api/settings", headers=AUTH,
-                   data=json.dumps({"mykey": "first"}),
+                   data=json.dumps({"webhook_url": "http://first.com"}),
                    content_type="application/json")
         client.put("/api/settings", headers=AUTH,
-                   data=json.dumps({"mykey": "second"}),
+                   data=json.dumps({"webhook_url": "http://second.com"}),
                    content_type="application/json")
         data = client.get("/api/settings", headers=AUTH).get_json()
-        assert data["mykey"] == "second"
+        assert data["webhook_url"] == "http://second.com"
 
     def test_put_settings_none_value_stored_as_empty_string(self, client):
         client.put("/api/settings", headers=AUTH,
-                   data=json.dumps({"nullkey": None}),
+                   data=json.dumps({"webhook_url": None}),
                    content_type="application/json")
         data = client.get("/api/settings", headers=AUTH).get_json()
-        assert data.get("nullkey") == ""
+        assert data.get("webhook_url") == ""
 
     def test_put_settings_no_auth_returns_401(self, client):
         r = client.put("/api/settings",
