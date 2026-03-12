@@ -4,19 +4,21 @@ services:
     container_name: novascm-api
     ports:
       - "9091:9091"
-      # Uncomment the line below to enable PXE/TFTP boot (requires ipxe.efi in ./dist/)
-      # - "69:69/udp"
+      - "69:69/udp"        # TFTP per PXE boot (richiede ipxe.efi in ./dist/)
+    cap_add:
+      - NET_BIND_SERVICE   # per porta 69/udp senza root
     volumes:
       - novascm-data:/data
-      # Uncomment to mount your ipxe.efi for PXE support:
-      # - ./dist:/app/dist:ro
+      - ./dist:/app/dist:ro  # ipxe.efi + winpe/ (solo lettura)
     environment:
       NOVASCM_DB: /data/novascm.db
       PORT: 9091
       NOVASCM_API_KEY: ${NOVASCM_API_KEY:-}
       NOVASCM_PUBLIC_URL: ${NOVASCM_PUBLIC_URL:-}
-      # Set to 1 to enable PXE/TFTP server (also uncomment port 69 above)
-      NOVASCM_PXE_ENABLED: ${NOVASCM_PXE_ENABLED:-0}
+      NOVASCM_PXE_ENABLED: ${NOVASCM_PXE_ENABLED:-1}
+      NOVASCM_TFTP_HOST: "0.0.0.0"
+      NOVASCM_TFTP_PORT: "69"
+      NOVASCM_PXE_ALLOWED_SUBNETS: ${NOVASCM_PXE_ALLOWED_SUBNETS:-192.168.10.0/24,192.168.20.0/24}
       NOVASCM_RATE_LIMIT_STORAGE: memory://
     restart: unless-stopped
     deploy:
