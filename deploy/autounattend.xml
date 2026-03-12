@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- TEMPLATE: sostituire le credenziali prima dell'uso.
+     Per generare automaticamente: GET /api/cr/by-name/{pc}/autounattend.xml
+     oppure GET /api/autounattend/{pc} (endpoint PXE) -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
 
   <!-- ========== windowsPE — partizionamento e selezione edizione ========== -->
@@ -23,7 +26,7 @@
           <Credentials>
             <Username>Administrator</Username>
             <Domain>192.168.10.199</Domain>
-            <Password>Admin2026!</Password>
+            <Password>CHANGE_ME</Password>
           </Credentials>
         </Login>
         <ImageSelection>
@@ -162,7 +165,7 @@
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
           <Description>Download postinstall</Description>
-          <CommandLine>cmd /c "curl -s -o C:\Windows\Temp\postinstall.ps1 http://192.168.10.122/postinstall.ps1"</CommandLine>
+          <CommandLine>cmd /c "curl -s -o C:\Windows\Temp\postinstall.ps1 http://192.168.20.110/postinstall.ps1"</CommandLine>
           <RequiresUserInput>false</RequiresUserInput>
         </SynchronousCommand>
         <!-- C-2: verifica SHA-256 prima di eseguire -->

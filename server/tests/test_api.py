@@ -30,12 +30,34 @@ def client(tmp_path):
     api.DB = db_file
     api.API_KEY = TEST_KEY
 
+    # Reset connessione thread-local cached — ogni test deve avere il suo DB fresco
+    if hasattr(api._db_local, "conn") and api._db_local.conn is not None:
+        try:
+            api._db_local.conn.close()
+        except Exception:
+            pass
+        api._db_local.conn = None
+
     # Ensure os.makedirs won't fail for :memory: – db_file is a real path
     api.init_db()
+
+    # Abilita 127.0.0.1 per i test PXE (subnet allow-list)
+    import ipaddress as _ip
+    api._PXE_ALLOWED_SUBNETS = [_ip.ip_network("127.0.0.0/8"),
+                                 _ip.ip_network("192.168.10.0/24"),
+                                 _ip.ip_network("192.168.20.0/24")]
 
     api.app.config["TESTING"] = True
     with api.app.test_client() as c:
         yield c
+
+    # Teardown: chiudi e resetta connessione dopo ogni test
+    if hasattr(api._db_local, "conn") and api._db_local.conn is not None:
+        try:
+            api._db_local.conn.close()
+        except Exception:
+            pass
+        api._db_local.conn = None
 
 
 # ── Helper ───────────────────────────────────────────────────────────────────
@@ -1036,3 +1058,259 @@ class TestTimeoutCleanup:
         with _api.get_db_ctx() as conn:
             row = conn.execute("SELECT status FROM pc_workflows WHERE id=?", (pw_id,)).fetchone()
         assert row["status"] == "running"
+
+
+# ── PXE Tests ────────────────────────────────────────────────────────────────
+
+class TestPxeBoot:
+    """Test per /api/boot/<mac> — endpoint senza auth, subnet allow-list."""
+
+    def test_boot_unknown_mac_auto_provision(self, client):
+        """MAC sconosciuto con auto_provision=1 → crea CR + pxe_host, restituisce script iPXE."""
+        client.put("/api/pxe/settings",
+                   json={"pxe_auto_provision": "1", "pxe_pc_prefix": "TEST"},
+                   headers=AUTH)
+        resp = client.get("/api/boot/AA:BB:CC:DD:EE:FF")
+        assert resp.status_code == 200
+        assert b"#!ipxe" in resp.data
+        hosts = client.get("/api/pxe/hosts", headers=AUTH).get_json()
+        assert any(h["mac"] == "AA:BB:CC:DD:EE:FF" for h in hosts)
+
+    def test_boot_invalid_mac(self, client):
+        """MAC non valido → script iPXE boot locale."""
+        resp = client.get("/api/boot/INVALID")
+        assert resp.status_code == 200
+        assert b"#!ipxe" in resp.data
+        assert b"sanboot" in resp.data
+
+    def test_boot_known_mac_with_workflow(self, client):
+        """MAC con workflow assegnato → script iPXE deploy con wimboot."""
+        wf = client.post("/api/workflows",
+                         json={"nome": "PXE-WF", "descrizione": "test"},
+                         headers=AUTH).get_json()
+        client.post("/api/pxe/hosts",
+                    json={"mac": "11:22:33:44:55:66", "pc_name": "PXE-TEST",
+                          "workflow_id": wf["id"], "boot_action": "deploy"},
+                    headers=AUTH)
+        resp = client.get("/api/boot/11:22:33:44:55:66")
+        assert resp.status_code == 200
+        assert b"wimboot" in resp.data
+
+    def test_boot_blocked_host(self, client):
+        """Host con boot_action=block → script iPXE poweroff."""
+        client.post("/api/pxe/hosts",
+                    json={"mac": "AA:BB:CC:00:00:01", "boot_action": "block"},
+                    headers=AUTH)
+        resp = client.get("/api/boot/AA:BB:CC:00:00:01")
+        assert resp.status_code == 200
+        assert b"poweroff" in resp.data
+
+    def test_boot_local_no_workflow(self, client):
+        """MAC senza workflow → boot da disco locale."""
+        client.post("/api/pxe/hosts",
+                    json={"mac": "AA:BB:CC:00:00:02", "boot_action": "auto"},
+                    headers=AUTH)
+        resp = client.get("/api/boot/AA:BB:CC:00:00:02")
+        assert resp.status_code == 200
+        assert b"sanboot" in resp.data
+
+
+class TestPxeHostsCrud:
+    """Test CRUD per /api/pxe/hosts."""
+
+    def test_create_host(self, client):
+        resp = client.post("/api/pxe/hosts",
+                           json={"mac": "AA:BB:CC:DD:EE:01", "pc_name": "TEST-PC",
+                                 "boot_action": "auto"},
+                           headers=AUTH)
+        assert resp.status_code == 201
+        assert resp.get_json()["mac"] == "AA:BB:CC:DD:EE:01"
+
+    def test_create_duplicate_mac(self, client):
+        client.post("/api/pxe/hosts",
+                    json={"mac": "AA:BB:CC:DD:EE:02"}, headers=AUTH)
+        resp = client.post("/api/pxe/hosts",
+                           json={"mac": "AA:BB:CC:DD:EE:02"}, headers=AUTH)
+        assert resp.status_code == 409
+
+    def test_create_invalid_mac(self, client):
+        resp = client.post("/api/pxe/hosts",
+                           json={"mac": "not-a-mac"}, headers=AUTH)
+        assert resp.status_code == 400
+
+    def test_create_invalid_boot_action(self, client):
+        resp = client.post("/api/pxe/hosts",
+                           json={"mac": "AA:BB:CC:DD:EE:09", "boot_action": "deploj"},
+                           headers=AUTH)
+        assert resp.status_code == 400
+
+    def test_get_host(self, client):
+        client.post("/api/pxe/hosts",
+                    json={"mac": "AA:BB:CC:DD:EE:03"}, headers=AUTH)
+        resp = client.get("/api/pxe/hosts/AA:BB:CC:DD:EE:03", headers=AUTH)
+        assert resp.status_code == 200
+        assert resp.get_json()["mac"] == "AA:BB:CC:DD:EE:03"
+
+    def test_get_nonexistent_host(self, client):
+        resp = client.get("/api/pxe/hosts/FF:FF:FF:FF:FF:FF", headers=AUTH)
+        assert resp.status_code == 404
+
+    def test_update_host(self, client):
+        client.post("/api/pxe/hosts",
+                    json={"mac": "AA:BB:CC:DD:EE:04", "boot_action": "auto"},
+                    headers=AUTH)
+        resp = client.put("/api/pxe/hosts/AA:BB:CC:DD:EE:04",
+                          json={"boot_action": "block", "notes": "manutenzione"},
+                          headers=AUTH)
+        assert resp.status_code == 200
+        assert resp.get_json()["boot_action"] == "block"
+
+    def test_update_invalid_boot_action(self, client):
+        client.post("/api/pxe/hosts",
+                    json={"mac": "AA:BB:CC:DD:EE:0A"}, headers=AUTH)
+        resp = client.put("/api/pxe/hosts/AA:BB:CC:DD:EE:0A",
+                          json={"boot_action": "invalid"},
+                          headers=AUTH)
+        assert resp.status_code == 400
+
+    def test_delete_host(self, client):
+        client.post("/api/pxe/hosts",
+                    json={"mac": "AA:BB:CC:DD:EE:05"}, headers=AUTH)
+        resp = client.delete("/api/pxe/hosts/AA:BB:CC:DD:EE:05", headers=AUTH)
+        assert resp.status_code == 200
+        resp2 = client.get("/api/pxe/hosts/AA:BB:CC:DD:EE:05", headers=AUTH)
+        assert resp2.status_code == 404
+
+    def test_delete_nonexistent(self, client):
+        resp = client.delete("/api/pxe/hosts/FF:FF:FF:FF:FF:FF", headers=AUTH)
+        assert resp.status_code == 404
+
+    def test_list_hosts(self, client):
+        client.post("/api/pxe/hosts",
+                    json={"mac": "AA:BB:CC:DD:EE:06"}, headers=AUTH)
+        resp = client.get("/api/pxe/hosts", headers=AUTH)
+        assert resp.status_code == 200
+        assert isinstance(resp.get_json(), list)
+        assert len(resp.get_json()) >= 1
+
+
+class TestPxeSettings:
+    """Test per /api/pxe/settings."""
+
+    def test_get_defaults(self, client):
+        resp = client.get("/api/pxe/settings", headers=AUTH)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "pxe_enabled" in data
+        assert "pxe_pc_prefix" in data
+
+    def test_update_and_read(self, client):
+        client.put("/api/pxe/settings",
+                   json={"pxe_pc_prefix": "LAB", "pxe_auto_provision": "0"},
+                   headers=AUTH)
+        resp = client.get("/api/pxe/settings", headers=AUTH)
+        data = resp.get_json()
+        assert data["pxe_pc_prefix"] == "LAB"
+        assert data["pxe_auto_provision"] == "0"
+
+    def test_password_masked(self, client):
+        client.put("/api/pxe/settings",
+                   json={"pxe_default_join_pass": "S3cret!"},
+                   headers=AUTH)
+        resp = client.get("/api/pxe/settings", headers=AUTH)
+        assert resp.get_json()["pxe_default_join_pass"] == "••••••••"
+
+    def test_password_not_overwritten_by_mask(self, client):
+        client.put("/api/pxe/settings",
+                   json={"pxe_default_join_pass": "RealPass123"},
+                   headers=AUTH)
+        client.put("/api/pxe/settings",
+                   json={"pxe_default_join_pass": "••••••••"},
+                   headers=AUTH)
+        resp = client.get("/api/pxe/settings", headers=AUTH)
+        assert resp.get_json()["pxe_default_join_pass"] == "••••••••"
+
+    def test_reject_unknown_keys(self, client):
+        resp = client.put("/api/pxe/settings",
+                          json={"pxe_evil_key": "hacked", "pxe_pc_prefix": "OK"},
+                          headers=AUTH)
+        assert resp.status_code == 200
+        data = client.get("/api/pxe/settings", headers=AUTH).get_json()
+        assert "pxe_evil_key" not in data
+
+
+class TestPxeStatus:
+    """Test per /api/pxe/status."""
+
+    def test_status_returns_structure(self, client):
+        resp = client.get("/api/pxe/status", headers=AUTH)
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "pxe_enabled" in data
+        assert "tftp_alive" in data
+        assert "winpe_files" in data
+        assert "winpe_ready" in data
+        assert "host_count" in data
+        assert "boot_today" in data
+
+
+class TestPxeBootLog:
+    """Test per /api/pxe/boot-log."""
+
+    def test_boot_log_populated_after_boot(self, client):
+        client.get("/api/boot/AA:BB:CC:11:22:33")
+        resp = client.get("/api/pxe/boot-log", headers=AUTH)
+        assert resp.status_code == 200
+        logs = resp.get_json()
+        assert any(l["mac"] == "AA:BB:CC:11:22:33" for l in logs)
+
+
+class TestPxeFileServing:
+    """Test per /api/pxe/file/<name> — whitelist file."""
+
+    def test_path_traversal_blocked(self, client):
+        resp = client.get("/api/pxe/file/../../etc/passwd")
+        assert resp.status_code in (403, 404, 405)
+
+    def test_unknown_file_returns_404(self, client):
+        resp = client.get("/api/pxe/file/evil.exe")
+        assert resp.status_code == 404
+
+    def test_allowed_file_missing_returns_404(self, client):
+        resp = client.get("/api/pxe/file/wimboot")
+        assert resp.status_code == 404
+        assert b"non trovato" in resp.data or b"not found" in resp.data.lower()
+
+
+class TestAutounattendPxe:
+    """Test per /api/autounattend/<pc_name>."""
+
+    def test_unknown_pc_returns_404(self, client):
+        resp = client.get("/api/autounattend/NONEXISTENT-PC")
+        assert resp.status_code == 404
+
+    def test_known_pc_returns_xml(self, client):
+        client.post("/api/cr",
+                    json={"pc_name": "PXE-XML-TEST", "domain": "test.local",
+                          "admin_pass": "Pass123"},
+                    headers=AUTH)
+        resp = client.get("/api/autounattend/PXE-XML-TEST")
+        assert resp.status_code == 200
+        assert b"<?xml" in resp.data
+        assert b"PXE-XML-TEST" in resp.data
+
+    def test_xml_has_install_to(self, client):
+        client.post("/api/cr",
+                    json={"pc_name": "PXE-INST-TEST", "domain": "test.local",
+                          "admin_pass": "Pass123"},
+                    headers=AUTH)
+        resp = client.get("/api/autounattend/PXE-INST-TEST")
+        assert b"InstallTo" in resp.data
+
+    def test_xml_no_api_key_exposed(self, client):
+        client.post("/api/cr",
+                    json={"pc_name": "PXE-KEY-TEST", "domain": "test.local",
+                          "admin_pass": "Pass123"},
+                    headers=AUTH)
+        resp = client.get("/api/autounattend/PXE-KEY-TEST")
+        assert b"X-Api-Key" not in resp.data
