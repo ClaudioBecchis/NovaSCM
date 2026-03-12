@@ -1,7 +1,7 @@
 # NovaSCM — Integrazione PXE Server
-## Report per Claude Code — v2.2.0
+## Report per Claude Code — v2.2.1
 
-**Data:** 2026-03-12
+**Data:** 2026-03-12 (aggiornato: 2026-03-12 — fix v2.2.1)
 **Repository:** https://github.com/ClaudioBecchis/NovaSCM
 **Scope:** Server iPXE/TFTP integrato in NovaSCM — boot intelligente per MAC, auto-creazione CR, deploy Windows via wimboot, sezione PXE nella UI
 
@@ -34,7 +34,7 @@ PC acceso (BIOS → PXE boot)
     │
     ▼
 DHCP (UCG-Fiber, VLAN 10 Trusted)
-    next-server = 192.168.20.103   ← CT 103 (NovaSCM)
+    next-server = 192.168.20.110   ← CT 103 (NovaSCM)
     filename    = "ipxe.efi"
     │
     ▼
@@ -43,7 +43,7 @@ TFTP → NovaSCM (CT 103):69/udp
     │
     ▼
 iPXE chainload HTTP
-    GET http://192.168.20.103:9091/api/boot/{mac}
+    GET http://192.168.20.110:9091/api/boot/{mac}
     (nessuna auth — endpoint protetto da subnet allow-list)
     │
     ├─ MAC conosciuto + workflow assegnato → script iPXE deploy
@@ -52,11 +52,11 @@ iPXE chainload HTTP
     │
     ▼ (se deploy)
 iPXE carica wimboot + WinPE via HTTP da NovaSCM
-    kernel  http://192.168.20.103:9091/api/pxe/file/wimboot
-    initrd  http://192.168.20.103:9091/api/pxe/file/BCD          BCD
-    initrd  http://192.168.20.103:9091/api/pxe/file/boot.sdi     boot.sdi
-    initrd  http://192.168.20.103:9091/api/pxe/file/boot.wim     boot.wim
-    initrd  http://192.168.20.103:9091/api/autounattend/{pc_name} autounattend.xml
+    kernel  http://192.168.20.110:9091/api/pxe/file/wimboot
+    initrd  http://192.168.20.110:9091/api/pxe/file/BCD          BCD
+    initrd  http://192.168.20.110:9091/api/pxe/file/boot.sdi     boot.sdi
+    initrd  http://192.168.20.110:9091/api/pxe/file/boot.wim     boot.wim
+    initrd  http://192.168.20.110:9091/api/autounattend/{pc_name} autounattend.xml
     boot
     │
     ▼
@@ -93,7 +93,7 @@ NovaSCMAgent avviato → DeployScreen → workflow
 
 | Risorsa | IP | VLAN | Note |
 |---|---|---|---|
-| NovaSCM (CT 103) | 192.168.20.103 | 20 (Servers) | API :9091, TFTP :69 |
+| NovaSCM (CT 103) | 192.168.20.110 | 20 (Servers) | API :9091, TFTP :69 |
 | PC client di test | 192.168.10.x | 10 (Trusted) | DHCP option 66/67 qui |
 | SMB share install.wim | da configurare | 20 (Servers) | TrueNAS o Windows Server |
 | UCG-Fiber (gateway) | 192.168.10.1 / 192.168.20.1 | tutte | DHCP server |
@@ -355,7 +355,7 @@ def pxe_boot_script(mac: str):
         log.warning("Boot PXE: MAC non valido: %s", mac)
         return _ipxe_local("MAC non valido"), 200, {"Content-Type": "text/plain"}
 
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
 
     # Riavvia TFTP se morto (best-effort)
     restart_tftp_if_dead()
@@ -652,6 +652,10 @@ def serve_autounattend(pc_name: str):
     return xml, 200, {"Content-Type": "application/xml"}
 
 
+> **NOTA:** il template XML proposto sotto è un riferimento semplificato per illustrare la struttura.
+> La versione completa e funzionante è già implementata in `server/api.py` come `_build_autounattend_xml_pxe()`.
+> **NON** sovrascrivere la funzione esistente con questa versione minimale — il codice in production è più completo.
+
 def _build_autounattend_xml(d: dict) -> str:
     """
     Genera il contenuto XML di autounattend.xml per un CR.
@@ -821,7 +825,7 @@ def create_pxe_host():
     mac = _normalize_mac(data.get("mac", ""))
     if not mac:
         return jsonify({"error": "MAC non valido o mancante"}), 400
-    now = datetime.datetime.utcnow().isoformat()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     with get_db_ctx() as conn:
         try:
             conn.execute("""
@@ -1300,13 +1304,13 @@ Questa configurazione va fatta **una volta sola** sull'UCG-Fiber. Non è codice 
 **Percorso:** Settings → Networks → VLAN 10 (Trusted) → DHCP → Advanced
 
 ```
-DHCP Option 66 (TFTP Server):  192.168.20.103
+DHCP Option 66 (TFTP Server):  192.168.20.110
 DHCP Option 67 (Boot File):    ipxe.efi
 ```
 
 ### 8.2 — Firewall rules VLAN 10 → VLAN 20
 
-La VLAN 10 deve poter raggiungere CT 103 (192.168.20.103) sulle porte:
+La VLAN 10 deve poter raggiungere CT 103 (192.168.20.110) sulle porte:
 - **69/udp** — TFTP (ipxe.efi)
 - **9091/tcp** — HTTP API NovaSCM (boot script, file WinPE, autounattend.xml)
 
@@ -1334,7 +1338,7 @@ cd ipxe/src
 cat > novascm.ipxe << 'EOF'
 #!ipxe
 dhcp
-chain http://192.168.20.103:9091/api/boot/${net0/mac} || sanboot --no-describe --drive 0x80
+chain http://192.168.20.110:9091/api/boot/${net0/mac} || sanboot --no-describe --drive 0x80
 EOF
 
 make bin-x86_64-efi/ipxe.efi EMBED=novascm.ipxe
@@ -1450,34 +1454,34 @@ server/dist/winpe/
 
 ```bash
 # 1. Verifica TFTP risponde
-tftp 192.168.20.103 -c get ipxe.efi /tmp/test.efi && ls -lh /tmp/test.efi
+tftp 192.168.20.110 -c get ipxe.efi /tmp/test.efi && ls -lh /tmp/test.efi
 
 # 2. Simula boot iPXE (curl)
-curl http://192.168.20.103:9091/api/boot/AA:BB:CC:DD:EE:FF
+curl http://192.168.20.110:9091/api/boot/AA:BB:CC:DD:EE:FF
 # Atteso: script iPXE con kernel wimboot + initrd BCD/boot.sdi/boot.wim
 
 # 3. Verifica file WinPE serviti
-curl -I http://192.168.20.103:9091/api/pxe/file/wimboot
+curl -I http://192.168.20.110:9091/api/pxe/file/wimboot
 # Atteso: 200 OK
-curl -I http://192.168.20.103:9091/api/pxe/file/boot.wim
+curl -I http://192.168.20.110:9091/api/pxe/file/boot.wim
 # Atteso: 200 OK (Content-Length ~300-500MB)
 
 # 4. Verifica autounattend.xml dinamico
 # (prima creare un CR di test con pc_name=TEST-PC)
-curl http://192.168.20.103:9091/api/autounattend/TEST-PC
+curl http://192.168.20.110:9091/api/autounattend/TEST-PC
 # Atteso: XML autounattend con ComputerName=TEST-PC
 
 # 5. Verifica accesso negato da subnet non autorizzata
-curl http://192.168.20.103:9091/api/boot/AA:BB:CC:DD:EE:FF \
+curl http://192.168.20.110:9091/api/boot/AA:BB:CC:DD:EE:FF \
   -H "X-Forwarded-For: 10.0.0.1"
 # Atteso: 403
 
 # 6. Verifica host auto-creato
-curl http://192.168.20.103:9091/api/pxe/hosts \
+curl http://192.168.20.110:9091/api/pxe/hosts \
   -H "X-Api-Key: TUA_CHIAVE" | python3 -m json.tool
 
 # 7. Verifica health check PXE completo
-curl http://192.168.20.103:9091/api/pxe/status \
+curl http://192.168.20.110:9091/api/pxe/status \
   -H "X-Api-Key: TUA_CHIAVE" | python3 -m json.tool
 # Atteso: tftp_alive: true, winpe_ready: true, winpe_files con dimensioni
 ```
@@ -1498,10 +1502,178 @@ curl http://192.168.20.103:9091/api/pxe/status \
 | **Rimosso** | 7 | Campi iVentoy IP/porta dalla UI |
 | **Aggiunto** | 7 | Badge separato stato WinPE con lista file mancanti |
 | **Aggiunto** | 7 | Campo dominio default nella UI settings |
-| **Config** | Tutte | IP NovaSCM aggiornato a 192.168.20.103 (CT 103) |
+| **Config** | Tutte | IP NovaSCM aggiornato a 192.168.20.110 (CT 103) |
 | **Sicurezza** | 3 | File WinPE serviti solo da whitelist statica (`_WINPE_ALLOWED_FILES`) |
 | **Docker** | 6 | Aggiunto volume `./dist:/app/dist:ro` per file PXE |
 
 ---
 
-*Report generato il 2026-03-12 — NovaSCM v2.2.0 — PolarisCore Homelab*
+---
+
+## PROBLEMI NOTI E PUNTI DA COMPLETARE
+
+> Questa sezione elenca i problemi noti, le limitazioni attuali e le attività pendenti
+> per l'integrazione PXE v2.2.1. Aggiornare man mano che vengono risolti.
+
+---
+
+### 🔴 Critici (bloccano il funzionamento in produzione)
+
+#### P-1 — `install.wim` non distribuito con il repo
+**Stato:** ⏳ aperto
+**Impatto:** senza `install.wim` in `server/dist/winpe/`, Windows Setup non riesce a installare il SO.
+**Causa:** il file pesa ~4GB — non può stare in git.
+**Soluzione richiesta:**
+```bash
+# Su CT 103, copiare install.wim dall'ISO estratta su CT 110:
+scp root@192.168.10.122:/DATA/win11-extracted/sources/install.wim \
+    /opt/novascm/dist/winpe/install.wim
+```
+**Alternativa:** montare `/DATA/win11-extracted/sources/` da CT 110 via NFS o bind mount Docker.
+
+---
+
+#### P-2 — WinPE (`boot.wim`) non personalizzato
+**Stato:** ⏳ aperto
+**Impatto:** `boot.wim` generico da ISO non ha `startnet.cmd` personalizzato → il download di `install.wim` via `certutil` in `RunSynchronousCommand` potrebbe non funzionare se il WinPE non ha connettività di rete configurata automaticamente.
+**Soluzione richiesta:** personalizzare `boot.wim` con Windows ADK (Deployment Tools) per aggiungere driver di rete e uno `startnet.cmd` che:
+1. Esegue `wpeinit` (abilita rete)
+2. Scarica `install.wim` da NovaSCM prima che `setup.exe` venga avviato
+```cmd
+:: startnet.cmd personalizzato
+wpeinit
+certutil -urlcache -split -f http://192.168.20.110:9091/api/pxe/file/install.wim X:\sources\install.wim
+```
+
+---
+
+#### P-3 — File WinPE (`wimboot`, `BCD`, `boot.sdi`, `boot.wim`) non distribuiti
+**Stato:** ⏳ aperto
+**Impatto:** la directory `server/dist/winpe/` è vuota sul server. L'endpoint `/api/pxe/status` segnala `winpe_ready: false`.
+**Soluzione richiesta:** seguire la procedura in `docs/pxe-deploy-setup.txt` per estrarre i file dall'ISO Windows 11 e scaricare `wimboot`.
+
+Procedura rapida:
+```bash
+# 1. Scarica wimboot
+wget https://github.com/ipxe/wimboot/releases/latest/download/wimboot \
+     -O /opt/novascm/dist/winpe/wimboot
+
+# 2. Estrai BCD, boot.sdi, boot.wim dall'ISO
+mount -o loop Win11_25H2.iso /mnt/iso
+cp /mnt/iso/boot/bcd    /opt/novascm/dist/winpe/BCD
+cp /mnt/iso/boot/boot.sdi /opt/novascm/dist/winpe/boot.sdi
+cp /mnt/iso/sources/boot.wim /opt/novascm/dist/winpe/boot.wim
+umount /mnt/iso
+
+# 3. install.wim (vedi P-1)
+cp /DATA/win11-extracted/sources/install.wim /opt/novascm/dist/winpe/install.wim
+```
+
+---
+
+### 🟠 Alti (degradano funzionalità ma non bloccano completamente)
+
+#### P-4 — DHCP option 66/67 da configurare su UCG Fiber
+**Stato:** ⏳ aperto
+**Impatto:** senza `next-server` e `filename` nel DHCP, i client PXE non scaricano `ipxe.efi` e non avviano il boot PXE.
+**Configurazione richiesta su UCG Fiber (https://192.168.10.1):**
+- VLAN Management (VLAN 10):
+  - DHCP option 66 (TFTP server): `192.168.20.110`
+  - DHCP option 67 (bootfile name): `ipxe.efi`
+- In alternativa, usare `deploy/pxe.conf` come proxyDHCP su CT 110 o CT 103.
+
+---
+
+#### P-5 — `ipxe.efi` non distribuito con il repo
+**Stato:** ⏳ aperto
+**Impatto:** senza `ipxe.efi` in `server/dist/`, il TFTP non ha nulla da servire ai client UEFI.
+**Soluzione:**
+```bash
+# Scarica ipxe.efi con lo script NovaSCM embedded (se NOVASCM_PUBLIC_URL è impostato):
+wget https://boot.ipxe.org/ipxe.efi -O /opt/novascm/dist/ipxe.efi
+# OPPURE compilare con script embed per puntare all'endpoint /api/boot/{mac}:
+# https://ipxe.org/embed
+```
+**Nota:** l'endpoint `/api/boot/{mac}` deve essere raggiungibile dall'indirizzo IP in `ipxe.efi`. Usare un `ipxe.efi` compilato con script embed che punta a `http://192.168.20.110:9091/api/boot/`.
+
+---
+
+#### P-6 — Due funzioni `autounattend` divergenti in `api.py`
+**Stato:** ⏳ aperto (tech debt)
+**Impatto:** `get_autounattend()` (endpoint CR `/api/cr/by-name/<pc>/autounattend.xml`) e `_build_autounattend_xml_pxe()` (endpoint PXE `/api/autounattend/<pc>`) generano XML con logica separata. Aggiungere una funzionalità a uno non la aggiunge all'altro → rischio di divergenza futura.
+**Soluzione suggerita:** estrarre un helper condiviso `_build_autounattend_core(cr_dict, *, pxe_mode=False)` che entrambe le route chiamano.
+
+---
+
+#### P-7 — Test PXE necessitano `127.0.0.0/8` in subnet allow-list
+**Stato:** ✅ workaround applicato in `test_api.py`
+**Dettaglio:** i test Flask usano `127.0.0.1` come client IP. L'endpoint `/api/boot/<mac>` è protetto dalla subnet allow-list (`192.168.10.0/24, 192.168.20.0/24`). Per far passare i test, `test_api.py` sovrascrive `api._PXE_ALLOWED_SUBNETS` aggiungendo `127.0.0.0/8`.
+**Implicazione in produzione:** non impatta — `127.0.0.0/8` non è raggiungibile da client fisici.
+
+---
+
+### 🟡 Medi (miglioramenti e cleanup)
+
+#### P-8 — Integrazione UI: nessun modal completo per host PXE
+**Stato:** ⏳ aperto
+**Dettaglio:** `editPxeHost()` e `openPxeHostModal()` usano `prompt()` browser come soluzione temporanea. Non supportano la modifica di `pc_name`, `cr_id`, `workflow_id`, `notes`.
+**Soluzione:** implementare modal HTML completo con form, simile ai modal già presenti per CR e workflow.
+
+---
+
+#### P-9 — Autounattend PXE: password amministratore vuota se non configurata
+**Stato:** ⏳ aperto
+**Dettaglio:** se il CR non ha `admin_pass` valorizzato, l'XML generato ha `<Value></Value>` per la password Administrator. Windows Setup con password vuota in autounattend è permesso ma insicuro.
+**Soluzione:** aggiungere validazione in `serve_autounattend_pxe()` e/o un default configurabile in `_PXE_SETTINGS_DEFAULTS`.
+
+---
+
+#### P-10 — Nessun feedback visivo boot in corso nell'UI
+**Stato:** ⏳ aperto
+**Dettaglio:** quando un PC avvia il boot PXE, il log viene aggiornato solo alla prossima richiesta dell'utente. Non c'è polling automatico nella tab PXE.
+**Soluzione:** aggiungere polling ogni 10s nel tab PXE (simile al polling checkin già presente per altri tab) che aggiorna la boot-log table.
+
+---
+
+### 🔵 Minori (documentazione e manutenzione)
+
+#### P-11 — `docs/pxe-deploy-setup.txt` da convertire in Markdown
+**Stato:** ⏳ aperto
+**File:** `docs/pxe-deploy-setup.txt`
+**Dettaglio:** le istruzioni operative per il deploy PXE sono in formato `.txt` non strutturato. Convertire in Markdown con sezioni chiare per CT 103 (server) e CT 110 (file ISO).
+
+---
+
+#### P-12 — Versione nel `CLAUDE.md` non allineata
+**Stato:** ⏳ aperto
+**File:** `CLAUDE.md`
+**Dettaglio:** il `CLAUDE.md` cita `v2.1.0` come versione corrente. Aggiornare a `v2.2.1` dopo il completamento di tutti i fix.
+
+---
+
+## ORDINE DI RISOLUZIONE CONSIGLIATO
+
+```
+PRIORITÀ  ID    DESCRIZIONE                          EFFORT
+────────  ────  ───────────────────────────────────  ──────
+  1        P-3   Copia file WinPE in dist/winpe/      30 min (CLI su CT 103)
+  2        P-5   Copia ipxe.efi in dist/             5 min
+  3        P-1   Copia install.wim (4GB) in dist/    ~30 min (trasferimento file)
+  4        P-4   Configura DHCP option 66/67 UCG     10 min (UI gateway)
+  5        P-2   Personalizza boot.wim (ADK)          2-4h (richiede Windows + ADK)
+  6        P-6   Unifica funzioni autounattend         2h (refactoring)
+  7        P-8   Modal completo host PXE UI           1-2h (frontend)
+  8        P-9   Validazione admin_pass mancante       30 min
+  9        P-10  Polling boot-log automatico          30 min
+ 10        P-11  Converti pxe-deploy-setup.txt        30 min
+ 11        P-12  Aggiorna CLAUDE.md versione          5 min
+```
+
+**Test di verifica funzionamento end-to-end:**
+1. `GET /api/pxe/status` → `winpe_ready: true`, `tftp_alive: true`
+2. Boot UEFI di un PC sulla VLAN 10 → riceve `ipxe.efi` via TFTP
+3. iPXE chiama `/api/boot/{mac}` → risponde con script wimboot
+4. WinPE avvia Windows Setup → `autounattend.xml` trovato
+5. Windows installato automaticamente → agente NovaSCM avviato
+
+*Report generato il 2026-03-12 — NovaSCM v2.2.1 — PolarisCore Homelab*
