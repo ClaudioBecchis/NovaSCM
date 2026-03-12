@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY api.py .
+COPY api.py pxe_server.py ./
 COPY web/ ./web/
 
 # Prima crea utente e directory, POI dichiara il volume

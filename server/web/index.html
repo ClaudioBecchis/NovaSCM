@@ -1618,13 +1618,27 @@ function app() {
       await this.api(`/api/pxe/hosts/${mac}`, 'DELETE');
       await this.loadPxeHosts();
     },
-    editPxeHost(mac) {
-      // TODO: aprire modal di modifica
-      alert(`Edit: ${mac} — TODO`);
+    async editPxeHost(mac) {
+      const action = prompt(
+        `Azione boot per ${mac}:\nauto | deploy | local | block`,
+        'auto'
+      );
+      if (!action) return;
+      const valid = ['auto', 'deploy', 'local', 'block'];
+      if (!valid.includes(action)) { alert('Azione non valida'); return; }
+      const r = await this.api(`/api/pxe/hosts/${encodeURIComponent(mac)}`, 'PUT', { boot_action: action });
+      if (r) await this.loadPxeHosts();
     },
-    openPxeHostModal() {
-      // TODO: modal creazione nuovo host
-      alert('TODO: aggiungi host PXE');
+    async openPxeHostModal() {
+      const mac = prompt('Indirizzo MAC (es. AA:BB:CC:DD:EE:FF):');
+      if (!mac) return;
+      const name = prompt('Nome PC (opzionale):') || '';
+      const r = await this.api('/api/pxe/hosts', 'POST', {
+        mac: mac.trim(),
+        pc_name: name.trim(),
+        boot_action: 'auto',
+      });
+      if (r) await this.loadPxeHosts();
     },
     async checkPxeStatus() {
       const tftpBadge  = document.getElementById('tftp-status');
