@@ -441,10 +441,15 @@ select option { background: var(--surface-2); }
     <div class="topbar-title" x-text="{dashboard:'Dashboard',workflows:'Workflow',assignments:'Deploy',floor:'Deploy Floor',cr:'Change Request',settings:'Settings'}[section]"></div>
     <div class="topbar-right">
       <span class="led" :class="liveOk ? 'led-run' : 'led-err'"></span>
+      <span x-show="assignments.some(a=>a.status==='running')"
+            style="font-size:11px;color:var(--run);font-family:'DM Mono',monospace;margin-right:4px">● LIVE</span>
       <span class="topbar-time" x-text="lastUpdate"></span>
       <button class="btn btn-ghost btn-sm" @click="loadAll()">↻</button>
       <template x-if="section==='workflows'">
-        <button class="btn btn-primary btn-sm" @click="openNewWorkflow()">+ WORKFLOW</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" @click="importWorkflow()" title="Importa JSON">⬆ Importa</button>
+          <button class="btn btn-primary btn-sm" @click="openNewWorkflow()">+ WORKFLOW</button>
+        </div>
       </template>
       <template x-if="section==='assignments'">
         <button class="btn btn-primary btn-sm" @click="openAssign()">+ ASSEGNA</button>
@@ -548,6 +553,7 @@ select option { background: var(--surface-2); }
             <div style="display:flex;gap:5px;flex-shrink:0">
               <button class="btn btn-ghost btn-sm" @click="openSteps(wf)">✏ Step</button>
               <button class="btn btn-ghost btn-sm" @click="openAssignFor(wf)">▶ Assegna</button>
+              <a class="btn btn-ghost btn-sm" :href="`/api/workflows/${wf.id}/export`" title="Esporta JSON">⬇</a>
               <button class="btn btn-danger btn-sm btn-icon" @click="deleteWorkflow(wf)">✕</button>
             </div>
           </div>
@@ -814,6 +820,28 @@ select option { background: var(--surface-2); }
             <option :value="wf.id" x-text="wf.nome"></option>
           </template>
         </select>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <button class="btn btn-primary" @click="saveSettings()">Salva</button>
+        <span x-show="settingsSaved" style="color:var(--ok);font-size:12px;font-family:'DM Mono',monospace">✓ Salvato</span>
+      </div>
+    </div>
+
+    <div class="card" style="max-width:480px;margin-bottom:14px">
+      <div class="card-title">Notifiche Webhook</div>
+      <p class="muted" style="margin-bottom:13px;font-size:12px">
+        Ricevi una chiamata HTTP POST quando un deploy si completa o va in timeout.<br>
+        Compatibile con ntfy, Gotify, Telegram bot, Discord/Slack webhook, n8n.
+      </p>
+      <div class="form-group">
+        <label>Webhook URL</label>
+        <input type="url" x-model="settings.webhook_url" placeholder="https://ntfy.sh/mio-topic" style="font-family:'DM Mono',monospace;font-size:12px">
+      </div>
+      <div class="form-group" style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+        <label style="margin:0;cursor:pointer">
+          <input type="checkbox" x-model="settings.webhook_enabled" style="margin-right:6px">
+          Abilita notifiche
+        </label>
       </div>
       <div style="display:flex;align-items:center;gap:10px">
         <button class="btn btn-primary" @click="saveSettings()">Salva</button>
@@ -1209,7 +1237,7 @@ function app() {
     workflows: [],
     assignments: [],
     crs: [],
-    settings: { default_workflow_id: null },
+    settings: { default_workflow_id: null, webhook_url: '', webhook_enabled: false },
     settingsSaved: false,
 
     form: { nome: '', descrizione: '' },
@@ -1232,7 +1260,15 @@ function app() {
 
     async init() {
       await this.loadAll();
-      setInterval(() => this.loadAll(), 5000);
+      // Polling: 5s quando ci sono workflow running, 30s altrimenti
+      setInterval(() => {
+        const hasRunning = this.assignments.some(a => a.status === 'running');
+        if (hasRunning || (Date.now() - this._lastFull > 30000)) {
+          this.loadAll();
+          this._lastFull = Date.now();
+        }
+      }, 5000);
+      this._lastFull = Date.now();
     },
 
     async loadAll() {
@@ -1282,11 +1318,19 @@ function app() {
 
     async loadSettings() {
       const s = await this.api('/api/settings');
-      if (s) this.settings = { default_workflow_id: s.default_workflow_id ? parseInt(s.default_workflow_id) : null };
+      if (s) this.settings = {
+        default_workflow_id: s.default_workflow_id ? parseInt(s.default_workflow_id) : null,
+        webhook_url:     s.webhook_url     || '',
+        webhook_enabled: s.webhook_enabled === '1',
+      };
     },
 
     async saveSettings() {
-      const r = await this.api('/api/settings', 'PUT', { default_workflow_id: this.settings.default_workflow_id || '' });
+      const r = await this.api('/api/settings', 'PUT', {
+        default_workflow_id: this.settings.default_workflow_id || '',
+        webhook_url:         this.settings.webhook_url || '',
+        webhook_enabled:     this.settings.webhook_enabled ? '1' : '0',
+      });
       if (r) {
         this.settingsSaved = true;
         setTimeout(() => { this.settingsSaved = false; }, 2500);
@@ -1315,6 +1359,28 @@ function app() {
       const r = await this.api('/api/workflows', 'POST', this.form);
       if (r) { this.modal = null; await this.loadWorkflows(); }
     },
+    async importWorkflow() {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json,application/json';
+      input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          const r = await this.api('/api/workflows/import', 'POST', data);
+          if (r) {
+            this.notify(`Workflow importato (ID: ${r.workflow_id})`, 'ok');
+            await this.loadWorkflows();
+          }
+        } catch (err) {
+          this.notify('Errore import: ' + err.message, 'err');
+        }
+      };
+      input.click();
+    },
+
     async deleteWorkflow(wf) {
       if (!confirm(`Eliminare il workflow "${wf.nome}"?`)) return;
       await this.api(`/api/workflows/${wf.id}`, 'DELETE');

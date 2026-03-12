@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json.Nodes;
 using System.Runtime.Versioning;
 
@@ -78,13 +79,15 @@ public class Worker : BackgroundService
             if (exePath == null) return;
 
             var args = $"hostname={cfg.PcName} domain={cfg.Domain} pw_id={pwId} " +
-                       $"server={cfg.ApiUrl} key={cfg.ApiKey} wf={Uri.EscapeDataString(wfNome)}";
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                       $"server={cfg.ApiUrl} wf={Uri.EscapeDataString(wfNome)}";
+            var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName        = exePath,
                 Arguments       = args,
-                UseShellExecute = true,
-            });
+                UseShellExecute = false,
+            };
+            psi.EnvironmentVariables["NOVASCM_API_KEY"] = cfg.ApiKey;
+            System.Diagnostics.Process.Start(psi);
         }
         catch (Exception ex)
         {
@@ -212,8 +215,37 @@ public class Worker : BackgroundService
             // Segnala running
             await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, "running", "", ct, cfg.ApiKey);
 
-            // Esegui
-            var result = await _exec.ExecuteAsync(step, ct);
+            // Calcola parametri retry
+            int retryMax      = 1;
+            int retryDelaySec = 10;
+            if (suErr == "retry")
+            {
+                System.Text.Json.Nodes.JsonObject? p = null;
+                try { p = System.Text.Json.Nodes.JsonNode.Parse(
+                        step["parametri"]?.GetValue<string>() ?? "{}")?.AsObject(); }
+                catch { /* parametri non JSON, ignora */ }
+                retryMax      = p?["retry_max"]?.GetValue<int>()       ?? 3;
+                retryDelaySec = p?["retry_delay_sec"]?.GetValue<int>() ?? 10;
+            }
+
+            // Esegui con eventuale retry, misurando la durata totale
+            var sw = Stopwatch.StartNew();
+            StepResult result = default!;
+            for (int attempt = 1; attempt <= retryMax; attempt++)
+            {
+                result = await _exec.ExecuteAsync(step, ct);
+                if (result.Ok != false) break;   // done, skipped o null → non ritentare
+                if (suErr == "retry" && attempt < retryMax)
+                {
+                    _log.LogWarning("  → Tentativo {A}/{M} fallito, retry tra {D}s",
+                        attempt, retryMax, retryDelaySec);
+                    await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, "running",
+                        $"Tentativo {attempt}/{retryMax} fallito. Retry in {retryDelaySec}s...",
+                        ct, cfg.ApiKey);
+                    await Task.Delay(TimeSpan.FromSeconds(retryDelaySec), ct);
+                }
+            }
+            sw.Stop();
 
             if (result.Ok is null)
             {
@@ -227,7 +259,8 @@ public class Worker : BackgroundService
             _log.LogInformation("  → {Status}: {Out}", status.ToUpperInvariant(),
                 result.Output.Length > 200 ? result.Output[..200] + "..." : result.Output);
 
-            await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, status, result.Output, ct, cfg.ApiKey);
+            await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, status, result.Output, ct, cfg.ApiKey,
+                                       elapsedSec: sw.Elapsed.TotalSeconds);
             if (!string.IsNullOrWhiteSpace(result.Output))
                 await _api.SendLogAsync(cfg.ApiUrl, pwId, result.Output, ct, cfg.ApiKey);
 

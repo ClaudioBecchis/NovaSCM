@@ -47,17 +47,19 @@ public class ApiClient
     }
 
     public async Task ReportStepAsync(string apiUrl, string pcName, int stepId,
-                                      string status, string output, CancellationToken ct, string apiKey = "")
+                                      string status, string output, CancellationToken ct,
+                                      string apiKey = "", double elapsedSec = 0)
     {
         try
         {
             var url  = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow/step";
             var body = JsonSerializer.Serialize(new
             {
-                step_id = stepId,
+                step_id     = stepId,
                 status,
-                output  = output.Length > 2000 ? output[^2000..] : output,
-                ts      = DateTime.Now.ToString("o")
+                output      = output.Length > 2000 ? output[^2000..] : output,
+                ts          = DateTime.Now.ToString("o"),
+                elapsed_sec = elapsedSec
             });
             var content = new StringContent(body, Encoding.UTF8, "application/json");
             using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);

@@ -30,28 +30,12 @@ def client(tmp_path):
     api.DB = db_file
     api.API_KEY = TEST_KEY
 
-    # Reset connessione thread-local cached — ogni test deve avere il suo DB fresco
-    if hasattr(api._db_local, "conn") and api._db_local.conn is not None:
-        try:
-            api._db_local.conn.close()
-        except Exception:
-            pass
-        api._db_local.conn = None
-
     # Ensure os.makedirs won't fail for :memory: – db_file is a real path
     api.init_db()
 
     api.app.config["TESTING"] = True
     with api.app.test_client() as c:
         yield c
-
-    # Teardown: chiudi e resetta connessione dopo ogni test
-    if hasattr(api._db_local, "conn") and api._db_local.conn is not None:
-        try:
-            api._db_local.conn.close()
-        except Exception:
-            pass
-        api._db_local.conn = None
 
 
 # ── Helper ───────────────────────────────────────────────────────────────────
@@ -472,10 +456,9 @@ class TestSettings:
         assert r.get_json() == {}
 
     def test_put_settings_stores_key(self, client):
-        r = client.put("/api/settings", headers=AUTH,
+        client.put("/api/settings", headers=AUTH,
                    data=json.dumps({"webhook_url": "http://example.com"}),
                    content_type="application/json")
-        assert r.status_code == 200
         data = client.get("/api/settings", headers=AUTH).get_json()
         assert data.get("webhook_url") == "http://example.com"
 
@@ -681,14 +664,375 @@ class TestVersion:
                          json={"pc_name": "STEP-PC", "domain": "test.local"},
                          headers=AUTH).get_json()
         cr_id = cr["id"]
-        # simula checkin step
-        client.post("/api/checkin",
-                    json={"hostname": "STEP-PC"},
-                    headers=AUTH)
-        client.post("/api/step",
-                    json={"hostname": "STEP-PC", "step": "postinstall_start", "status": "done"},
-                    headers=AUTH)
+        # Inserisce uno step reale tramite endpoint corretto
+        r_step = client.post("/api/cr/by-name/STEP-PC/step",
+                             json={"step": "postinstall_start", "status": "done"},
+                             headers=AUTH)
+        assert r_step.status_code == 200
+        # Verifica che lo step esista prima della cancellazione
+        steps_before = client.get(f"/api/cr/{cr_id}/steps", headers=AUTH).get_json()
+        assert steps_before["total"] == 1
+        # Cancella la CR
         client.delete(f"/api/cr/{cr_id}", headers=AUTH)
         # La CR non deve più esistere
         r = client.get(f"/api/cr/{cr_id}", headers=AUTH)
         assert r.status_code == 404
+
+
+# ── v2.1.0 Feature Tests ──────────────────────────────────────────────────────
+
+class TestSuErroreValidation:
+    """FEATURE-3: validazione su_errore in add_step e update_step."""
+
+    def _create_wf(self, client):
+        wf = client.post("/api/workflows", json={"nome": "WF-SU-ERR"}, headers=AUTH).get_json()
+        return wf["id"]
+
+    def test_add_step_su_errore_stop(self, client):
+        wf_id = self._create_wf(client)
+        r = client.post(f"/api/workflows/{wf_id}/steps",
+                        json={"nome": "S1", "tipo": "reboot", "ordine": 1, "su_errore": "stop"},
+                        headers=AUTH)
+        assert r.status_code == 201
+        assert r.get_json()["su_errore"] == "stop"
+
+    def test_add_step_su_errore_continue(self, client):
+        wf_id = self._create_wf(client)
+        r = client.post(f"/api/workflows/{wf_id}/steps",
+                        json={"nome": "S2", "tipo": "message", "ordine": 2, "su_errore": "continue"},
+                        headers=AUTH)
+        assert r.status_code == 201
+        assert r.get_json()["su_errore"] == "continue"
+
+    def test_add_step_su_errore_retry(self, client):
+        wf_id = self._create_wf(client)
+        r = client.post(f"/api/workflows/{wf_id}/steps",
+                        json={"nome": "S3", "tipo": "winget_install", "ordine": 3, "su_errore": "retry"},
+                        headers=AUTH)
+        assert r.status_code == 201
+        assert r.get_json()["su_errore"] == "retry"
+
+    def test_add_step_su_errore_invalid(self, client):
+        wf_id = self._create_wf(client)
+        r = client.post(f"/api/workflows/{wf_id}/steps",
+                        json={"nome": "S4", "tipo": "reboot", "ordine": 4, "su_errore": "ignore"},
+                        headers=AUTH)
+        assert r.status_code == 400
+        assert "su_errore" in r.get_json()["error"]
+
+    def test_update_step_su_errore_invalid(self, client):
+        wf_id = self._create_wf(client)
+        step = client.post(f"/api/workflows/{wf_id}/steps",
+                           json={"nome": "S1", "tipo": "reboot", "ordine": 1},
+                           headers=AUTH).get_json()
+        r = client.put(f"/api/workflows/{wf_id}/steps/{step['id']}",
+                       json={"nome": "S1", "tipo": "reboot", "ordine": 1, "su_errore": "bad"},
+                       headers=AUTH)
+        assert r.status_code == 400
+
+    def test_update_step_su_errore_retry(self, client):
+        wf_id = self._create_wf(client)
+        step = client.post(f"/api/workflows/{wf_id}/steps",
+                           json={"nome": "S1", "tipo": "reboot", "ordine": 1},
+                           headers=AUTH).get_json()
+        r = client.put(f"/api/workflows/{wf_id}/steps/{step['id']}",
+                       json={"nome": "S1", "tipo": "reboot", "ordine": 1, "su_errore": "retry"},
+                       headers=AUTH)
+        assert r.status_code == 200
+        assert r.get_json()["su_errore"] == "retry"
+
+
+class TestArchivedAndHistory:
+    """FEATURE-4: archived filter + history endpoint."""
+
+    def _setup(self, client):
+        """Crea workflow + assegna a PC + mette in stato running."""
+        wf = client.post("/api/workflows", json={"nome": "WF-ARCH"}, headers=AUTH).get_json()
+        wf_id = wf["id"]
+        client.post(f"/api/workflows/{wf_id}/steps",
+                    json={"nome": "S1", "tipo": "reboot", "ordine": 1},
+                    headers=AUTH)
+        pw = client.post("/api/pc-workflows",
+                         json={"pc_name": "ARCH-PC", "workflow_id": wf_id},
+                         headers=AUTH).get_json()
+        pw_id = pw["id"]
+        # Metti in stato running
+        import api as _api
+        with _api.get_db_ctx() as conn:
+            conn.execute("UPDATE pc_workflows SET status='running', started_at=datetime('now') WHERE id=?",
+                         (pw_id,))
+            conn.commit()
+        return pw_id, wf_id
+
+    def test_list_pc_workflows_excludes_archived(self, client):
+        pw_id, _ = self._setup(client)
+        # Archivia il workflow
+        import api as _api
+        with _api.get_db_ctx() as conn:
+            conn.execute("UPDATE pc_workflows SET archived=1, status='completed' WHERE id=?", (pw_id,))
+            conn.commit()
+        rows = client.get("/api/pc-workflows", headers=AUTH).get_json()
+        ids = [r["id"] for r in rows]
+        assert pw_id not in ids
+
+    def test_list_pc_workflows_includes_non_archived(self, client):
+        pw_id, _ = self._setup(client)
+        rows = client.get("/api/pc-workflows", headers=AUTH).get_json()
+        ids = [r["id"] for r in rows]
+        assert pw_id in ids
+
+    def test_history_requires_pc_name(self, client):
+        r = client.get("/api/pc-workflows/history", headers=AUTH)
+        assert r.status_code == 400
+
+    def test_history_returns_all_including_archived(self, client):
+        pw_id, _ = self._setup(client)
+        # Archivia
+        import api as _api
+        with _api.get_db_ctx() as conn:
+            conn.execute("UPDATE pc_workflows SET archived=1, status='completed' WHERE id=?", (pw_id,))
+            conn.commit()
+        r = client.get("/api/pc-workflows/history?pc_name=ARCH-PC", headers=AUTH)
+        assert r.status_code == 200
+        rows = r.get_json()
+        ids = [row["id"] for row in rows]
+        assert pw_id in ids
+
+    def test_history_unknown_pc_returns_empty(self, client):
+        r = client.get("/api/pc-workflows/history?pc_name=NONEXISTENT-PC", headers=AUTH)
+        assert r.status_code == 200
+        assert r.get_json() == []
+
+
+class TestExportImportWorkflow:
+    """FEATURE-7: export/import workflow."""
+
+    def _create_wf_with_steps(self, client, nome="WF-EXP"):
+        wf = client.post("/api/workflows",
+                         json={"nome": nome, "descrizione": "Test export"},
+                         headers=AUTH).get_json()
+        wf_id = wf["id"]
+        client.post(f"/api/workflows/{wf_id}/steps",
+                    json={"nome": "Step A", "tipo": "winget_install", "ordine": 1,
+                          "parametri": {"package": "7zip.7zip"}, "su_errore": "continue"},
+                    headers=AUTH)
+        client.post(f"/api/workflows/{wf_id}/steps",
+                    json={"nome": "Step B", "tipo": "reboot", "ordine": 2},
+                    headers=AUTH)
+        return wf_id
+
+    def test_export_returns_json_attachment(self, client):
+        wf_id = self._create_wf_with_steps(client)
+        r = client.get(f"/api/workflows/{wf_id}/export", headers=AUTH)
+        assert r.status_code == 200
+        assert "attachment" in r.headers.get("Content-Disposition", "")
+        data = r.get_json()
+        assert data["novascm_export"] == "1.0"
+        assert data["workflow"]["nome"] == "WF-EXP"
+        assert len(data["workflow"]["steps"]) == 2
+
+    def test_export_not_found(self, client):
+        r = client.get("/api/workflows/9999/export", headers=AUTH)
+        assert r.status_code == 404
+
+    def test_export_steps_order(self, client):
+        wf_id = self._create_wf_with_steps(client)
+        data = client.get(f"/api/workflows/{wf_id}/export", headers=AUTH).get_json()
+        orders = [s["ordine"] for s in data["workflow"]["steps"]]
+        assert orders == sorted(orders)
+
+    def test_import_creates_workflow(self, client):
+        payload = {
+            "novascm_export": "1.0",
+            "workflow": {
+                "nome": "WF-IMPORTED",
+                "descrizione": "Importato",
+                "steps": [
+                    {"ordine": 1, "nome": "Installa", "tipo": "winget_install",
+                     "parametri": "{}", "condizione": "", "su_errore": "stop", "platform": "all"},
+                ]
+            }
+        }
+        r = client.post("/api/workflows/import", json=payload, headers=AUTH)
+        assert r.status_code == 201
+        body = r.get_json()
+        assert body["ok"] is True
+        assert "workflow_id" in body
+
+    def test_import_duplicate_name_returns_409(self, client):
+        payload = {
+            "novascm_export": "1.0",
+            "workflow": {"nome": "WF-DUP", "steps": []}
+        }
+        client.post("/api/workflows/import", json=payload, headers=AUTH)
+        r = client.post("/api/workflows/import", json=payload, headers=AUTH)
+        assert r.status_code == 409
+
+    def test_import_invalid_format(self, client):
+        r = client.post("/api/workflows/import",
+                        json={"novascm_export": "2.0", "workflow": {"nome": "X", "steps": []}},
+                        headers=AUTH)
+        assert r.status_code == 400
+
+    def test_import_missing_nome(self, client):
+        r = client.post("/api/workflows/import",
+                        json={"novascm_export": "1.0", "workflow": {"steps": []}},
+                        headers=AUTH)
+        assert r.status_code == 400
+
+    def test_roundtrip_export_import(self, client):
+        """Export poi re-import con nome diverso — step devono coincidere."""
+        wf_id = self._create_wf_with_steps(client, nome="WF-ROUNDTRIP")
+        export_data = client.get(f"/api/workflows/{wf_id}/export", headers=AUTH).get_json()
+        # Modifica nome per evitare conflitto
+        export_data["workflow"]["nome"] = "WF-ROUNDTRIP-2"
+        r = client.post("/api/workflows/import", json=export_data, headers=AUTH)
+        assert r.status_code == 201
+        new_id = r.get_json()["workflow_id"]
+        # Verifica che gli step siano stati importati
+        steps = client.get(f"/api/workflows/{new_id}/steps", headers=AUTH).get_json()
+        assert len(steps) == 2
+
+
+class TestWebhookSettings:
+    """FEATURE-1: webhook_url/webhook_enabled in settings."""
+
+    def test_settings_accept_webhook_url(self, client):
+        r = client.put("/api/settings",
+                       json={"webhook_url": "http://example.com/hook"},
+                       headers=AUTH)
+        assert r.status_code == 200
+
+    def test_settings_accept_webhook_enabled(self, client):
+        r = client.put("/api/settings",
+                       json={"webhook_enabled": "1"},
+                       headers=AUTH)
+        assert r.status_code == 200
+
+    def test_settings_reject_unknown_key(self, client):
+        r = client.put("/api/settings",
+                       json={"webhook_unknown_key": "val"},
+                       headers=AUTH)
+        assert r.status_code == 400
+
+    def test_settings_webhook_roundtrip(self, client):
+        client.put("/api/settings",
+                   json={"webhook_url": "http://hooks.example.com/novascm", "webhook_enabled": "1"},
+                   headers=AUTH)
+        s = client.get("/api/settings", headers=AUTH).get_json()
+        assert s.get("webhook_url") == "http://hooks.example.com/novascm"
+        assert s.get("webhook_enabled") == "1"
+
+
+class TestElapsedSec:
+    """R8-I1: elapsed_sec salvato in report_step."""
+
+    def _run_workflow(self, client):
+        """Crea workflow, assegna, mette running, ritorna (pw_id, step_id)."""
+        wf = client.post("/api/workflows", json={"nome": "WF-EL"}, headers=AUTH).get_json()
+        wf_id = wf["id"]
+        step = client.post(f"/api/workflows/{wf_id}/steps",
+                           json={"nome": "S1", "tipo": "reboot", "ordine": 1},
+                           headers=AUTH).get_json()
+        step_id = step["id"]
+        pw = client.post("/api/pc-workflows",
+                         json={"pc_name": "EL-PC", "workflow_id": wf_id},
+                         headers=AUTH).get_json()
+        pw_id = pw["id"]
+        import api as _api
+        with _api.get_db_ctx() as conn:
+            conn.execute("UPDATE pc_workflows SET status='running' WHERE id=?", (pw_id,))
+            conn.commit()
+        return pw_id, step_id
+
+    def test_report_step_saves_elapsed_sec(self, client):
+        pw_id, step_id = self._run_workflow(client)
+        r = client.post("/api/pc/EL-PC/workflow/step",
+                        json={"step_id": step_id, "status": "done", "elapsed_sec": 12.34},
+                        headers=AUTH)
+        assert r.status_code == 200
+        # Verifica in DB
+        import api as _api
+        with _api.get_db_ctx() as conn:
+            row = conn.execute(
+                "SELECT elapsed_sec FROM pc_workflow_steps WHERE pc_workflow_id=? AND step_id=?",
+                (pw_id, step_id)
+            ).fetchone()
+        assert row is not None
+        assert abs(row["elapsed_sec"] - 12.34) < 0.01
+
+    def test_report_step_elapsed_zero_default(self, client):
+        pw_id, step_id = self._run_workflow(client)
+        client.post("/api/pc/EL-PC/workflow/step",
+                    json={"step_id": step_id, "status": "running"},
+                    headers=AUTH)
+        import api as _api
+        with _api.get_db_ctx() as conn:
+            row = conn.execute(
+                "SELECT elapsed_sec FROM pc_workflow_steps WHERE pc_workflow_id=? AND step_id=?",
+                (pw_id, step_id)
+            ).fetchone()
+        assert row is not None
+        assert row["elapsed_sec"] == 0.0
+
+
+class TestTimeoutCleanup:
+    """FEATURE-6: _cleanup_stale_workflows marca timeout come error."""
+
+    def test_stale_workflow_marked_error(self, client):
+        import api as _api
+        wf = client.post("/api/workflows",
+                         json={"nome": "WF-TIMEOUT"},
+                         headers=AUTH).get_json()
+        wf_id = wf["id"]
+        # Imposta timeout breve: 1 minuto
+        with _api.get_db_ctx() as conn:
+            conn.execute("UPDATE workflows SET timeout_min=1 WHERE id=?", (wf_id,))
+            conn.commit()
+        client.post(f"/api/workflows/{wf_id}/steps",
+                    json={"nome": "S1", "tipo": "reboot", "ordine": 1},
+                    headers=AUTH)
+        pw = client.post("/api/pc-workflows",
+                         json={"pc_name": "STALE-PC", "workflow_id": wf_id},
+                         headers=AUTH).get_json()
+        pw_id = pw["id"]
+        # Metti in stato running con started_at 2 minuti fa
+        with _api.get_db_ctx() as conn:
+            conn.execute(
+                "UPDATE pc_workflows SET status='running', started_at=datetime('now','-2 minutes') WHERE id=?",
+                (pw_id,)
+            )
+            conn.commit()
+        # Esegui cleanup direttamente
+        _api._cleanup_stale_workflows()
+        # Verifica stato
+        with _api.get_db_ctx() as conn:
+            row = conn.execute("SELECT status FROM pc_workflows WHERE id=?", (pw_id,)).fetchone()
+        assert row["status"] == "error"
+
+    def test_fresh_workflow_not_affected(self, client):
+        import api as _api
+        wf = client.post("/api/workflows",
+                         json={"nome": "WF-FRESH"},
+                         headers=AUTH).get_json()
+        wf_id = wf["id"]
+        with _api.get_db_ctx() as conn:
+            conn.execute("UPDATE workflows SET timeout_min=120 WHERE id=?", (wf_id,))
+            conn.commit()
+        client.post(f"/api/workflows/{wf_id}/steps",
+                    json={"nome": "S1", "tipo": "reboot", "ordine": 1},
+                    headers=AUTH)
+        pw = client.post("/api/pc-workflows",
+                         json={"pc_name": "FRESH-PC", "workflow_id": wf_id},
+                         headers=AUTH).get_json()
+        pw_id = pw["id"]
+        with _api.get_db_ctx() as conn:
+            conn.execute(
+                "UPDATE pc_workflows SET status='running', started_at=datetime('now') WHERE id=?",
+                (pw_id,)
+            )
+            conn.commit()
+        _api._cleanup_stale_workflows()
+        with _api.get_db_ctx() as conn:
+            row = conn.execute("SELECT status FROM pc_workflows WHERE id=?", (pw_id,)).fetchone()
+        assert row["status"] == "running"

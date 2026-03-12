@@ -138,12 +138,12 @@ Or install it automatically via script:
 
 On a Windows target machine (admin PowerShell):
 ```powershell
-iwr http://<server-ip>:9091/agent/install.ps1 | iex
+iwr http://<server-ip>:9091/api/download/agent-install.ps1 | iex
 ```
 
 On Linux:
 ```bash
-curl -s http://<server-ip>:9091/agent/install-linux.sh | bash
+curl -fsSL http://<server-ip>:9091/api/download/agent-install.sh | bash
 ```
 
 > The agent runs silently in the background, polls the server for tasks and executes workflows.
@@ -168,17 +168,40 @@ curl -s http://<server-ip>:9091/agent/install-linux.sh | bash
 
 ## Requirements
 
-### Console
+### Console (management GUI)
 - Windows 10/11 x64
-- .NET 8 Runtime (or use the self-contained single-file exe from Releases)
+- .NET 8 Runtime — or use the **self-contained** `.exe` from Releases (no runtime needed)
 
 ### Server
-- Python 3.10+ or Docker
-- 512 MB RAM, 1 GB disk
+The server runs on anything that supports Docker or Python.
+
+**Option A — Docker (recommended, any OS)**
+
+| Platform | Notes |
+|----------|-------|
+| Linux (Ubuntu, Debian, any distro) | Install [Docker Engine](https://docs.docker.com/engine/install/) + Compose plugin |
+| Raspberry Pi (ARMv7/ARM64) | Use Docker Engine for ARM |
+| macOS | Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
+| Windows 10/11 | Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) with WSL2 backend |
+| Windows Server 2019/2022 | Install Docker Desktop with WSL2 — requires WSL2 enabled (`wsl --install`) |
+| Windows Server Core | ❌ WSL2 not supported — use Option B |
+| VPS / cloud VM | Any provider (Hetzner, DigitalOcean, AWS, etc.) with Linux |
+
+Minimum resources: **512 MB RAM**, **1 GB disk**
+
+**Option B — Python directly (no Docker)**
+
+- Python 3.10+
+- Works on Linux and Windows (including Windows Server Core)
+
+```bash
+pip install flask gunicorn flask-limiter python-json-logger tftpy
+python api.py
+```
 
 ### Agent
-- Python 3.8+ (Windows or Linux)
-- Administrator / root privileges
+- **Windows**: no dependencies — standalone `.exe` from Releases
+- **Linux**: Python 3.8+ and `sudo` / root access
 
 ---
 
