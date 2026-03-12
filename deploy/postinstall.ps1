@@ -82,20 +82,25 @@ try {
     Write-Warning "deploy/start non riuscito: $_"
 }
 
-# 2. Scarica NovaSCMDeployScreen ed eseguilo fullscreen
+# 2. Apri Deploy Screen in Edge kiosk mode (fullscreen)
 try {
-    $osdExe = "$env:TEMP\NovaSCM-OSD.exe"
-    Invoke-WebRequest -Uri "$PXE/NovaSCM.exe" -OutFile $osdExe -UseBasicParsing -TimeoutSec 60
-    if (Test-Path $osdExe) {
-        $osdArgs = if ($PW_ID) {
-            "hostname=$PC server=$SERVER key=$APIKEY pw_id=$PW_ID demo=0"
-        } else {
-            "hostname=$PC demo=1"
-        }
-        Start-Process $osdExe -ArgumentList $osdArgs -WindowStyle Normal
-        Start-Sleep 3
-        Write-Output "NovaSCM DeployScreen avviato (pw_id=$PW_ID)"
+    $domain  = "polariscore.it"
+    $ver     = "2.2.1"
+    $deployUrl = if ($PW_ID) {
+        "$SERVER/deploy-client?pw_id=$PW_ID&key=$APIKEY&hostname=$PC&domain=$domain&ver=$ver"
+    } else {
+        "$SERVER/deploy-client?hostname=$PC&domain=$domain&ver=$ver&demo=1"
     }
+    $edgePath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+    if (Test-Path $edgePath) {
+        Start-Process $edgePath "--kiosk `"$deployUrl`" --edge-kiosk-type=fullscreen --no-first-run --disable-infobars" `
+            -WindowStyle Maximized
+    } else {
+        # Fallback: apri nel browser predefinito
+        Start-Process $deployUrl
+    }
+    Start-Sleep 3
+    Write-Output "NovaSCM DeployScreen avviato in Edge kiosk (pw_id=$PW_ID)"
 } catch {
     Write-Warning "DeployScreen non disponibile: $_"
 }
