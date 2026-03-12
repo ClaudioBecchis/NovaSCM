@@ -26,7 +26,7 @@ oppure a un percorso USB accessibile come `X:\Deploy\`.
     <RunSynchronous>
       <RunSynchronousCommand wcm:action="add">
         <Order>1</Order>
-        <Path>X:\Deploy\NovaSCMDeployScreen.exe hostname=%COMPUTERNAME% domain=polariscore.local wf="Deploy Base Win 11" server=http://192.168.20.110:9091 key=APIKEY pw_id=14</Path>
+        <Path>X:\Deploy\NovaSCMDeployScreen.exe hostname=%COMPUTERNAME% domain=YOUR-DOMAIN wf="Deploy Base Win 11" server=http://YOUR-SERVER:9091 key=YOUR-API-KEY pw_id=1</Path>
         <Description>NovaSCM Deploy Screen</Description>
         <WillReboot>Never</WillReboot>
       </RunSynchronousCommand>
@@ -51,10 +51,10 @@ NovaSCMDeployScreen.exe demo=1
 
 | Parametro  | Default                   | Descrizione                          |
 |------------|---------------------------|--------------------------------------|
-| `hostname` | `WKS-MKTG-042`            | Nome del PC mostrato in header       |
-| `domain`   | `polariscore.local`       | Dominio mostrato sotto l'hostname    |
+| `hostname` | `PC-HOSTNAME`             | Nome del PC mostrato in header       |
+| `domain`   | `workgroup`               | Dominio mostrato sotto l'hostname    |
 | `wf`       | `Deploy Base Win 11`      | Nome del workflow                    |
-| `server`   | `http://192.168.20.110:9091` | URL base del server NovaSCM       |
+| `server`   | `http://YOUR-SERVER:9091` | URL base del server NovaSCM          |
 | `key`      | _(vuoto)_                 | API key (`X-Api-Key`)                |
 | `pw_id`    | `1`                       | ID pc_workflow da monitorare         |
 | `ver`      | `1.8.0`                   | Versione mostrata in footer          |

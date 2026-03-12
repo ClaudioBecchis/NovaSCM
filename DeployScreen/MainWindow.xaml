@@ -68,9 +68,9 @@
           </StackPanel>
         </StackPanel>
         <StackPanel Grid.Column="1" HorizontalAlignment="Center" VerticalAlignment="Center">
-          <TextBlock x:Name="TxtHostname" Text="WKS-MKTG-042"
+          <TextBlock x:Name="TxtHostname" Text="PC-HOSTNAME"
                      Style="{StaticResource MonoHi}" FontSize="22" FontWeight="SemiBold" HorizontalAlignment="Center"/>
-          <TextBlock x:Name="TxtDomain"   Text="polariscore.local"
+          <TextBlock x:Name="TxtDomain"   Text="workgroup"
                      Style="{StaticResource Mono}" FontSize="10" HorizontalAlignment="Center" Margin="0,3,0,0"/>
         </StackPanel>
         <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
@@ -361,7 +361,7 @@
         <TextBlock Grid.Column="1" Text="▲  Non spegnere il PC durante la configurazione"
                    Foreground="#7A6020" FontFamily="Consolas" FontSize="9" HorizontalAlignment="Center"/>
         <TextBlock Grid.Column="2" Style="{StaticResource Mono}" FontSize="9">
-          <Run Text="Server "/><Run x:Name="FooterServer" Text="192.168.20.110" Foreground="#526080"/>
+          <Run Text="Server "/><Run x:Name="FooterServer" Text="YOUR-SERVER" Foreground="#526080"/>
         </TextBlock>
       </Grid>
     </Grid>

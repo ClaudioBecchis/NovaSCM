@@ -110,10 +110,10 @@ namespace NovaSCMDeployScreen
 
     public class Config
     {
-        public string Hostname { get; set; } = "WKS-MKTG-042";
-        public string Domain   { get; set; } = "polariscore.local";
+        public string Hostname { get; set; } = "PC-HOSTNAME";
+        public string Domain   { get; set; } = "workgroup";
         public string WfName   { get; set; } = "Deploy Base Win 11";
-        public string Server   { get; set; } = "http://192.168.20.110:9091";
+        public string Server   { get; set; } = "http://YOUR-SERVER:9091";
         public string ApiKey   { get; set; } = "";
         public string PwId     { get; set; } = "1";
         public string Version  { get; set; } = "1.8.1";
@@ -196,7 +196,7 @@ namespace NovaSCMDeployScreen
         {
             [1]  = new[] { "[INFO] Avvio partizionamento…", "[INFO] Disco rilevato: Samsung SSD 980 500GB", "[INFO] Creazione EFI 500MB", "[INFO] Creazione C:\\ 450GB", "[OK] Partizionamento completato" },
             [3]  = new[] { "[INFO] Avvio setup.exe /unattend", "[INFO] Copia file Windows…", "[INFO] Installazione feature…", "[WARN] Riavvio richiesto", "[OK] Windows 11 Pro 23H2 installato" },
-            [15] = new[] { "[INFO] Add-Computer -DomainName polariscore.local", "[INFO] Autenticazione in corso…", "[INFO] Oggetto computer creato in OU=Workstations", "[OK] Join dominio completato" },
+            [15] = new[] { "[INFO] Add-Computer -DomainName corp.example.local", "[INFO] Autenticazione in corso…", "[INFO] Oggetto computer creato in OU=Workstations", "[OK] Join dominio completato" },
             [18] = new[] { "[INFO] Download Office 365 ProPlus (2.1 GB)…", "[INFO] 45% — 180 MB/s", "[INFO] 100% completato", "[INFO] Installazione componenti…", "[OK] Microsoft 365 Apps installato" },
         };
 

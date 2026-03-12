@@ -208,8 +208,8 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
       </div>
     </div>
     <div>
-      <div class="pc-name" id="pc-name">WKS-MKTG-042</div>
-      <div class="pc-domain">polariscore.local</div>
+      <div class="pc-name" id="pc-name">PC-HOSTNAME</div>
+      <div class="pc-domain">workgroup</div>
     </div>
     <div style="text-align:right">
       <div class="wf-badge"><span class="led"></span>Deploy Base Win 11</div>
@@ -314,7 +314,7 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
   <footer class="ftr">
     <div class="ftr-item">NovaSCM <b>1.8.1</b></div>
     <div class="ftr-warn">▲ Non spegnere il PC durante la configurazione</div>
-    <div class="ftr-item">Server <b>192.168.20.110</b></div>
+    <div class="ftr-item">Server <b>your-server</b></div>
   </footer>
 </div>
 
@@ -324,7 +324,7 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
     <div class="ov-left">
       <div class="ov-ring ok">✓</div>
       <div class="ov-title">Configurazione<br>completata</div>
-      <div class="ov-sub ok" id="ov-host">WKS-MKTG-042</div>
+      <div class="ov-sub ok" id="ov-host">PC-HOSTNAME</div>
       <div class="ov-detail" id="ov-detail">—</div>
       <div class="ov-hw" id="ov-hw"></div>
       <div class="reboot-line">Riavvio tra <span class="reboot-n" id="reboot-n">30</span>s</div>
@@ -387,8 +387,8 @@ const DEMO_LOGS={
   3:["[INFO] Avvio setup.exe /unattend:X:\\autounattend.xml","[INFO] Fase 1: Copia file Windows...","[INFO] Fase 2: Preparazione file da installare...","[INFO] Fase 3: Installazione feature...","[INFO] Fase 4: Installazione aggiornamenti...","[WARN] Riavvio richiesto dal setup","[OK] Windows 11 Pro 23H2 installato"],
   4:["[INFO] Configurazione OOBE silente","[INFO] Disabilita telemetria consumer","[INFO] Imposta lingua: it-IT, tastiera: it","[OK] OOBE completato"],
   5:["[INFO] winget install --id Intel.Chipset --silent","[OK] Driver chipset installato v10.1.18"],
-  14:["[INFO] netsh advfirewall set allprofiles state on","[INFO] Regola IN: blocco porte non standard","[INFO] Regola OUT: DNS solo 192.168.20.253","[OK] Policy firewall applicata"],
-  15:["[INFO] Add-Computer -DomainName polariscore.local","[INFO] Autenticazione con account di join...","[INFO] Creazione oggetto computer in OU=Workstations","[OK] Join al dominio completato — riavvio richiesto"],
+  14:["[INFO] netsh advfirewall set allprofiles state on","[INFO] Regola IN: blocco porte non standard","[INFO] Regola OUT: DNS solo 192.168.1.1","[OK] Policy firewall applicata"],
+  15:["[INFO] Add-Computer -DomainName workgroup","[INFO] Autenticazione con account di join...","[INFO] Creazione oggetto computer in OU=Workstations","[OK] Join al dominio completato — riavvio richiesto"],
   18:["[INFO] Scaricamento Office 365 ProPlus (2.1 GB)...","[INFO] Download: 45% — 180 MB/s","[INFO] Download: 78% — 195 MB/s","[INFO] Download: 100% completato","[INFO] Installazione componenti...","[OK] Microsoft 365 Apps for Enterprise installato"],
 };
 

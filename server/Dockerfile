@@ -6,6 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api.py .
+COPY web/ ./web/
 
 # Prima crea utente e directory, POI dichiara il volume
 RUN adduser --disabled-password --gecos "" novascm \

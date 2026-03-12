@@ -4,6 +4,14 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [2.2.1] - 2026-03-12
+
+### Bug fix
+
+- **fix #9**: `DpapiEncrypt` — aggiunto try/catch con fallback plain-base64 se DPAPI non disponibile (es. Kaspersky blocca accesso keystore). Le impostazioni vengono salvate correttamente anche in ambienti con security software restrittivi.
+
+---
+
 ## [1.8.1] - 2026-03-09
 
 ### Bug fix (Round 7)

@@ -3,7 +3,7 @@
 ; Output: NovaSCM-v{#AppVersion}-Setup.exe
 
 #define AppName "NovaSCM"
-#define AppVersion "2.2.0"
+#define AppVersion "2.2.1"
 #define AppPublisher "Claudio Becchis"
 #define AppURL "https://polariscore.it/novascm"
 #define AppExeName "NovaSCM.exe"

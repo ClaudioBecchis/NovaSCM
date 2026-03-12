@@ -369,8 +369,8 @@ html,body{
       </div>
     </div>
     <div class="hdr-center">
-      <div class="pc-name"  id="pc-name">WKS-MKTG-042</div>
-      <div class="pc-domain" id="pc-domain">polariscore.local</div>
+      <div class="pc-name"  id="pc-name">PC-HOSTNAME</div>
+      <div class="pc-domain" id="pc-domain">workgroup</div>
     </div>
     <div class="hdr-right">
       <div class="wf-badge"><span class="led"></span><span id="wf-name">Deploy Base Win 11</span></div>
@@ -440,7 +440,7 @@ html,body{
   <footer class="ftr">
     <div class="ftr-item">NovaSCM <b id="f-ver">1.8.0</b></div>
     <div class="ftr-warn">▲ Non spegnere il PC durante la configurazione</div>
-    <div class="ftr-item">Server <b id="f-server">192.168.20.110</b></div>
+    <div class="ftr-item">Server <b id="f-server">your-server</b></div>
   </footer>
 
 </div>
@@ -449,7 +449,7 @@ html,body{
 <div class="overlay" id="ov-done">
   <div class="ov-ring ok">✓</div>
   <div class="ov-title">Configurazione completata</div>
-  <div class="ov-sub ok" id="ov-done-host">WKS-MKTG-042</div>
+  <div class="ov-sub ok" id="ov-done-host">PC-HOSTNAME</div>
   <div class="ov-detail" id="ov-done-detail">Tutti gli step eseguiti con successo.</div>
   <div class="reboot-line">
     <span>Riavvio automatico tra</span>
@@ -472,10 +472,10 @@ html,body{
 // ════════════════════════════════════════════════════
 const P = new URLSearchParams(location.search);
 const CFG = {
-  hostname : P.get("hostname") || "WKS-MKTG-042",
-  domain   : P.get("domain")   || "polariscore.local",
+  hostname : P.get("hostname") || "PC-HOSTNAME",
+  domain   : P.get("domain")   || "workgroup",
   wf_name  : P.get("wf")       || "Deploy Base Win 11",
-  server   : P.get("server")   || "http://192.168.20.110:9091",
+  server   : P.get("server")   || "http://your-server:9091",
   api_key  : P.get("key")      || "",
   pw_id    : P.get("pw_id")    || "1",
   version  : P.get("ver")      || "1.8.0",

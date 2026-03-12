@@ -278,18 +278,30 @@ public partial class MainWindow : Window
     private NovaSCMApiService? _apiSvc;
 
     // BUG-04: DPAPI helpers (Windows-only, CurrentUser scope)
+    // Fallback plain-base64 se DPAPI non disponibile (es. Kaspersky blocca accesso keystore)
+    private const string DpapiPlainPrefix = "plain:";
     private static string DpapiEncrypt(string plain)
     {
         if (string.IsNullOrEmpty(plain)) return "";
-        var encrypted = System.Security.Cryptography.ProtectedData.Protect(
-            System.Text.Encoding.UTF8.GetBytes(plain), null,
-            System.Security.Cryptography.DataProtectionScope.CurrentUser);
-        return Convert.ToBase64String(encrypted);
+        try
+        {
+            var encrypted = System.Security.Cryptography.ProtectedData.Protect(
+                System.Text.Encoding.UTF8.GetBytes(plain), null,
+                System.Security.Cryptography.DataProtectionScope.CurrentUser);
+            return Convert.ToBase64String(encrypted);
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            // DPAPI non disponibile — salva come plain base64 con prefisso riconoscibile
+            return DpapiPlainPrefix + Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(plain));
+        }
     }
 
     private static string DpapiDecrypt(string cipher)
     {
         if (string.IsNullOrEmpty(cipher)) return "";
+        if (cipher.StartsWith(DpapiPlainPrefix))
+            return System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cipher[DpapiPlainPrefix.Length..]));
         try
         {
             var plain = System.Security.Cryptography.ProtectedData.Unprotect(
