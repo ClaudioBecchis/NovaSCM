@@ -2586,8 +2586,27 @@ def ui_token():
     return jsonify({"token": token, "expires_at": exp})
 
 @app.route("/deploy-client")
-@require_auth
 def ui_deploy_client():
+    """Deploy screen — accetta session_key da query param (Edge kiosk durante deploy)
+    oppure X-Api-Key header (accesso admin)."""
+    key = request.args.get("key", "")
+    if key:
+        with _ui_tokens_lock:
+            exp = _ui_tokens.get(key)
+        if not exp or exp < time.time():
+            return "Token non valido o scaduto", 401
+    else:
+        token = request.headers.get("X-Api-Key", "")
+        if not token:
+            return "Non autorizzato", 401
+        ok = hmac.compare_digest(token, API_KEY)
+        if not ok:
+            with _ui_tokens_lock:
+                exp = _ui_tokens.get(token)
+            ok = bool(exp and exp > time.time())
+        if not ok:
+            log.warning("deploy-client: accesso non autorizzato da %s", request.remote_addr)
+            return "Non autorizzato", 401
     html_path = os.path.join(WEB_DIR, "deploy-client.html")
     with open(html_path, encoding="utf-8") as f:
         html = f.read()
