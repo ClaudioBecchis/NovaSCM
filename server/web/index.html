@@ -876,10 +876,11 @@ select option { background: var(--surface-2); }
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <div>
         <div style="font-size:18px;font-weight:600;margin-bottom:2px">PXE / Boot Manager</div>
-        <div class="muted" style="font-size:13px">Gestione boot di rete — iPXE chainload → iVentoy</div>
+        <div class="muted" style="font-size:13px">Gestione boot di rete — iPXE + wimboot → WinPE</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
-        <span id="tftp-status" style="font-size:11px;padding:3px 10px;border-radius:99px;background:var(--border);color:var(--text)">TFTP ...</span>
+        <span id="tftp-status" style="font-size:11px;padding:3px 10px;border-radius:99px;background:var(--border);color:var(--text)">PXE ...</span>
+        <span id="winpe-status" style="font-size:11px;padding:3px 10px;border-radius:99px;background:var(--border);color:var(--text)">WinPE ...</span>
         <button class="btn btn-sm" @click="openPxeHostModal()">+ Host</button>
         <button class="btn btn-sm" @click="loadPxeData()">↻</button>
       </div>
@@ -887,17 +888,7 @@ select option { background: var(--surface-2); }
 
     <!-- Settings rapide PXE -->
     <div class="card" style="margin-bottom:14px;padding:14px 16px">
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:10px">
-        <div>
-          <div class="muted" style="font-size:11px;margin-bottom:4px">iVentoy IP</div>
-          <input type="text" id="pxe-iventoy-ip" placeholder="192.168.20.110"
-                 style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
-        </div>
-        <div>
-          <div class="muted" style="font-size:11px;margin-bottom:4px">iVentoy Porta</div>
-          <input type="text" id="pxe-iventoy-port" placeholder="10809"
-                 style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
-        </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:10px">
         <div>
           <div class="muted" style="font-size:11px;margin-bottom:4px">Prefisso PC auto</div>
           <input type="text" id="pxe-pc-prefix" placeholder="PC"
@@ -910,6 +901,11 @@ select option { background: var(--surface-2); }
             <option value="1">Abilitato</option>
             <option value="0">Disabilitato</option>
           </select>
+        </div>
+        <div>
+          <div class="muted" style="font-size:11px;margin-bottom:4px">Dominio default</div>
+          <input type="text" id="pxe-default-domain" placeholder="polariscore.it"
+                 style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:6px 8px;border-radius:4px;font-size:13px">
         </div>
       </div>
       <div style="text-align:right">
@@ -1550,7 +1546,7 @@ function app() {
       await this.loadPxeHosts();
       await this.loadPxeSettings();
       await this.loadPxeLog();
-      this.checkTftpStatus();
+      this.checkPxeStatus();
     },
     async loadPxeHosts() {
       const rows = await this.api('/api/pxe/hosts');
@@ -1603,19 +1599,17 @@ function app() {
       const cfg = await this.api('/api/pxe/settings');
       if (!cfg) return;
       const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v || ''; };
-      set('pxe-iventoy-ip',    cfg.pxe_iventoy_ip   || cfg.iventoy_ip   || '');
-      set('pxe-iventoy-port',  cfg.pxe_iventoy_port || cfg.iventoy_port || '10809');
       set('pxe-pc-prefix',     cfg.pxe_pc_prefix    || cfg.pc_prefix    || 'PC');
+      set('pxe-default-domain', cfg.pxe_default_domain || '');
       const sel = document.getElementById('pxe-auto-provision');
       if (sel) sel.value = cfg.pxe_auto_provision || cfg.auto_provision || '1';
     },
     async savePxeSettings() {
       const get = id => document.getElementById(id)?.value || '';
       const data = {
-        pxe_iventoy_ip:     get('pxe-iventoy-ip'),
-        pxe_iventoy_port:   get('pxe-iventoy-port'),
-        pxe_pc_prefix:      get('pxe-pc-prefix'),
-        pxe_auto_provision: get('pxe-auto-provision'),
+        pxe_pc_prefix:       get('pxe-pc-prefix'),
+        pxe_auto_provision:  get('pxe-auto-provision'),
+        pxe_default_domain:  get('pxe-default-domain'),
       };
       await this.api('/api/pxe/settings', 'PUT', data);
     },
@@ -1632,18 +1626,26 @@ function app() {
       // TODO: modal creazione nuovo host
       alert('TODO: aggiungi host PXE');
     },
-    async checkTftpStatus() {
-      const badge = document.getElementById('tftp-status');
-      if (!badge) return;
-      const r = await this.api('/health');
-      if (r) {
-        badge.textContent = 'Server ON';
-        badge.style.background = 'rgba(0,180,80,0.15)';
-        badge.style.color = 'var(--ok)';
-      } else {
-        badge.textContent = 'Server OFF';
-        badge.style.background = 'rgba(255,60,60,0.15)';
-        badge.style.color = 'var(--error)';
+    async checkPxeStatus() {
+      const tftpBadge  = document.getElementById('tftp-status');
+      const winpeBadge = document.getElementById('winpe-status');
+      const r = await this.api('/api/pxe/status');
+      if (!r) {
+        if (tftpBadge)  { tftpBadge.textContent  = 'Server OFF'; tftpBadge.style.background  = 'rgba(255,60,60,0.15)'; tftpBadge.style.color  = 'var(--error)'; }
+        if (winpeBadge) { winpeBadge.textContent = 'WinPE OFF';  winpeBadge.style.background = 'rgba(255,60,60,0.15)'; winpeBadge.style.color = 'var(--error)'; }
+        return;
+      }
+      if (tftpBadge) {
+        const ok = r.tftp_alive;
+        tftpBadge.textContent  = ok ? 'TFTP ON' : 'TFTP OFF';
+        tftpBadge.style.background = ok ? 'rgba(0,180,80,0.15)' : 'rgba(255,60,60,0.15)';
+        tftpBadge.style.color      = ok ? 'var(--ok)' : 'var(--error)';
+      }
+      if (winpeBadge) {
+        const ok = r.winpe_ready;
+        winpeBadge.textContent  = ok ? 'WinPE OK' : 'WinPE miss';
+        winpeBadge.style.background = ok ? 'rgba(0,180,80,0.15)' : 'rgba(255,165,0,0.15)';
+        winpeBadge.style.color      = ok ? 'var(--ok)' : '#f90';
       }
     },
     showPxeSubTab(name) {
