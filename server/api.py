@@ -2217,7 +2217,7 @@ def get_pxe_boot_log():
 
 # ── ENDPOINT FILE WINPE (no auth, subnet allow-list) ─────────────────────────
 
-_WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim"}
+_WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim", "install.wim"}
 
 
 @app.route("/api/pxe/file/<name>", methods=["GET"])
@@ -2351,11 +2351,21 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
           </ModifyPartitions>
         </Disk>
       </DiskConfiguration>
+      <!-- install.wim scaricato in WinPE da {xurl}/api/pxe/file/install.wim -->
       <InstallFrom>
+        <Path>X:\sources\install.wim</Path>
         <MetaData wcm:action="add">
           <Key>/IMAGE/INDEX</Key><Value>5</Value>
         </MetaData>
       </InstallFrom>
+      <RunSynchronous>
+        <!-- Scarica install.wim da NovaSCM prima che setup.exe lo cerchi -->
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>cmd /c mkdir X:\sources 2&gt;nul &amp; certutil -urlcache -split -f {xurl}/api/pxe/file/install.wim X:\sources\install.wim</Path>
+          <WillReboot>Never</WillReboot>
+        </RunSynchronousCommand>
+      </RunSynchronous>
       <UserData>
         <AcceptEula>true</AcceptEula>
       </UserData>
