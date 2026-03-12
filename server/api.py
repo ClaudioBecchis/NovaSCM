@@ -15,10 +15,16 @@ def _xe_ps(val: str) -> str:
 from contextlib import contextmanager
 
 try:
-    from pxe_server import start_tftp_server as _start_tftp
+    from pxe_server import (
+        start_tftp_server as _start_tftp,
+        is_tftp_alive,
+        restart_tftp_if_dead,
+    )
     _pxe_server_available = True
 except ImportError:
     _pxe_server_available = False
+    def is_tftp_alive() -> bool: return False
+    def restart_tftp_if_dead() -> bool: return False
 
 try:
     from pythonjsonlogger import jsonlogger as _jsonlogger
@@ -1813,22 +1819,71 @@ def _get_pxe_settings() -> dict:
     return {r["key"][4:]: r["value"] for r in rows}  # rimuove prefisso 'pxe_'
 
 
-def _generate_pc_name(mac: str, cfg: dict) -> str:
-    """Genera nome PC da MAC: prefisso + ultimi 6 char MAC senza ':'."""
+def _generate_pc_name(conn, mac: str, cfg: dict) -> str:
+    """
+    Genera nome PC univoco da MAC: prefisso configurabile + ultimi 6 char MAC.
+    Se il nome esiste già nella tabella cr, aggiunge un suffisso numerico.
+    """
     prefix = cfg.get("pc_prefix", "PC")
     suffix = mac.replace(":", "")[-6:].upper()
-    return f"{prefix}-{suffix}"
+    base_name = f"{prefix}-{suffix}"
+    existing = conn.execute(
+        "SELECT COUNT(*) as cnt FROM cr WHERE pc_name=?", (base_name,)
+    ).fetchone()
+    if existing["cnt"] == 0:
+        return base_name
+    for i in range(2, 100):
+        candidate = f"{base_name}-{i}"
+        existing = conn.execute(
+            "SELECT COUNT(*) as cnt FROM cr WHERE pc_name=?", (candidate,)
+        ).fetchone()
+        if existing["cnt"] == 0:
+            return candidate
+    return f"{base_name}-{int(time.time()) % 10000}"
 
 
-def _ipxe_deploy(pc_name: str, iventoy_ip: str, iventoy_port: str, enroll_token: str = "") -> str:
+def _get_setting(key: str, default: str = "") -> str:
+    """Legge un singolo valore dalla tabella settings."""
+    with get_db_ctx() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def _sizeof_fmt(num: int) -> str:
+    """Formatta dimensione file in formato leggibile."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if abs(num) < 1024.0:
+            return f"{num:.1f}{unit}"
+        num /= 1024.0
+    return f"{num:.1f}TB"
+
+
+def _ipxe_deploy(pc_name: str, server_url: str) -> str:
+    """Script iPXE: avvia deploy Windows via wimboot + WinPE."""
     return f"""#!ipxe
-echo NovaSCM Deploy -- {pc_name}
-echo Connessione a iVentoy {iventoy_ip}:{iventoy_port}...
-set iventoy http://{iventoy_ip}:{iventoy_port}
-chain ${{iventoy}}/boot.ipxe || goto local_boot
+echo ============================================
+echo  NovaSCM Deploy -- {pc_name}
+echo ============================================
+echo.
+echo Caricamento WinPE via HTTP da {server_url}...
+echo Questo potrebbe richiedere qualche minuto per boot.wim (~300-500MB)
+echo.
 
-:local_boot
-echo iVentoy non raggiungibile -- boot da disco locale
+kernel {server_url}/api/pxe/file/wimboot
+initrd {server_url}/api/pxe/file/BCD         BCD
+initrd {server_url}/api/pxe/file/boot.sdi    boot.sdi
+initrd {server_url}/api/pxe/file/boot.wim    boot.wim
+initrd {server_url}/api/autounattend/{pc_name} autounattend.xml
+boot || goto failed
+
+:failed
+echo.
+echo ERRORE: caricamento WinPE fallito
+echo Verificare che i file WinPE siano presenti su NovaSCM
+echo (wimboot, BCD, boot.sdi, boot.wim in server/dist/winpe/)
+echo.
+echo Boot da disco locale in 10 secondi...
+sleep 10
 sanboot --no-describe --drive 0x80
 """
 
@@ -1852,39 +1907,52 @@ poweroff
 
 # ── PXE BOOT SCRIPT ───────────────────────────────────────────────────────────
 
-_PXE_ALLOWED_NETS = [
-    s.strip() for s in os.environ.get("NOVASCM_PXE_ALLOWED_NETS", "192.168.0.0/16,10.0.0.0/8,172.16.0.0/12").split(",")
+import ipaddress as _ipaddress
+
+_PXE_ALLOWED_SUBNETS = [
+    _ipaddress.ip_network(s.strip())
+    for s in os.environ.get(
+        "NOVASCM_PXE_ALLOWED_SUBNETS",
+        "192.168.10.0/24,192.168.20.0/24"
+    ).split(",")
     if s.strip()
 ]
 
-def _ip_in_allowed_nets(ip: str) -> bool:
-    """C-6: verifica che l'IP client sia in una delle subnet consentite per PXE."""
-    import ipaddress
+
+def _is_pxe_allowed(client_ip: str) -> bool:
+    """Verifica se l'IP client è in una subnet autorizzata per PXE."""
     try:
-        client = ipaddress.ip_address(ip)
-        return any(client in ipaddress.ip_network(net, strict=False) for net in _PXE_ALLOWED_NETS)
+        addr = _ipaddress.ip_address(client_ip)
+        return any(addr in net for net in _PXE_ALLOWED_SUBNETS)
     except ValueError:
         return False
+
+
+def _get_client_ip() -> str:
+    """Estrae l'IP client dalla request, considerando X-Forwarded-For."""
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "")
+    return client_ip.split(",")[0].strip()
 
 @app.route("/api/boot/<mac>", methods=["GET"])
 @limiter.limit("30 per minute; 200 per hour")
 def pxe_boot_script(mac: str):
     """
     Endpoint iPXE — NESSUNA autenticazione (iPXE non può inviare header).
-    C-6: accettato solo da subnet LAN configurate (NOVASCM_PXE_ALLOWED_NETS).
-    Risponde con script iPXE testuale.
+    Protetto da subnet allow-list (NOVASCM_PXE_ALLOWED_SUBNETS).
+    Risponde con script iPXE testuale: wimboot deploy o local boot.
     """
+    client_ip = _get_client_ip()
+    if not _is_pxe_allowed(client_ip):
+        log.warning("PXE boot rifiutato: IP %s non in subnet autorizzata", client_ip)
+        return _ipxe_local("Accesso negato"), 403, {"Content-Type": "text/plain"}
+
     norm_mac = _normalize_mac(mac)
     if not norm_mac:
         log.warning("Boot PXE: MAC non valido: %s", mac)
         return _ipxe_local("MAC non valido"), 200, {"Content-Type": "text/plain"}
 
-    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
-    # C-6: rifiuta richieste da IP non in subnet LAN consentite
-    if not _ip_in_allowed_nets(client_ip):
-        log.warning("Boot PXE: IP non autorizzato: %s MAC: %s", client_ip, mac)
-        return _ipxe_local("IP non autorizzato"), 200, {"Content-Type": "text/plain"}
     now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
+    restart_tftp_if_dead()
     pxe_cfg = _get_pxe_settings()
 
     with get_db_ctx() as conn:
@@ -1893,43 +1961,49 @@ def pxe_boot_script(mac: str):
         ).fetchone()
 
         if not host:
-            pc_name = _generate_pc_name(norm_mac, pxe_cfg)
+            pc_name = _generate_pc_name(conn, norm_mac, pxe_cfg)
             log.info("PXE: MAC sconosciuto %s — auto-creo host '%s'", norm_mac, pc_name)
             cr_id = None
-            if pxe_cfg.get("auto_provision", "0") == "1":
+            if pxe_cfg.get("auto_provision", "1") == "1":
                 try:
-                    # M-5: non salvare credenziali nelle CR auto; richiedere approvazione manuale
-                    conn.execute("""
-                        INSERT OR IGNORE INTO cr
-                            (pc_name, software, status, created_at, workflow_id)
-                        VALUES (?,?,?,?,?)
+                    cursor = conn.execute("""
+                        INSERT INTO cr
+                            (pc_name, domain, ou, dc_ip, join_user, join_pass,
+                             admin_pass, software, status, created_at, workflow_id)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?)
                     """, (
                         pc_name,
-                        "[]", "pending_approval", now,
+                        pxe_cfg.get("default_domain", ""),
+                        pxe_cfg.get("default_ou", ""),
+                        pxe_cfg.get("default_dc_ip", ""),
+                        pxe_cfg.get("default_join_user", ""),
+                        pxe_cfg.get("default_join_pass", ""),
+                        pxe_cfg.get("default_admin_pass", ""),
+                        "[]", "open", now,
                         int(pxe_cfg["default_workflow_id"])
                         if pxe_cfg.get("default_workflow_id") else None,
                     ))
-                    cr_row = conn.execute(
-                        "SELECT id FROM cr WHERE pc_name=?", (pc_name,)
-                    ).fetchone()
-                    cr_id = cr_row["id"] if cr_row else None
+                    cr_id = cursor.lastrowid
                 except Exception as exc:
                     log.warning("PXE auto-provision CR fallito: %s", exc)
+                    if "UNIQUE" in str(exc):
+                        cr_row = conn.execute(
+                            "SELECT id FROM cr WHERE pc_name=?", (pc_name,)
+                        ).fetchone()
+                        cr_id = cr_row["id"] if cr_row else None
 
             wf_id = int(pxe_cfg["default_workflow_id"]) if pxe_cfg.get("default_workflow_id") else None
             conn.execute("""
                 INSERT OR IGNORE INTO pxe_hosts
                     (mac, pc_name, cr_id, workflow_id, boot_action,
                      last_boot_at, boot_count, last_ip, created_at)
-                VALUES (?,?,?,?,'auto',?,1,?,?)
+                VALUES (?,?,?,?,'auto',?,0,?,?)
             """, (norm_mac, pc_name, cr_id, wf_id, now, client_ip, now))
             conn.commit()
             host = conn.execute(
                 "SELECT * FROM pxe_hosts WHERE mac=?", (norm_mac,)
             ).fetchone()
 
-        # I-6: aggiornamento atomico boot_count
-        conn.execute("BEGIN IMMEDIATE")
         conn.execute("""
             UPDATE pxe_hosts
             SET last_boot_at=?, boot_count=boot_count+1, last_ip=?
@@ -1961,38 +2035,29 @@ def pxe_boot_script(mac: str):
             except Exception as exc:
                 log.warning("PXE: creazione pc_workflow fallita: %s", exc)
 
-        # Genera enrollment token monouso per postinstall.ps1
-        enroll_token = None
-        if action == "deploy" and pw_id:
-            try:
-                enroll_token = _generate_deploy_token(conn, pc_name, pw_id)
-            except Exception as exc:
-                log.warning("PXE: generazione enrollment token fallita: %s", exc)
-
         conn.execute("""
             INSERT INTO pxe_boot_log (mac, pc_name, ip, action, pw_id, ts)
             VALUES (?,?,?,?,?,?)
         """, (norm_mac, pc_name, client_ip, action, pw_id, now))
+
+        # Cleanup: mantieni solo gli ultimi 10000 log
+        conn.execute("""
+            DELETE FROM pxe_boot_log
+            WHERE id NOT IN (SELECT id FROM pxe_boot_log ORDER BY id DESC LIMIT 10000)
+        """)
         conn.commit()
 
     log.info("PXE boot: MAC=%s PC=%s IP=%s action=%s pw_id=%s",
              norm_mac, pc_name, client_ip, action, pw_id)
 
-    iventoy_ip   = pxe_cfg.get("iventoy_ip",  "").strip()
-    iventoy_port = pxe_cfg.get("iventoy_port", "10809")
-
-    if action == "deploy" and not iventoy_ip:
-        log.warning("PXE: iVentoy IP non configurato — fallback local boot per MAC=%s", norm_mac)
-        return _ipxe_local(f"{pc_name} (iVentoy non configurato)"), 200, {"Content-Type": "text/plain"}
+    server_url = _get_public_url()
 
     if action == "block":
-        script = _ipxe_block(pc_name)
+        return _ipxe_block(pc_name), 200, {"Content-Type": "text/plain"}
     elif action == "deploy":
-        script = _ipxe_deploy(pc_name, iventoy_ip, iventoy_port, enroll_token or "")
+        return _ipxe_deploy(pc_name, server_url), 200, {"Content-Type": "text/plain"}
     else:
-        script = _ipxe_local(pc_name)
-
-    return script, 200, {"Content-Type": "text/plain"}
+        return _ipxe_local(pc_name), 200, {"Content-Type": "text/plain"}
 
 
 # ── PXE HOSTS CRUD ────────────────────────────────────────────────────────────
@@ -2150,13 +2215,227 @@ def get_pxe_boot_log():
     return jsonify([dict(r) for r in rows])
 
 
+# ── ENDPOINT FILE WINPE (no auth, subnet allow-list) ─────────────────────────
+
+_WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim"}
+
+
+@app.route("/api/pxe/file/<name>", methods=["GET"])
+def serve_pxe_file(name: str):
+    """
+    Serve file statici WinPE per iPXE (wimboot, BCD, boot.sdi, boot.wim).
+    NESSUNA autenticazione — protetto da subnet allow-list.
+    I file devono essere in server/dist/winpe/.
+    """
+    from flask import send_file as _send_file
+    client_ip = _get_client_ip()
+    if not _is_pxe_allowed(client_ip):
+        return "Accesso negato", 403
+    if name not in _WINPE_ALLOWED_FILES:
+        log.warning("PXE file: richiesta file non consentito: %s da %s", name, client_ip)
+        return "File non consentito", 404
+    filepath = os.path.join(_WINPE_DIR, name)
+    if not os.path.isfile(filepath):
+        log.warning("PXE file: %s non trovato in %s", name, _WINPE_DIR)
+        return f"File {name} non trovato — copiare in server/dist/winpe/", 404
+    log.info("PXE file: serving %s (%s) a %s", name, _sizeof_fmt(os.path.getsize(filepath)), client_ip)
+    return _send_file(filepath, mimetype="application/octet-stream", as_attachment=False)
+
+
+# ── ENDPOINT AUTOUNATTEND DINAMICO (no auth, subnet allow-list) ──────────────
+
+@app.route("/api/autounattend/<pc_name>", methods=["GET"])
+def serve_autounattend_pxe(pc_name: str):
+    """
+    Genera e serve autounattend.xml dinamico per il PC specificato (endpoint PXE).
+    NESSUNA autenticazione — protetto da subnet allow-list.
+    Usa i dati del CR associato al pc_name.
+    """
+    client_ip = _get_client_ip()
+    if not _is_pxe_allowed(client_ip):
+        return "Accesso negato", 403
+    with get_db_ctx() as conn:
+        cr = conn.execute(
+            "SELECT * FROM cr WHERE pc_name=?", (pc_name,)
+        ).fetchone()
+    if not cr:
+        log.warning("autounattend PXE: CR non trovato per pc_name=%s", pc_name)
+        return "CR non trovato", 404
+    xml = _build_autounattend_xml_pxe(dict(cr))
+    log.info("autounattend PXE: servito XML per %s a %s", pc_name, client_ip)
+    return xml, 200, {"Content-Type": "application/xml"}
+
+
+def _build_autounattend_xml_pxe(d: dict) -> str:
+    """
+    Genera autounattend.xml completo per deploy PXE via wimboot.
+    Include DiskConfiguration (GPT EFI+MSR+Windows), locale it-IT,
+    join dominio opzionale, e FirstLogonCommands per NovaSCM agent.
+    """
+    import xml.sax.saxutils as _sax
+    _x = _sax.escape
+
+    server_url = _get_public_url()
+    api_key    = _get_setting("api_key", "")
+
+    xpc   = _x(d.get("pc_name", ""))
+    xdom  = _x(d.get("domain", ""))
+    xou   = _x(d.get("ou", ""))
+    xju   = _x(d.get("join_user", ""))
+    xjp   = _x(d.get("join_pass", ""))
+    xap   = _x(d.get("admin_pass", ""))
+    xkey  = _x(api_key)
+    xurl  = _x(server_url)
+
+    join_section = ""
+    if xdom:
+        join_section = f"""    <component name="Microsoft-Windows-UnattendedJoin"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <Identification>
+        <JoinDomain>{xdom}</JoinDomain>
+        <MachineObjectOU>{xou}</MachineObjectOU>
+        <Credentials>
+          <Domain>{xdom}</Domain>
+          <Username>{xju}</Username>
+          <Password>{xjp}</Password>
+        </Credentials>
+      </Identification>
+    </component>"""
+
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+  <!-- Pass 1: windowsPE — partizionamento disco e impostazioni lingua -->
+  <settings pass="windowsPE">
+    <component name="Microsoft-Windows-International-Core-WinPE"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <SetupUILanguage><UILanguage>it-IT</UILanguage></SetupUILanguage>
+      <InputLocale>it-IT</InputLocale>
+      <SystemLocale>it-IT</SystemLocale>
+      <UILanguage>it-IT</UILanguage>
+      <UserLocale>it-IT</UserLocale>
+    </component>
+    <component name="Microsoft-Windows-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <DiskConfiguration>
+        <WillShowUI>OnError</WillShowUI>
+        <Disk wcm:action="add">
+          <DiskID>0</DiskID>
+          <WillWipeDisk>true</WillWipeDisk>
+          <CreatePartitions>
+            <CreatePartition wcm:action="add">
+              <Order>1</Order><Type>EFI</Type><Size>100</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>2</Order><Type>MSR</Type><Size>16</Size>
+            </CreatePartition>
+            <CreatePartition wcm:action="add">
+              <Order>3</Order><Type>Primary</Type><Extend>true</Extend>
+            </CreatePartition>
+          </CreatePartitions>
+          <ModifyPartitions>
+            <ModifyPartition wcm:action="add">
+              <Order>1</Order><PartitionID>1</PartitionID>
+              <Format>FAT32</Format><Label>System</Label>
+            </ModifyPartition>
+            <ModifyPartition wcm:action="add">
+              <Order>2</Order><PartitionID>3</PartitionID>
+              <Format>NTFS</Format><Label>Windows</Label><Letter>C</Letter>
+            </ModifyPartition>
+          </ModifyPartitions>
+        </Disk>
+      </DiskConfiguration>
+      <InstallFrom>
+        <MetaData wcm:action="add">
+          <Key>/IMAGE/INDEX</Key><Value>5</Value>
+        </MetaData>
+      </InstallFrom>
+      <UserData>
+        <AcceptEula>true</AcceptEula>
+      </UserData>
+    </component>
+  </settings>
+
+  <!-- Pass 4: specialize — nome PC, dominio, fuso orario -->
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <ComputerName>{xpc}</ComputerName>
+      <TimeZone>W. Europe Standard Time</TimeZone>
+    </component>
+{join_section}  </settings>
+
+  <!-- Pass 7: oobeSystem — OOBE, account, primo avvio -->
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+      <UserAccounts>
+        <AdministratorPassword>
+          <Value>{xap}</Value>
+          <PlainText>true</PlainText>
+        </AdministratorPassword>
+      </UserAccounts>
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <Username>Administrator</Username>
+        <Password><Value>{xap}</Value><PlainText>true</PlainText></Password>
+        <LogonCount>3</LogonCount>
+      </AutoLogon>
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>cmd /c mkdir C:\\ProgramData\\NovaSCM\\logs</CommandLine>
+          <Description>NovaSCM: crea cartella</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Invoke-WebRequest -Uri &apos;{xurl}/api/download/agent&apos; -Headers @{{&apos;X-Api-Key&apos;=&apos;{xkey}&apos;}} -OutFile &apos;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&apos; -UseBasicParsing&quot;</CommandLine>
+          <Description>NovaSCM: scarica agente</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Invoke-WebRequest -Uri &apos;{xurl}/api/download/deploy-screen&apos; -Headers @{{&apos;X-Api-Key&apos;=&apos;{xkey}&apos;}} -OutFile &apos;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&apos; -UseBasicParsing&quot;</CommandLine>
+          <Description>NovaSCM: scarica DeployScreen</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>4</Order>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;@{{api_url=&apos;{xurl}&apos;;api_key=&apos;{xkey}&apos;;pc_name=&apos;{xpc}&apos;;poll_sec=30;domain=&apos;{xdom}&apos;}}|ConvertTo-Json|Set-Content &apos;C:\\ProgramData\\NovaSCM\\agent.json&apos; -Encoding UTF8&quot;</CommandLine>
+          <Description>NovaSCM: crea config agente</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>5</Order>
+          <CommandLine>cmd /c start &quot;&quot; /b &quot;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&quot;</CommandLine>
+          <Description>NovaSCM: avvia agente</Description>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>
+</unattend>"""
+
+
 # ── PXE SETTINGS ──────────────────────────────────────────────────────────────
 
 _PXE_SETTINGS_DEFAULTS = {
     "pxe_enabled":             "1",
-    "pxe_iventoy_ip":          "",
-    "pxe_iventoy_port":        "10809",
-    "pxe_auto_provision":      "0",
+    "pxe_auto_provision":      "1",
     "pxe_pc_prefix":           "PC",
     "pxe_default_domain":      "",
     "pxe_default_ou":          "",
@@ -2203,9 +2482,34 @@ def update_pxe_settings_api():
     return jsonify({"ok": True})
 
 
-# ── Download dist binaries ────────────────────────────────────────────────────
+# ── PXE STATUS (health check TFTP + stato file WinPE) ────────────────────────
 
-DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
+@app.route("/api/pxe/status", methods=["GET"])
+@require_auth
+def get_pxe_status():
+    """Stato del server PXE: TFTP alive, PXE enabled, file WinPE presenti, conteggi."""
+    winpe_files = {}
+    for fname in ("wimboot", "BCD", "boot.sdi", "boot.wim"):
+        fpath = os.path.join(_WINPE_DIR, fname)
+        winpe_files[fname] = _sizeof_fmt(os.path.getsize(fpath)) if os.path.isfile(fpath) else None
+    ipxe_ok = os.path.isfile(os.path.join(DIST_DIR, "ipxe.efi"))
+    with get_db_ctx() as conn:
+        host_count = conn.execute("SELECT COUNT(*) as cnt FROM pxe_hosts").fetchone()["cnt"]
+        boot_today = conn.execute(
+            "SELECT COUNT(*) as cnt FROM pxe_boot_log WHERE ts >= date('now')"
+        ).fetchone()["cnt"]
+    return jsonify({
+        "pxe_enabled": _PXE_ENABLED,
+        "tftp_alive":  is_tftp_alive(),
+        "ipxe_efi":    ipxe_ok,
+        "winpe_files": winpe_files,
+        "winpe_ready": all(v is not None for v in winpe_files.values()),
+        "host_count":  host_count,
+        "boot_today":  boot_today,
+    })
+
+
+# ── Download dist binaries ────────────────────────────────────────────────────
 
 @app.route("/api/download/deploy-screen", methods=["GET"])
 @require_auth
