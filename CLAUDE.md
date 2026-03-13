@@ -249,6 +249,8 @@ def ui_deploy_client():
 
 ### M-7 · Nessun test PXE ✅ FIXATO (30 test PXE aggiunti — totale 142/142)
 
+### M-8 · Nessun test `/deploy-client` auth ✅ FIXATO (7 test aggiunti — totale 149/149)
+
 ---
 
 ## ★ INTEGRAZIONE DEPLOY SCREEN
@@ -269,7 +271,7 @@ if (Test-Path $edgePath) {
 ## Convenzioni
 
 - **Dominio:** `polariscore.it` ovunque (NON `.local`)
-- **IP server:** `192.168.1.100` ovunque (NON `192.168.1.100`)
+- **IP server:** `192.168.1.100` ovunque (CT 103, VLAN 20)
 - **Date:** ISO 8601 UTC senza timezone
 - **PC names:** uppercase, max 15 char, regex `^[A-Z0-9][A-Z0-9\-]{0,14}$`
 - **MAC:** `AA:BB:CC:DD:EE:FF` uppercase
@@ -307,4 +309,4 @@ if (Test-Path $edgePath) {
 
 ---
 
-*Ultimo aggiornamento: 2026-03-12 — v2.2.1*
+*Ultimo aggiornamento: 2026-03-12 — v2.2.1 — 149 test OK*

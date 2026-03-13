@@ -1,7 +1,7 @@
 {
-  "version": "2.2.0",
+  "version": "2.2.1",
   "channel": "stable",
-  "stable": "2.2.0",
+  "stable": "2.2.1",
   "url": "",
-  "notes": "v2.2.0: iPXE + wimboot + WinPE deploy. iVentoy rimosso. Endpoint /api/pxe/file, /api/autounattend, /api/pxe/status aggiunti."
+  "notes": "v2.2.1: bug fix PXE (file handle, enrollment token, deploy-client auth). 149 test."
 }

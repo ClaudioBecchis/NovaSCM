@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- TEMPLATE: sostituire le credenziali prima dell'uso.
-     Per generare automaticamente: GET /api/cr/by-name/{pc}/autounattend.xml
-     oppure GET /api/autounattend/{pc} (endpoint PXE) -->
+<!-- ⚠️ DEPRECATED — Questo file è un template legacy.
+     Il deploy PXE usa autounattend.xml generato dinamicamente dal server:
+       GET /api/autounattend/{pc_name}
+     Questo file resta solo come riferimento per deploy USB manuali.
+     Sostituire le credenziali CHANGE_ME prima dell'uso. -->
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
 
   <!-- ========== windowsPE — partizionamento e selezione edizione ========== -->

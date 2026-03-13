@@ -1,0 +1,346 @@
+================================================================================
+  POLARISCORE — DEPLOY WINDOWS 11 VIA PXE (iVentoy + dnsmasq proxyDHCP)
+  Documento di configurazione completo
+  Data: 2026-03-10
+================================================================================
+
+OBIETTIVO
+---------
+Installare Windows 11 Pro in modalità zero-touch su HP EliteBook x360 1040 G6
+tramite PXE boot sulla rete locale (VLAN Management 192.168.10.0/24).
+L'installazione è completamente automatica: partizionamento, Windows, driver,
+software e agente NovaSCM, senza alcun intervento manuale.
+
+
+ARCHITETTURA
+------------
+
+  [HP EliteBook x360 1040 G6]
+       |  1. DHCP Discover (broadcast)
+       v
+  [UCG Fiber 192.168.10.1]          —→  assegna IP dalla pool VLAN Management
+  [CT110 dnsmasq 192.168.1.122]    —→  aggiunge opzioni PXE (proxyDHCP)
+       |
+       |  2. TFTP: scarica snponly.efi
+       v
+  [CT110 iVentoy 192.168.1.122:16000]
+       |  3. Menu iVentoy → profilo "win11-nb" → Win11.iso
+       v
+  [Windows Setup + autounattend.xml]
+       |  4. Installazione silenziosa
+       v
+  [postinstall.ps1 al primo avvio]
+       |  5. Software + NovaSCM agent
+       v
+  [NovaSCM 192.168.1.100:9091]     —→  monitora gli step del deploy
+
+
+COMPONENTI E INDIRIZZI
+----------------------
+
+  CT110 (pxe)         192.168.1.122    VLAN Management (tag=10, native)
+  iVentoy             porta 26000       web UI di gestione
+  iVentoy HTTP        porta 16000       serve ISO ai client PXE
+  nginx               porta 80          serve autounattend.xml + postinstall.ps1
+  dnsmasq             UDP 67            proxyDHCP (solo opzioni PXE, no IP)
+
+  NovaSCM server      192.168.1.100:9091  VLAN Services (tag=20)
+  API Key NovaSCM     YOUR_API_KEY_HERE
+
+  HP EliteBook        NB-ELITEBOOK      nome PC post-install
+                      Admin / CHANGE_ME
+
+
+================================================================================
+FILE 1 — /etc/dnsmasq.d/pxe.conf  (CT110)
+================================================================================
+
+  Ruolo: proxyDHCP — risponde ai broadcast DHCP Discover con sole opzioni PXE.
+  NON assegna indirizzi IP (lo fa UCG Fiber).
+  Quando un client avvia PXE, riceve:
+    - IP + gateway da UCG Fiber (192.168.10.1)
+    - opzioni PXE da dnsmasq: "scarica snponly.efi dal TFTP di iVentoy"
+
+  Contenuto attuale:
+  ──────────────────────────────────────────────────────────────────────────────
+  # ProxyDHCP — iVentoy @ 192.168.1.122
+  # Risponde solo ai broadcast PXE (non assegna IP — ci pensa UCG Fiber)
+  dhcp-range=192.168.10.0,proxy
+
+  # Indica al client: usa il TFTP di iVentoy (192.168.1.122) con i suoi file
+  pxe-service=x86PC,"Network Boot (BIOS)",pxelinux,192.168.1.122
+  pxe-service=X86-64_EFI,"Network Boot (UEFI)",snponly.efi,192.168.1.122
+  pxe-service=BC_EFI,"Network Boot (UEFI BC)",snponly.efi,192.168.1.122
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Stato servizio:
+    systemctl status dnsmasq     → active (running)
+    systemctl is-enabled dnsmasq → enabled (parte al boot CT110)
+
+  Nota: dnsmasq fu già disabilitato in precedenza (era usato per netboot.xyz).
+  Il config vecchio puntava ai file netboot.xyz in /srv/tftp/.
+  Ora punta al TFTP interno di iVentoy a 192.168.1.122.
+
+
+================================================================================
+FILE 2 — iVentoy configurazione  (CT110, /opt/iventoy-1.0.21/)
+================================================================================
+
+  Versione: iVentoy 1.0.21 Linux 64-bit
+  Web UI:   http://192.168.1.122:26000
+  Binario:  /opt/iventoy-1.0.21/lib/iventoy
+  ISO:      /opt/iventoy-1.0.21/iso/Win11.iso
+
+  DHCP Mode: 1 = External
+    → iVentoy NON invia offerte DHCP sulla rete.
+    → Il DHCP è gestito da UCG Fiber + dnsmasq proxyDHCP.
+    → iVentoy risponde solo alle richieste TFTP e HTTP dei client PXE.
+
+  Impostazione eseguita via API:
+    POST http://192.168.1.122:26000/iventoy/json
+    Body: {"method":"set_dhcp_mode","dhcp_mode":1}
+
+  Porte interne (da g_vtoy_config):
+    http_port: 16000   (serve le ISO ai client)
+    nbd_port:  10809   (NBD protocol, non usato)
+    tftp:      interno (non esposto come UDP:69 standard, gestito dal binario)
+
+  Boot file per UEFI:
+    efi_boot_file: 0 = snponly.efi (impostazione di default)
+
+  Profilo win11-nb:
+    Path:   /opt/iventoy-1.0.21/user/scripts/win11-nb/
+    File:   autounattend.xml  (copia del file in /var/www/html/)
+    Scopo:  iniettare autounattend.xml nell'ISO durante il boot PXE
+            (iVentoy intercetta il client e serve il file unattend personalizzato)
+
+  ISO disponibili:
+    /opt/iventoy-1.0.21/iso/Win11.iso
+
+  Avvio/stop manuale:
+    cd /opt/iventoy-1.0.21 && bash iventoy.sh start
+    cd /opt/iventoy-1.0.21 && bash iventoy.sh stop
+    cd /opt/iventoy-1.0.21 && bash iventoy.sh status
+
+
+================================================================================
+FILE 3 — /var/www/html/autounattend.xml  (CT110, servito via nginx :80)
+================================================================================
+
+  Ruolo: risposta automatica a tutte le domande di Windows Setup.
+  Windows cerca autounattend.xml nella radice del media di installazione.
+  iVentoy lo inietta automaticamente nel profilo win11-nb.
+
+  Parametri principali:
+  ──────────────────────────────────────────────────────────────────────────────
+  LINGUA        it-IT (UI, input, sistema, utente)
+  FUSO ORARIO   W. Europe Standard Time (UTC+1/UTC+2 DST)
+  NOME PC       NB-ELITEBOOK
+  EDIZIONE      Windows 11 Pro (IMAGE/NAME = "Windows 11 Pro")
+
+  DISCO 0 — partizionamento automatico (WillWipeDisk=true ⚠️ CANCELLA TUTTO):
+    Partizione 1: EFI  100 MB  FAT32  label=System
+    Partizione 2: MSR   16 MB  (nessun formato, riservata Microsoft)
+    Partizione 3: Windows — tutto lo spazio rimanente  NTFS  label=Windows C:
+
+  ACCOUNT:
+    Administrator abilitato, password: CHANGE_ME
+    AutoLogon: 1 accesso automatico come Administrator al primo avvio
+
+  OOBE silenziosa:
+    HideEULAPage                 = true
+    HideOEMRegistrationScreen    = true
+    HideOnlineAccountScreens     = true
+    HideWirelessSetupInOOBE      = true
+    ProtectYourPC                = 3  (salta Cortana/SmartScreen setup)
+    SkipMachineOOBE              = true
+    SkipUserOOBE                 = true
+
+  FIRSTLOGONCOMMANDS (eseguiti al primo desktop):
+    Ordine 1: curl -s -o C:\Windows\Temp\postinstall.ps1
+                       http://192.168.1.122/postinstall.ps1
+    Ordine 2: powershell -ExecutionPolicy Bypass -NonInteractive
+                         -File C:\Windows\Temp\postinstall.ps1
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Nota: il file è presente in due posizioni:
+    /var/www/html/autounattend.xml              (servito da nginx per download)
+    /opt/iventoy-1.0.21/user/scripts/win11-nb/ (usato da iVentoy per injection)
+
+
+================================================================================
+FILE 4 — /var/www/html/postinstall.ps1  (CT110, servito via nginx :80)
+================================================================================
+
+  Ruolo: script PowerShell eseguito al primo avvio di Windows.
+  Segnala ogni step a NovaSCM e installa software/agente.
+
+  Variabili principali:
+  ──────────────────────────────────────────────────────────────────────────────
+  $SERVER = "http://192.168.1.100:9091"    (NovaSCM API)
+  $PC     = "NB-ELITEBOOK"                  (nome PC su NovaSCM)
+  $APIKEY = "YOUR_API_KEY_HERE"
+  ──────────────────────────────────────────────────────────────────────────────
+
+  Funzione Report-Step:
+    POST $SERVER/api/cr/by-name/$PC/step
+    Body: { "step": "<nome>", "status": "running"|"done"|"error" }
+    Header: X-Api-Key: $APIKEY
+    Ignora errori di rete (il deploy continua comunque)
+
+  STEP ESEGUITI IN ORDINE:
+  ┌─────────────────────┬────────────────────────────────────────────────────┐
+  │ Step                │ Azione                                             │
+  ├─────────────────────┼────────────────────────────────────────────────────┤
+  │ disk_partition      │ già fatto da autounattend — segnala done           │
+  │ disk_format         │ già fatto da autounattend — segnala done           │
+  │ windows_install     │ già fatto da autounattend — segnala done           │
+  │ oobe_setup          │ già fatto da autounattend — segnala done           │
+  ├─────────────────────┼────────────────────────────────────────────────────┤
+  │ drv_chipset         │ sleep 2s (driver gestiti da Windows Update)        │
+  │ drv_nic             │ sleep 1s                                           │
+  │ drv_audio           │ sleep 1s                                           │
+  │ drv_gpu             │ sleep 1s                                           │
+  ├─────────────────────┼────────────────────────────────────────────────────┤
+  │ wu_critical         │ Installa PSWindowsUpdate + aggiorna Windows        │
+  │ wu_cumulative       │ sleep 3s                                           │
+  ├─────────────────────┼────────────────────────────────────────────────────┤
+  │ vcredist            │ winget install Microsoft.VCRedist.2015+.x64        │
+  │ dotnet              │ winget install Microsoft.DotNet.Runtime.8          │
+  ├─────────────────────┼────────────────────────────────────────────────────┤
+  │ security_agent      │ Windows Defender già attivo — sleep 2s             │
+  │ firewall_policy     │ netsh advfirewall set allprofiles state on         │
+  ├─────────────────────┼────────────────────────────────────────────────────┤
+  │ domain_join         │ workgroup già impostato da autounattend             │
+  │ gpo_sync            │ gpupdate /force                                    │
+  │ cert_enroll         │ sleep 1s                                           │
+  ├─────────────────────┼────────────────────────────────────────────────────┤
+  │ office365           │ winget install Mozilla.Firefox                     │
+  │ teams               │ winget install VideoLAN.VLC                        │
+  │ outlook_cfg         │ segnala done (non applicabile)                     │
+  │ onedrive_cfg        │ segnala done (non applicabile)                     │
+  │ default_profile     │ segnala done (non applicabile)                     │
+  ├─────────────────────┼────────────────────────────────────────────────────┤
+  │ agent_install       │ Invoke-WebRequest $SERVER/agent/install.ps1 | iex  │
+  ├─────────────────────┼────────────────────────────────────────────────────┤
+  │ cleanup             │ Remove-Item postinstall.ps1, svuota Cestino        │
+  │ final_reboot        │ shutdown /r /t 10                                  │
+  └─────────────────────┴────────────────────────────────────────────────────┘
+
+
+================================================================================
+FLUSSO COMPLETO — passo per passo
+================================================================================
+
+  1. HP EliteBook accende, premi F10/F12 → Boot menu → Network Boot (PXE)
+
+  2. DHCP Discover (broadcast su 192.168.10.255):
+     - UCG Fiber risponde: IP=192.168.10.x, GW=192.168.10.1, DNS=192.168.1.100
+     - dnsmasq (CT110) risponde: DHCP proxy, boot file=snponly.efi @ 192.168.1.122
+
+  3. EliteBook scarica snponly.efi via TFTP da iVentoy (192.168.1.122)
+
+  4. iVentoy boot menu → profilo "win11-nb" → Win11.iso
+     iVentoy inietta automaticamente autounattend.xml
+
+  5. Windows Setup parte in modo silenzioso:
+     - Partiziona il disco (⚠️ CANCELLA TUTTO)
+     - Installa Windows 11 Pro
+     - Configura locale it-IT, PC name NB-ELITEBOOK
+     - AutoLogon come Administrator
+
+  6. Al primo desktop: esegue postinstall.ps1 (scaricato da nginx CT110:80)
+
+  7. postinstall.ps1 installa software e agente NovaSCM, poi riavvia
+
+  8. Dopo riavvio: NovaSCM agent fa polling su 192.168.1.100:9091
+     Il PC appare come "online" nella dashboard NovaSCM
+
+
+================================================================================
+RISOLUZIONE PROBLEMI
+================================================================================
+
+  PROBLEMA: EliteBook non ottiene IP / non avvia PXE
+  ───────────────────────────────────────────────────
+  Verifica:
+    pct exec 110 -- systemctl is-active dnsmasq     → deve essere "active"
+    pct exec 110 -- systemctl is-active iventoy     → "inactive" (raw socket)
+    pct exec 110 -- ss -ulnp | grep :67             → dnsmasq deve essere lì
+
+  Log in tempo reale:
+    pct exec 110 -- journalctl -u dnsmasq -f
+    → cerca righe tipo: PXE(eth0) <MAC-client> proxy
+
+  PROBLEMA: iVentoy DHCP mode torna a 0 (Internal) dopo restart
+  ──────────────────────────────────────────────────────────────
+  iVentoy può resettare dhcp_mode all'avvio. Ripristina con:
+    curl -s -X POST -H "Content-Type: application/json" \
+         -d '{"method":"set_dhcp_mode","dhcp_mode":1}' \
+         http://192.168.1.122:26000/iventoy/json
+
+  PROBLEMA: boot PXE parte ma si ferma / non trova ISO
+  ─────────────────────────────────────────────────────
+  Verifica ISO presente:
+    pct exec 110 -- ls -lh /opt/iventoy-1.0.21/iso/
+  Verifica profilo win11-nb:
+    pct exec 110 -- ls /opt/iventoy-1.0.21/user/scripts/win11-nb/
+
+  PROBLEMA: postinstall.ps1 non riesce a contattare NovaSCM
+  ──────────────────────────────────────────────────────────
+  Firewall UCG: verifica che Management (192.168.10.0/24) possa raggiungere
+  Services (192.168.1.100:9091). Gli step vengono comunque marcati "done"
+  anche in caso di errore di rete (try/catch nel script).
+
+  PROBLEMA: winget non disponibile
+  ─────────────────────────────────
+  Windows 11 ha winget preinstallato. Se mancasse:
+    Add-AppxPackage -RegisterByFamilyName -MainPackage Microsoft.DesktopAppInstaller_8wekyb3d8bbwe
+
+
+================================================================================
+COMANDI UTILI DI MANUTENZIONE
+================================================================================
+
+  # Stato servizi CT110
+  pct exec 110 -- bash -c "systemctl is-active dnsmasq; cd /opt/iventoy-1.0.21 && bash iventoy.sh status"
+
+  # Log PXE live
+  pct exec 110 -- journalctl -u dnsmasq -f
+
+  # Aggiorna autounattend.xml su iVentoy (dopo modifica in /var/www/html/)
+  pct exec 110 -- cp /var/www/html/autounattend.xml \
+                     /opt/iventoy-1.0.21/user/scripts/win11-nb/autounattend.xml
+
+  # Rimposta DHCP mode External su iVentoy
+  curl -s -X POST -H "Content-Type: application/json" \
+       -d '{"method":"set_dhcp_mode","dhcp_mode":1}' \
+       http://192.168.1.122:26000/iventoy/json
+
+  # Riavvia dnsmasq dopo modifica pxe.conf
+  pct exec 110 -- systemctl restart dnsmasq
+
+  # Testa config dnsmasq senza riavviare
+  pct exec 110 -- dnsmasq --test
+
+
+================================================================================
+NOTE STORICHE / DECISIONI PROGETTUALI
+================================================================================
+
+  - iVentoy v1.0.21 NON ha opzione proxyDHCP nella web UI.
+    Il DHCP mode si cambia solo via API JSON (metodo set_dhcp_mode).
+
+  - dnsmasq era già installato su CT110 per netboot.xyz (progetto precedente).
+    Il file pxe.conf puntava ai file in /srv/tftp/ (netboot.xyz.kpxe, ecc.).
+    È stato aggiornato per puntare al TFTP interno di iVentoy.
+
+  - iVentoy usa raw packet sockets per DHCP/TFTP (non visibili con ss/netstat).
+    Per questo dnsmasq può bindare UDP:67 anche con iVentoy in esecuzione.
+
+  - Il config.dat di iVentoy è in formato TLV binario:
+      [CRC32:4 bytes LE][key:4 LE][len:4 LE][value:len bytes]...
+    Key 18 (0x12) = dhcp_mode.
+    La modifica via API è più affidabile della modifica diretta del file binario.
+
+================================================================================

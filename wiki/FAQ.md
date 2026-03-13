@@ -40,7 +40,7 @@ Verifica che:
 **Come faccio l'enrollment automatico su un PC Windows?**
 Da PowerShell (admin) sul PC da registrare:
 ```powershell
-iwr http://192.168.1.100:9090/agent/install.ps1 | iex
+iwr http://192.168.1.100:9091/agent/install.ps1 | iex
 ```
 
 ---

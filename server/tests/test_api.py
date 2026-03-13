@@ -1314,3 +1314,51 @@ class TestAutounattendPxe:
                     headers=AUTH)
         resp = client.get("/api/autounattend/PXE-KEY-TEST")
         assert b"X-Api-Key" not in resp.data
+
+
+class TestDeployClientAuth:
+    """Test autenticazione /deploy-client — accetta X-Api-Key header O ?key= query param."""
+
+    def test_no_auth_returns_401(self, client):
+        resp = client.get("/deploy-client")
+        assert resp.status_code == 401
+
+    def test_wrong_api_key_returns_401(self, client):
+        resp = client.get("/deploy-client", headers={"X-Api-Key": "wrong-key"})
+        assert resp.status_code == 401
+
+    def test_valid_api_key_header_ok(self, client):
+        resp = client.get("/deploy-client", headers=AUTH)
+        assert resp.status_code == 200
+        assert b"<!DOCTYPE html" in resp.data or b"<html" in resp.data
+
+    def test_valid_session_key_query_param_ok(self, client):
+        """Il browser kiosk durante il deploy usa ?key= (non può inviare header)."""
+        import time
+        # Crea un token valido nel dizionario _ui_tokens
+        tok = "test-session-token-abc123"
+        with api._ui_tokens_lock:
+            api._ui_tokens[tok] = time.time() + 3600
+        resp = client.get(f"/deploy-client?key={tok}")
+        assert resp.status_code == 200
+
+    def test_expired_session_key_returns_401(self, client):
+        import time
+        tok = "expired-token-xyz"
+        with api._ui_tokens_lock:
+            api._ui_tokens[tok] = time.time() - 1  # già scaduto
+        resp = client.get(f"/deploy-client?key={tok}")
+        assert resp.status_code == 401
+
+    def test_unknown_session_key_returns_401(self, client):
+        resp = client.get("/deploy-client?key=nonexistent-token")
+        assert resp.status_code == 401
+
+    def test_query_key_takes_priority_over_missing_header(self, client):
+        """Con ?key= valido non serve X-Api-Key nell'header."""
+        import time
+        tok = "priority-test-token"
+        with api._ui_tokens_lock:
+            api._ui_tokens[tok] = time.time() + 3600
+        resp = client.get(f"/deploy-client?key={tok}")
+        assert resp.status_code == 200
