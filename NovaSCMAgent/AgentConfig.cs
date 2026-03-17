@@ -53,8 +53,9 @@ public class AgentConfig
                 Console.Error.WriteLine($"[ATTENZIONE] agent.json non configurato! Modifica ApiUrl in: {ConfigPath}");
             return cfg;
         }
-        catch
+        catch (Exception ex)
         {
+            Console.Error.WriteLine($"[NovaSCM] Errore lettura config {ConfigPath}: {ex.Message}");
             return new AgentConfig();
         }
     }

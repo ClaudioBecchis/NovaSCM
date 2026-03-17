@@ -7,16 +7,20 @@ namespace NovaSCMAgent;
 
 public class ApiClient
 {
-    private readonly HttpClient _http;
+    private static readonly HttpClient _http;
     private readonly ILogger<ApiClient> _log;
     private static readonly string AgentVer =
         System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "1.0.0";
 
+    static ApiClient()
+    {
+        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+        _http.DefaultRequestHeaders.Add("User-Agent", $"NovaSCMAgent/{AgentVer}");
+    }
+
     public ApiClient(ILogger<ApiClient> log)
     {
         _log = log;
-        _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-        _http.DefaultRequestHeaders.Add("User-Agent", $"NovaSCMAgent/{AgentVer}");
     }
 
     // BUG-6: header per-request invece di DefaultRequestHeaders (non thread-safe)

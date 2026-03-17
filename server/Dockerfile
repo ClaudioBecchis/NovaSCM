@@ -21,4 +21,4 @@ ENV NOVASCM_DB=/data/novascm.db
 ENV PORT=9091
 EXPOSE 9091
 
-CMD ["gunicorn", "--workers=2", "--threads=4", "--timeout=30", "--bind=0.0.0.0:9091", "api:app"]
+CMD ["gunicorn", "--workers=1", "--threads=4", "--timeout=300", "--bind=0.0.0.0:9091", "api:app"]
