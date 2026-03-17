@@ -1,0 +1,46 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  server-tests:
+    name: Server (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: server/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r server/requirements.txt pytest
+
+      - name: Run tests
+        run: |
+          cd server
+          NOVASCM_DB=/tmp/test_novascm.db NOVASCM_API_KEY=test-key python -m pytest tests/ -v --tb=short
+        env:
+          NOVASCM_API_KEY: test-key
+          NOVASCM_DB: /tmp/test_novascm.db
+
+  agent-tests:
+    name: .NET Agent (xUnit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Run tests
+        run: dotnet test NovaSCMAgent.Tests/NovaSCMAgent.Tests.csproj --verbosity normal

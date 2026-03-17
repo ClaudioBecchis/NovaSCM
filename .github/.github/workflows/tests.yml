@@ -1,0 +1,47 @@
+name: Tests & Coverage
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  server-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        working-directory: server
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+      - name: Run tests with coverage
+        working-directory: server
+        run: pytest tests/ --cov=. --cov-report=xml --cov-report=term -v
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: server/coverage.xml
+          flags: server
+          fail_ci_if_error: false
+
+  agent-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Run tests with coverage
+        working-directory: NovaSCMAgent.Tests
+        run: dotnet test --collect:"XPlat Code Coverage" --results-directory ./results -v n
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          directory: NovaSCMAgent.Tests/results
+          flags: agent
+          fail_ci_if_error: false
