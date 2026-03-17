@@ -165,7 +165,7 @@
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
           <Description>Download postinstall</Description>
-          <CommandLine>cmd /c "curl -s -o C:\Windows\Temp\postinstall.ps1 http://192.168.20.110/postinstall.ps1"</CommandLine>
+          <CommandLine>cmd /c "curl -s -o C:\Windows\Temp\postinstall.ps1 http://192.168.20.103:9091/postinstall.ps1"</CommandLine>
           <RequiresUserInput>false</RequiresUserInput>
         </SynchronousCommand>
         <!-- C-2: verifica SHA-256 prima di eseguire -->

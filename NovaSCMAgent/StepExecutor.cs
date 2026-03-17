@@ -281,7 +281,11 @@ public class StepExecutor
             var output = (sbOut.ToString() + sbErr.ToString()).Trim();
             return new(proc.ExitCode == 0, output);
         }
-        catch (OperationCanceledException) { return new(false, $"Timeout dopo {StepTimeoutSec}s"); }
+        catch (OperationCanceledException)
+        {
+            try { proc.Kill(true); } catch { /* best effort */ }
+            return new(false, $"Timeout dopo {StepTimeoutSec}s");
+        }
         catch (Exception ex)               { return new(false, ex.Message); }
     }
 

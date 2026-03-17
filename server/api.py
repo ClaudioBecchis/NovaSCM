@@ -232,7 +232,6 @@ def get_db_ctx():
     conn = get_db()
     try:
         yield conn
-        conn.commit()  # M-3: auto-commit on success
     except Exception:
         conn.rollback()
         raise
@@ -458,9 +457,25 @@ def _fire_webhook(event: str, data: dict):
     try:
         from urllib.parse import urlparse
         parsed = urlparse(url)
-        if parsed.hostname and (parsed.hostname in _WEBHOOK_BLOCKED_HOSTS or parsed.hostname.startswith("10.") or parsed.hostname.startswith("169.254.")):
+        hostname = parsed.hostname or ""
+        if hostname in _WEBHOOK_BLOCKED_HOSTS:
             log.warning("Webhook URL bloccato (SSRF): %s", url)
             return
+        # Blocca range privati: 10.x.x.x, 169.254.x.x, 172.16-31.x.x, 192.168.x.x
+        if hostname.startswith("10.") or hostname.startswith("169.254.") or hostname.startswith("192.168."):
+            log.warning("Webhook URL bloccato (SSRF): %s", url)
+            return
+        # 172.16.0.0 - 172.31.255.255
+        if hostname.startswith("172."):
+            parts = hostname.split(".")
+            if len(parts) >= 2:
+                try:
+                    second_octet = int(parts[1])
+                    if 16 <= second_octet <= 31:
+                        log.warning("Webhook URL bloccato (SSRF): %s", url)
+                        return
+                except ValueError:
+                    pass
     except Exception:
         return
     payload = json.dumps({
@@ -483,10 +498,10 @@ def _fire_webhook(event: str, data: dict):
 # ── Cleanup workflow in stallo ─────────────────────────────────────────────────
 
 def _cleanup_stale_workflows():
-    """Marca come 'error' i workflow running da più di timeout_min minuti (atomico)."""
+    """Marca come 'error' i workflow running da più di timeout_min minuti."""
     now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-    with get_db_ctx() as conn:
-        conn.execute("BEGIN IMMEDIATE")
+    conn = get_db()
+    try:
         stale = conn.execute("""
             SELECT pw.id, pw.pc_name, pw.started_at, COALESCE(w.timeout_min, 120) AS timeout_min
             FROM pc_workflows pw
@@ -510,8 +525,9 @@ def _cleanup_stale_workflows():
                 [now.isoformat()] + ids
             )
             conn.commit()
-        else:
-            conn.rollback()
+    except Exception:
+        conn.rollback()
+        raise
     for row in timed_out:
         log.warning("Workflow timeout: pw_id=%s pc=%s", row["id"], row["pc_name"])
         _fire_webhook("workflow_timeout", {
@@ -869,7 +885,13 @@ def update_settings():
     with get_db_ctx() as conn:
         for key, value in data.items():
             try:
-                value = SETTINGS_SCHEMA[key](value) if value not in (None, "") else None
+                if key == "default_workflow_id" and value not in (None, ""):
+                    try:
+                        value = int(value)
+                    except (ValueError, TypeError):
+                        return jsonify({"error": f"Tipo non valido per {key}: deve essere un intero"}), 400
+                else:
+                    value = SETTINGS_SCHEMA[key](value) if value not in (None, "") else None
             except (ValueError, TypeError):
                 return jsonify({"error": f"Tipo non valido per {key}"}), 400
             conn.execute(
@@ -1346,8 +1368,8 @@ def deploy_start():
         conn.commit()
         # Crea nuovo pc_workflow in stato running
         conn.execute(
-            "INSERT INTO pc_workflows (pc_name, workflow_id, status, assigned_at) VALUES (?,?,?,?)",
-            (pc_name, wf_id, "running", now)
+            "INSERT INTO pc_workflows (pc_name, workflow_id, status, assigned_at, started_at) VALUES (?,?,?,?,?)",
+            (pc_name, wf_id, "running", now, now)
         )
         conn.commit()
         pw = conn.execute(
@@ -1561,10 +1583,18 @@ def report_wf_step(pc_name):
         ).fetchone()[0]
         done = conn.execute("""
             SELECT COUNT(*) FROM pc_workflow_steps
-            WHERE pc_workflow_id=? AND status IN ('done','skipped','error')
+            WHERE pc_workflow_id=? AND status IN ('done','skipped')
+        """, (pw_id,)).fetchone()[0]
+        has_error = conn.execute("""
+            SELECT COUNT(*) FROM pc_workflow_steps
+            WHERE pc_workflow_id=? AND status = 'error'
         """, (pw_id,)).fetchone()[0]
         workflow_completed = False
-        if total > 0 and done >= total:
+        if has_error > 0:
+            conn.execute("UPDATE pc_workflows SET status='failed', completed_at=? WHERE id=?",
+                         (ts, pw_id))
+            workflow_completed = True
+        elif total > 0 and done >= total:
             conn.execute("UPDATE pc_workflows SET status='completed', completed_at=? WHERE id=?",
                          (ts, pw_id))
             workflow_completed = True
@@ -1594,8 +1624,8 @@ def checkin_wf(pc_name):
 
 # ── Auto-update ───────────────────────────────────────────────────────────────
 
-VERSION_FILE = os.path.join(os.path.dirname(DB), "version.json")
-EXE_FILE     = os.path.join(os.path.dirname(DB), "NovaSCM.exe")
+VERSION_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.json")
+EXE_FILE     = os.path.join(os.path.dirname(os.path.abspath(__file__)), "NovaSCM.exe")
 
 @app.route("/api/version", methods=["GET"])
 @require_auth
@@ -1649,8 +1679,41 @@ def download_agent_sha256():
             h.update(chunk)
     return Response(h.hexdigest(), mimetype="text/plain")
 
+def _is_valid_deploy_token(token: str) -> bool:
+    """Verifica se un token è un deploy_token valido e non scaduto (senza consumarlo)."""
+    if not token:
+        return False
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM deploy_tokens WHERE token=? AND used=1 AND expires_at >= ?",
+        (token, now)
+    ).fetchone()
+    return row is not None
+
+def _require_auth_or_deploy_token(fn):
+    """Like require_auth but also accepts deploy_token (used in autounattend PXE flow)."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        token = request.headers.get("X-Api-Key", "")
+        # Check normal API key
+        if token and hmac.compare_digest(token, API_KEY):
+            return fn(*args, **kwargs)
+        # Check session token
+        if token:
+            with _ui_tokens_lock:
+                exp = _ui_tokens.get(token)
+            if exp and exp > time.time():
+                return fn(*args, **kwargs)
+        # Check deploy token (used during PXE autounattend flow)
+        if token and _is_valid_deploy_token(token):
+            return fn(*args, **kwargs)
+        log.warning("Accesso non autorizzato a %s da %s", request.path, request.remote_addr)
+        return jsonify({"error": "Non autorizzato"}), 401
+    return wrapper
+
 @app.route("/api/download/agent", methods=["GET"])
-@require_auth
+@_require_auth_or_deploy_token
 def download_agent():
     """Serve NovaSCMAgent.exe (Windows) o NovaSCMAgent-linux (Linux) in base all'User-Agent."""
     ua = request.headers.get("User-Agent", "").lower()
@@ -1901,6 +1964,7 @@ kernel {server_url}/api/pxe/file/wimboot --index=1
 initrd {server_url}/api/pxe/file/BCD              BCD
 initrd {server_url}/api/pxe/file/boot.sdi         boot.sdi
 initrd {server_url}/api/pxe/file/boot.wim         boot.wim
+initrd {server_url}/api/autounattend/{pc_name}     autounattend.xml
 boot || goto failed
 
 :failed
@@ -2150,6 +2214,8 @@ def get_pxe_host(mac: str):
     return jsonify(dict(row))
 
 
+_VALID_BOOT_ACTIONS = {"auto", "deploy", "local", "block"}
+
 @app.route("/api/pxe/hosts", methods=["POST"])
 @require_auth
 def create_pxe_host():
@@ -2157,6 +2223,8 @@ def create_pxe_host():
     mac = _normalize_mac(data.get("mac", ""))
     if not mac:
         return jsonify({"error": "MAC non valido o mancante"}), 400
+    if data.get("boot_action", "auto") not in _VALID_BOOT_ACTIONS:
+        return jsonify({"error": "boot_action non valido"}), 400
     now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     with get_db_ctx() as conn:
         try:
@@ -2189,6 +2257,8 @@ def update_pxe_host(mac: str):
     if not norm:
         return jsonify({"error": "MAC non valido"}), 400
     data    = request.get_json(silent=True) or {}
+    if data.get("boot_action", "auto") not in _VALID_BOOT_ACTIONS:
+        return jsonify({"error": "boot_action non valido"}), 400
     allowed = ("pc_name", "cr_id", "workflow_id", "boot_action", "notes")
     updates = {k: v for k, v in data.items() if k in allowed}
     if not updates:
@@ -2777,9 +2847,8 @@ def ui_index():
     html_path = os.path.join(WEB_DIR, "index.html")
     with open(html_path, encoding="utf-8") as f:
         html = f.read()
-    # Inietta API key nel meta tag per la UI
-    api_key = os.environ.get("NOVASCM_API_KEY", _get_setting("api_key", ""))
-    html = html.replace("<head>", f'<head>\n<meta name="x-api-key" content="{api_key}">', 1)
+    # BUG-09: API key non viene più iniettata nel HTML per sicurezza.
+    # La UI deve usare /api/ui-token per ottenere un session token.
     return html, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 @app.route("/api/ui-token", methods=["GET"])
@@ -2796,8 +2865,18 @@ def ui_token():
     return jsonify({"token": token, "expires_at": exp})
 
 @app.route("/deploy-client")
-@require_auth
 def ui_deploy_client():
+    """BUG-04 fix: accept session_key from query param for PXE deploy browser."""
+    key = request.args.get("key", "")
+    if key:
+        with _ui_tokens_lock:
+            exp = _ui_tokens.get(key)
+        if not exp or exp < time.time():
+            return "Token non valido o scaduto", 401
+    else:
+        token = request.headers.get("X-Api-Key", request.args.get("api_key", ""))
+        if not token or not hmac.compare_digest(token, API_KEY):
+            return "Non autorizzato", 401
     html_path = os.path.join(WEB_DIR, "deploy-client.html")
     with open(html_path, encoding="utf-8") as f:
         html = f.read()

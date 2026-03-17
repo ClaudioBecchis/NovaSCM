@@ -438,7 +438,7 @@ select option { background: var(--surface-2); }
 
   <!-- ── Topbar ── -->
   <div class="topbar">
-    <div class="topbar-title" x-text="{dashboard:'Dashboard',workflows:'Workflow',assignments:'Deploy',floor:'Deploy Floor',cr:'Change Request',settings:'Settings'}[section]"></div>
+    <div class="topbar-title" x-text="{dashboard:'Dashboard',workflows:'Workflow',assignments:'Deploy',floor:'Deploy Floor',cr:'Change Request',settings:'Settings',pxe:'PXE / Boot'}[section]"></div>
     <div class="topbar-right">
       <span class="led" :class="liveOk ? 'led-run' : 'led-err'"></span>
       <span x-show="assignments.some(a=>a.status==='running')"
@@ -865,7 +865,7 @@ select option { background: var(--surface-2); }
       <div style="display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:12px">
         <span class="led" :class="liveOk ? 'led-ok' : 'led-err'"></span>
         <span x-text="liveOk ? 'Online' : 'Offline'" :style="liveOk ? 'color:var(--ok)' : 'color:var(--err)'"></span>
-        <span class="muted">— NovaSCM v1.8.0</span>
+        <span class="muted">— NovaSCM v<span x-text="serverVersion || '...'"></span></span>
       </div>
     </div>
   </div>

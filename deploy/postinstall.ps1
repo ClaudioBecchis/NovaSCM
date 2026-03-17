@@ -46,8 +46,13 @@ $PXE = $SERVER  # Il PXE server è sulla stessa macchina del server NovaSCM
 # ── M-1: Rinomina PC con template MAC6 ───────────────────────────────────────
 $adapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.HardwareInterface } |
            Sort-Object InterfaceIndex | Select-Object -First 1
-$mac6    = ($adapter.MacAddress -replace '[:\-]','').Substring(6)
-$newName = "PC-$mac6"
+if (-not $adapter) {
+    Write-Warning "NovaSCM: nessun adattatore di rete attivo trovato — uso nome PC corrente"
+    $newName = $env:COMPUTERNAME
+} else {
+    $mac6    = ($adapter.MacAddress -replace '[:\-]','').Substring(6)
+    $newName = "PC-$mac6"
+}
 
 if ($env:COMPUTERNAME -ne $newName) {
     try {
