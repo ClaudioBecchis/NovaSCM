@@ -429,7 +429,7 @@ select option { background: var(--surface-2); }
   </nav>
   <div class="sidebar-footer">
     <span class="led" :class="liveOk ? 'led-ok' : 'led-err'"></span>
-    <span>v1.8.0</span>
+    <span x-text="'v' + (serverVersion || '...')"></span>
   </div>
 </div>
 
@@ -1068,7 +1068,7 @@ select option { background: var(--surface-2); }
         <label>In caso di errore</label>
         <select x-model="stepForm.su_errore">
           <option value="stop">stop — blocca workflow</option>
-          <option value="continua">continua — vai al prossimo</option>
+          <option value="continue">continue — vai al prossimo</option>
         </select>
       </div>
     </div>
@@ -1226,6 +1226,7 @@ function app() {
     section: 'dashboard',
     modal: null,
     liveOk: false,
+    serverVersion: '',
     lastUpdate: '',
     toast: { show: false, msg: '', type: 'ok' },
     apiKey: document.querySelector('meta[name="x-api-key"]')?.content || '',
@@ -1270,6 +1271,10 @@ function app() {
     async loadAll() {
       try {
         await Promise.all([this.loadWorkflows(), this.loadAssignments(), this.loadCr(), this.loadSettings()]);
+        if (!this.serverVersion) {
+          const v = await this.api('/api/version');
+          if (v) this.serverVersion = v.version || '2.2.0';
+        }
         this.liveOk = true;
         this.lastUpdate = new Date().toLocaleTimeString('it-IT');
         // Aggiorna modal dettaglio se aperto
@@ -1531,6 +1536,13 @@ function app() {
     statusColor(s) {
       return { pending:'var(--border)', running:'var(--accent)', done:'var(--success)', error:'var(--error)', skipped:'var(--muted)' }[s] || 'var(--border)';
     },
+    // M-1: escape HTML per prevenire XSS in innerHTML
+    esc(s) {
+      if (s == null) return '';
+      const d = document.createElement('div');
+      d.textContent = String(s);
+      return d.innerHTML;
+    },
     ago(iso) {
       if (!iso) return '—';
       const d = new Date(iso), now = new Date();
@@ -1559,13 +1571,13 @@ function app() {
       const actionColor = { deploy:'var(--accent)', local:'var(--muted)', block:'var(--error)', auto:'var(--ok)' };
       tbody.innerHTML = rows.map(h => `
         <tr style="border-bottom:1px solid var(--border)">
-          <td style="padding:7px 10px;font-family:monospace">${h.mac}</td>
-          <td style="padding:7px 10px">${h.pc_name || '<span style="color:var(--muted)">—</span>'}</td>
-          <td style="padding:7px 10px"><span style="color:${actionColor[h.boot_action]||'var(--muted)'};font-size:12px">${h.boot_action}</span></td>
-          <td style="padding:7px 10px;color:var(--muted)">${h.workflow_nome || '—'}</td>
+          <td style="padding:7px 10px;font-family:monospace">${this.esc(h.mac)}</td>
+          <td style="padding:7px 10px">${this.esc(h.pc_name) || '<span style="color:var(--muted)">—</span>'}</td>
+          <td style="padding:7px 10px"><span style="color:${actionColor[h.boot_action]||'var(--muted)'};font-size:12px">${this.esc(h.boot_action)}</span></td>
+          <td style="padding:7px 10px;color:var(--muted)">${this.esc(h.workflow_nome) || '—'}</td>
           <td style="padding:7px 10px;color:var(--muted);font-size:12px">${h.last_boot_at ? this.ago(h.last_boot_at) : '—'}</td>
           <td style="padding:7px 10px">${h.boot_count || 0}</td>
-          <td style="padding:7px 10px;color:var(--muted);font-size:12px">${h.last_ip || '—'}</td>
+          <td style="padding:7px 10px;color:var(--muted);font-size:12px">${this.esc(h.last_ip) || '—'}</td>
           <td style="padding:7px 10px">
             <button style="background:transparent;border:1px solid var(--border);color:var(--text);border-radius:3px;padding:2px 8px;cursor:pointer;font-size:12px"
                     onclick="document.querySelector('[x-data]').__x.$data.editPxeHost('${h.mac}')">✎</button>
@@ -1587,10 +1599,10 @@ function app() {
       tbody.innerHTML = rows.map(r => `
         <tr style="border-bottom:1px solid var(--border)">
           <td style="padding:6px 10px;color:var(--muted);font-size:12px">${r.ts ? this.ago(r.ts) : '—'}</td>
-          <td style="padding:6px 10px;font-family:monospace;font-size:12px">${r.mac}</td>
-          <td style="padding:6px 10px">${r.pc_name || '—'}</td>
-          <td style="padding:6px 10px;color:var(--muted);font-size:12px">${r.ip || '—'}</td>
-          <td style="padding:6px 10px"><span style="color:${actionColor[r.action]||'var(--muted)'};font-size:12px">${r.action}</span></td>
+          <td style="padding:6px 10px;font-family:monospace;font-size:12px">${this.esc(r.mac)}</td>
+          <td style="padding:6px 10px">${this.esc(r.pc_name) || '—'}</td>
+          <td style="padding:6px 10px;color:var(--muted);font-size:12px">${this.esc(r.ip) || '—'}</td>
+          <td style="padding:6px 10px"><span style="color:${actionColor[r.action]||'var(--muted)'};font-size:12px">${this.esc(r.action)}</span></td>
           <td style="padding:6px 10px;color:var(--muted)">${r.pw_id || '—'}</td>
         </tr>
       `).join('');
@@ -1619,26 +1631,25 @@ function app() {
       await this.loadPxeHosts();
     },
     async editPxeHost(mac) {
-      const action = prompt(
-        `Azione boot per ${mac}:\nauto | deploy | local | block`,
-        'auto'
-      );
-      if (!action) return;
-      const valid = ['auto', 'deploy', 'local', 'block'];
-      if (!valid.includes(action)) { alert('Azione non valida'); return; }
-      const r = await this.api(`/api/pxe/hosts/${encodeURIComponent(mac)}`, 'PUT', { boot_action: action });
-      if (r) await this.loadPxeHosts();
+      const hosts = await this.api('/api/pxe/hosts');
+      const host = hosts?.find(h => h.mac === mac);
+      if (!host) return;
+      const action = prompt(`Boot action per ${mac}\n(auto / deploy / local / block):`, host.boot_action || 'auto');
+      if (action === null) return;
+      const pcName = prompt('Nome PC:', host.pc_name || '');
+      if (pcName === null) return;
+      await this.api(`/api/pxe/hosts/${mac}`, 'PUT', { boot_action: action, pc_name: pcName });
+      await this.loadPxeHosts();
     },
     async openPxeHostModal() {
-      const mac = prompt('Indirizzo MAC (es. AA:BB:CC:DD:EE:FF):');
+      const mac = prompt('MAC address (es. AA:BB:CC:DD:EE:FF):');
       if (!mac) return;
-      const name = prompt('Nome PC (opzionale):') || '';
-      const r = await this.api('/api/pxe/hosts', 'POST', {
-        mac: mac.trim(),
-        pc_name: name.trim(),
-        boot_action: 'auto',
-      });
-      if (r) await this.loadPxeHosts();
+      const pcName = prompt('Nome PC:', '');
+      if (pcName === null) return;
+      const action = prompt('Boot action (auto / deploy / local / block):', 'auto');
+      if (action === null) return;
+      await this.api('/api/pxe/hosts', 'POST', { mac: mac.toUpperCase(), pc_name: pcName, boot_action: action });
+      await this.loadPxeHosts();
     },
     async checkPxeStatus() {
       const tftpBadge  = document.getElementById('tftp-status');
