@@ -36,6 +36,9 @@ public class Worker : BackgroundService
         var version = System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
         _log.LogInformation("NovaSCM Agent v{Version} avviato — OS: {Os}", version, Environment.OSVersion);
 
+        int consecutiveErrors = 0;
+        const int MaxBackoffSec = 300; // max 5 minuti di backoff
+
         while (!ct.IsCancellationRequested)
         {
             var cfg = AgentConfig.Load();
@@ -44,6 +47,7 @@ public class Worker : BackgroundService
             try
             {
                 var wf = await _api.GetWorkflowAsync(cfg.ApiUrl, cfg.PcName, ct, cfg.ApiKey);
+                consecutiveErrors = 0; // reset su successo
 
                 if (wf != null && wf.ContainsKey("workflow_nome") && wf["workflow_nome"] != null)
                 {
@@ -55,10 +59,19 @@ public class Worker : BackgroundService
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _log.LogError(ex, "Errore nel loop principale");
+                consecutiveErrors++;
+                _log.LogError(ex, "Errore nel loop principale (tentativo {N})", consecutiveErrors);
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(cfg.PollSec), ct);
+            // Backoff esponenziale: pollSec * 2^errori, max 5 minuti
+            var delaySec = consecutiveErrors > 0
+                ? Math.Min(cfg.PollSec * (1 << Math.Min(consecutiveErrors, 5)), MaxBackoffSec)
+                : cfg.PollSec;
+
+            if (consecutiveErrors > 0)
+                _log.LogWarning("Backoff: prossimo polling tra {Sec}s ({Err} errori consecutivi)", delaySec, consecutiveErrors);
+
+            await Task.Delay(TimeSpan.FromSeconds(delaySec), ct);
         }
     }
 

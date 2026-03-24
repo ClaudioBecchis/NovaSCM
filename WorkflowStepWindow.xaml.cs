@@ -41,24 +41,30 @@ public partial class WorkflowStepWindow : Window
     public WorkflowStepWindow(WfStepRow? existing, int defaultOrdine)
     {
         InitializeComponent();
-        Owner = Application.Current.MainWindow;
+        try { Owner = Application.Current.MainWindow; } catch { }
 
-        if (existing != null)
+        try
         {
-            TxtTitle.Text     = "Modifica Step";
-            TxtNome.Text      = existing.Nome;
-            TxtOrdine.Text    = existing.Ordine.ToString();
-            TxtParametri.Text = existing.Parametri;
-            SelectComboByTag(CmbTipo,      existing.Tipo);
-            SelectComboByTag(CmbPlatform,  existing.Platform);
-            SelectComboByTag(CmbSuErrore,  existing.SuErrore);
+            if (existing != null)
+            {
+                TxtTitle.Text     = "Modifica Step";
+                TxtNome.Text      = existing.Nome;
+                TxtOrdine.Text    = existing.Ordine.ToString();
+                TxtParametri.Text = existing.Parametri;
+                SelectComboByTag(CmbTipo,      existing.Tipo);
+                SelectComboByTag(CmbPlatform,  existing.Platform);
+                SelectComboByTag(CmbSuErrore,  existing.SuErrore);
+            }
+            else
+            {
+                TxtOrdine.Text = defaultOrdine.ToString();
+                TxtParametri.Text = DefaultParams["winget_install"];
+                if (TxtHelper != null) TxtHelper.Text = Helpers["winget_install"];
+            }
         }
-        else
+        catch (Exception ex)
         {
-            TxtOrdine.Text = defaultOrdine.ToString();
-            // Imposta defaults per winget_install (già selezionato)
-            TxtParametri.Text = DefaultParams["winget_install"];
-            TxtHelper.Text    = Helpers["winget_install"];
+            System.Diagnostics.Debug.WriteLine($"[WorkflowStepWindow] Init error: {ex.Message}");
         }
     }
 
@@ -70,14 +76,26 @@ public partial class WorkflowStepWindow : Window
 
     private void CmbTipo_SelectionChanged(object s, SelectionChangedEventArgs e)
     {
-        // Guard: l'evento scatta durante InitializeComponent prima che i controlli siano pronti
-        if (TxtParametri == null) return;
-        if (CmbTipo.SelectedItem is not ComboBoxItem item) return;
-        var tipo = item.Tag?.ToString() ?? "";
-        if (DefaultParams.TryGetValue(tipo, out var def))
-            TxtParametri.Text = def;
-        if (Helpers.TryGetValue(tipo, out var help) && TxtHelper != null)
-            TxtHelper.Text = help;
+        try
+        {
+            // Guard: l'evento scatta durante InitializeComponent prima che i controlli siano pronti
+            if (TxtParametri == null || CmbTipo == null) return;
+            if (CmbTipo.SelectedItem is not ComboBoxItem item) return;
+            var tipo = item.Tag?.ToString() ?? "";
+            if (DefaultParams.TryGetValue(tipo, out var def))
+                TxtParametri.Text = def;
+            if (Helpers.TryGetValue(tipo, out var help) && TxtHelper != null)
+                TxtHelper.Text = help;
+        }
+        catch (NullReferenceException)
+        {
+            // Fix #5: ignora NullReferenceException durante inizializzazione UI
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Errore nel cambio tipo step: {ex.Message}",
+                "NovaSCM", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     private void BtnOk_Click(object s, RoutedEventArgs e)

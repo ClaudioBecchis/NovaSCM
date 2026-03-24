@@ -4,6 +4,30 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [2.4.0] - 2026-03-24
+
+### Security
+
+- **HTTPS**: Server Flask supporta HTTPS con certificato self-signed auto-generato (`NOVASCM_HTTPS=1`). Variabili env `NOVASCM_SSL_CERT` e `NOVASCM_SSL_KEY` per certificati custom.
+
+### Bug fix
+
+- **Fix #5**: `WorkflowStepWindow.xaml.cs` — try-catch completo nel costruttore e in `CmbTipo_SelectionChanged`. NullReferenceException catturata con messaggio utente chiaro.
+- **Fix #5**: Guard aggiuntivo su `TxtHelper` null durante init.
+
+### Improvements
+
+- **Agent backoff esponenziale**: In caso di errori di connessione consecutivi, il polling aumenta progressivamente (60s → 120s → 240s → max 300s) per evitare socket exhaustion e rate limiting. Reset automatico su successo.
+- **Logging strutturato Console WPF**: Aggiunti livelli `Log()`, `LogWarn()`, `LogError()` con timestamp completo `yyyy-MM-dd HH:mm:ss.fff` e rotazione automatica a 5MB (file .old).
+- **Versione aggiornata**: Console WPF → v2.4.0
+
+### Note
+
+- SQLite WAL era già abilitato dalla v1.6.0
+- Agent polling default era già 60 secondi (non 5 come riportato nel debug report)
+
+---
+
 ## [2.2.1] - 2026-03-12
 
 ### Bug fix

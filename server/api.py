@@ -2908,4 +2908,31 @@ if _PXE_ENABLED and _pxe_server_available:
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 9091))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    use_https = os.environ.get("NOVASCM_HTTPS", "0").lower() in ("1", "true", "yes")
+    ssl_cert = os.environ.get("NOVASCM_SSL_CERT", "/data/cert.pem")
+    ssl_key  = os.environ.get("NOVASCM_SSL_KEY",  "/data/key.pem")
+
+    if use_https:
+        # Auto-genera certificato self-signed se non esiste
+        if not os.path.exists(ssl_cert) or not os.path.exists(ssl_key):
+            try:
+                import subprocess
+                os.makedirs(os.path.dirname(ssl_cert), exist_ok=True)
+                subprocess.run([
+                    "openssl", "req", "-x509", "-newkey", "rsa:2048",
+                    "-keyout", ssl_key, "-out", ssl_cert,
+                    "-days", "365", "-nodes",
+                    "-subj", "/CN=novascm/O=PolarisCore"
+                ], check=True, capture_output=True)
+                logging.getLogger("novascm-api").info("Self-signed certificate generated")
+            except Exception as e:
+                logging.getLogger("novascm-api").warning(f"Cannot generate SSL cert: {e} — falling back to HTTP")
+                use_https = False
+
+        if use_https:
+            ssl_context = (ssl_cert, ssl_key)
+            app.run(host="0.0.0.0", port=port, debug=False, ssl_context=ssl_context)
+        else:
+            app.run(host="0.0.0.0", port=port, debug=False)
+    else:
+        app.run(host="0.0.0.0", port=port, debug=False)

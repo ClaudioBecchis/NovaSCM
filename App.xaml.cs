@@ -18,7 +18,7 @@ public partial class App : Application
                      "PolarisManager", "debug.log");
 
     private const string GitHubIssuesUrl = "https://github.com/ClaudioBecchis/NovaSCM/issues/new";
-    private const string AppVersion      = "2.2.1";
+    private const string AppVersion      = "2.4.0";
 
     private void OnStartup(object sender, StartupEventArgs e)
     {
@@ -72,11 +72,27 @@ public partial class App : Application
         }
     }
 
-    public static void Log(string msg)
+    private const long MaxLogSize = 5 * 1024 * 1024; // 5MB max log size
+
+    public static void Log(string msg) => LogLevel("INFO", msg);
+    public static void LogWarn(string msg) => LogLevel("WARN", msg);
+    public static void LogError(string msg) => LogLevel("ERROR", msg);
+    public static void LogError(string msg, Exception? ex) =>
+        LogLevel("ERROR", $"{msg}: {ex?.Message}\n{ex?.StackTrace}");
+
+    private static void LogLevel(string level, string msg)
     {
         try
         {
-            var line = $"[{DateTime.Now:HH:mm:ss.fff}] {msg}";
+            // Rotazione log: se supera 5MB, rinomina in .old e ricomincia
+            if (File.Exists(LogPath) && new FileInfo(LogPath).Length > MaxLogSize)
+            {
+                var oldPath = LogPath + ".old";
+                if (File.Exists(oldPath)) File.Delete(oldPath);
+                File.Move(LogPath, oldPath);
+            }
+
+            var line = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] [{level}] {msg}";
             File.AppendAllText(LogPath, line + Environment.NewLine);
             System.Diagnostics.Debug.WriteLine(line);
         }
