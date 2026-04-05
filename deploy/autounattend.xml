@@ -27,7 +27,7 @@
           <WillShowUI>Never</WillShowUI>
           <Credentials>
             <Username>Administrator</Username>
-            <Domain>192.168.1.199</Domain>
+            <Domain>192.168.1.100</Domain>
             <Password>CHANGE_ME</Password>
           </Credentials>
         </Login>
@@ -152,13 +152,13 @@
         <LogonCount>1</LogonCount>
         <Username>Administrator</Username>
         <Password>
-          <Value>Q0hBTkdFX01F</Value>
+          <Value>Q0hBTkdFX01FX1Bhc3N3b3JkAA==</Value>
           <PlainText>false</PlainText>
         </Password>
       </AutoLogon>
       <UserAccounts>
         <AdministratorPassword>
-          <Value>Q0hBTkdFX01F</Value>
+          <Value>Q0hBTkdFX01FX0FkbWluaXN0cmF0b3JQYXNzd29yZAA=</Value>
           <PlainText>false</PlainText>
         </AdministratorPassword>
       </UserAccounts>

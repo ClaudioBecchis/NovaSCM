@@ -96,7 +96,7 @@ NovaSCMAgent avviato → DeployScreen → workflow
 | NovaSCM (CT 103) | 192.168.1.100 | 20 (Servers) | API :9091, TFTP :69 |
 | PC client di test | 192.168.10.x | 10 (Trusted) | DHCP option 66/67 qui |
 | SMB share install.wim | da configurare | 20 (Servers) | TrueNAS o Windows Server |
-| UCG-Fiber (gateway) | 192.168.10.1 / 192.168.20.1 | tutte | DHCP server |
+| UCG-Fiber (gateway) | 192.168.1.1 / 192.168.20.1 | tutte | DHCP server |
 
 ---
 
@@ -1576,7 +1576,7 @@ cp /DATA/win11-extracted/sources/install.wim /opt/novascm/dist/winpe/install.wim
 #### P-4 — DHCP option 66/67 da configurare su UCG Fiber
 **Stato:** ⏳ aperto
 **Impatto:** senza `next-server` e `filename` nel DHCP, i client PXE non scaricano `ipxe.efi` e non avviano il boot PXE.
-**Configurazione richiesta su UCG Fiber (https://192.168.10.1):**
+**Configurazione richiesta su UCG Fiber (https://192.168.1.1):**
 - VLAN Management (VLAN 10):
   - DHCP option 66 (TFTP server): `192.168.1.100`
   - DHCP option 67 (bootfile name): `ipxe.efi`

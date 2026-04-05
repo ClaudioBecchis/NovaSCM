@@ -279,7 +279,7 @@ def test_post_hardware(client):
     """POST /api/pc/<name>/hardware salva i dati"""
     r = client.post("/api/pc/WKS-TEST/hardware",
         json={"cpu": "i5-12400", "ram": "16 GB", "disk": "SSD 500GB",
-              "mac": "AA:BB:CC:DD:EE:FF", "ip": "192.168.10.1"},
+              "mac": "AA:BB:CC:DD:EE:FF", "ip": "192.168.1.1"},
         headers={"X-Api-Key": "test"})
     assert r.status_code == 200
 
@@ -287,7 +287,7 @@ def test_hardware_in_workflow_response(client, sample_workflow):
     """GET /api/pc-workflows/<id> include hardware se presente"""
     client.post("/api/pc/WKS-TEST/hardware",
         json={"cpu": "i5-12400", "ram": "16 GB", "disk": "SSD 500GB",
-              "mac": "AA:BB:CC:DD:EE:FF", "ip": "192.168.10.1"},
+              "mac": "AA:BB:CC:DD:EE:FF", "ip": "192.168.1.1"},
         headers={"X-Api-Key": "test"})
     r = client.get(f"/api/pc-workflows/{sample_workflow}",
         headers={"X-Api-Key": "test"})
