@@ -1,253 +1,178 @@
-<p align="center">
-  <img src="Assets/banner.png" alt="NovaSCM Banner" width="100%"/>
-</p>
+# NovaSCM — Nova Software Configuration Manager
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
-  <a href="../../releases"><img src="https://img.shields.io/badge/Console-Windows-0078D4?logo=windows" alt="Platform: Windows"/></a>
-  <a href="server/"><img src="https://img.shields.io/badge/Server-Docker%20%7C%20Python-2496ED?logo=docker" alt="Server: Docker"/></a>
-  <a href="https://github.com/ClaudioBecchis/NovaSCM/releases/latest"><img src="https://img.shields.io/github/v/release/ClaudioBecchis/NovaSCM" alt="GitHub release"/></a>
-</p>
+> Open source fleet & network manager per infrastrutture IT Windows e Linux.
 
-# NovaSCM
+[![Release](https://img.shields.io/github/v/release/ClaudioBecchis/NovaSCM?label=versione)](https://github.com/ClaudioBecchis/NovaSCM/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-9.0-purple)](https://dotnet.microsoft.com/download/dotnet/9.0)
 
-> **Tired of paying for SCCM? There's a free alternative.**
-
-NovaSCM is an open-source fleet & deployment manager for IT admins who want full control over their infrastructure — without the Microsoft price tag.
-
-Deploy Windows in zero-touch, manage software, scan networks, issue WiFi certificates and track every machine from a single console.
-**Built by an IT admin, for IT admins.**
-
-NovaSCM combines a **WPF desktop console** (Windows), a **REST API server** (Python/Flask) and a **cross-platform agent** (Linux & Windows) — self-hosted, lightweight, no licensing fees.
-
-📖 **Read the full article on dev.to:** [I built a free open-source alternative to Microsoft SCCM](https://dev.to/claudio_f5c23617499305b57/i-built-a-free-open-source-alternative-to-microsoft-sccm-3dkh)
+![NovaSCM Banner](https://novascm.polariscore.it/assets/banner.png)
 
 ---
 
-## What it does
+## Cos'è NovaSCM
 
-### Fleet Management
-- **Network scanner** — discovers devices by IP/MAC, vendor detection, open port scan
-- **Device inventory** — hostname, OS, hardware details, last seen
-- **RDP & SSH one-click** — connect to any device directly from the console
-- **Change Request system** — track deployment jobs per machine with status and notes
+NovaSCM è un'alternativa open source a Microsoft SCCM per la gestione di reti e flotte di PC. Combina in un'unica interfaccia WPF:
 
-### Software Deployment (like SCCM Task Sequences)
-- **Visual Workflow editor** — create multi-step deployment sequences (install, script, reboot, message...)
-- **Step types**: `winget_install`, `apt_install`, `shell_script`, `windows_update`, `reboot`, `message`, `systemd_service`, `registry`, `file_copy`, `powershell`
-- **Per-platform steps** — tag steps as `windows`, `linux` or `all`
-- **Real-time progress** — live status per device, step-by-step log, progress bar
-- **Auto-assign** — assign a default workflow; agent picks it up on next check-in
-
-### OS Deployment (Zero-touch)
-- **Generates `autounattend.xml`** — Windows 11 unattended install file, ready for USB or PXE
-- **Generates `postinstall.ps1`** — runs on first boot: installs software via winget, enrolls the device
-- **USB & PXE support** — copy files to a USB stick or push to a PXE server via SCP
-- **PC naming template** — `PC-{MAC6}` renames the machine automatically from its MAC address
-
-### WiFi 802.1X EAP-TLS
-- **Certificate portal** — issues client certificates signed by an internal CA
-- **Auto-enrollment agent** — installed on Windows, runs at startup, installs cert silently, adds WiFi profile
-- **iOS mobileconfig** — one-tap install of CA + cert + WiFi profile from Safari
-- **Android support** — QR code enrollment flow
-
-### Network & Security
-- **OPSI integration** — manage OPSI software packages and deployments
-- **Port scanner** — per-device open port report
-- **App catalog** — install/uninstall applications remotely
+- **Scansione rete** multi-VLAN con rilevamento vendor OUI
+- **Deploy Windows zero-touch** via PXE (autounattend.xml + postinstall.ps1)
+- **Workflow e automazione** — sequenze di step eseguite dall'agent sui PC gestiti
+- **Change Request** — tracciamento completo del ciclo di vita provisioning PC
+- **Certificati WiFi EAP-TLS** — autenticazione enterprise senza password
+- **Dashboard** — metriche in tempo reale (PC online, workflow attivi, CR aperte)
+- **Gestione Proxmox** — VM e container direttamente dall'interfaccia
+- **Console SCCM** — visualizzatore read-only per ambienti SCCM esistenti
 
 ---
 
-## Screenshots
+## Download
 
-<p align="center">
-  <img src="Assets/screenshots/screen-rete.jpg" alt="Network Scanner" width="49%"/>
-  <img src="Assets/screenshots/screen-certificati.jpg" alt="WiFi EAP-TLS Certificates" width="49%"/>
-</p>
-<p align="center">
-  <img src="Assets/screenshots/screen-applicazioni.jpg" alt="Software Portal" width="49%"/>
-  <img src="Assets/screenshots/screen-impostazioni.jpg" alt="Settings" width="49%"/>
-</p>
+**[↓ Scarica NovaSCM.exe](https://github.com/ClaudioBecchis/NovaSCM/releases/latest)**
+
+Requisiti: Windows 10/11 (64-bit) · [.NET 9.0 Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
 
 ---
 
-## Architecture
+## Architettura
 
 ```
-┌──────────────────────┐      HTTP/REST      ┌──────────────────────────┐
-│  NovaSCM Console     │ ◄─────────────────► │  NovaSCM Server          │
-│  (WPF, Windows)      │                     │  (Flask + SQLite)        │
-└──────────────────────┘                     │  port 9091               │
-                                             └──────────┬───────────────┘
-                                                        │ polling
-                                             ┌──────────▼───────────────┐
-                                             │  NovaSCM Agent           │
-                                             │  (Python — Win & Linux)  │
-                                             │  executes workflow steps  │
-                                             └──────────────────────────┘
+NovaSCM/
+├── MainWindow.xaml/.cs        — UI principale WPF (MVVM)
+├── ViewModels/                — ViewModel per ogni tab (9 ViewModel)
+│   ├── MainViewModel.cs
+│   ├── NetworkViewModel.cs
+│   ├── SettingsViewModel.cs
+│   ├── WorkflowViewModel.cs
+│   ├── ChangeRequestViewModel.cs
+│   ├── DeployViewModel.cs
+│   ├── DashboardViewModel.cs
+│   ├── ProxmoxViewModel.cs
+│   └── ...
+├── Services/
+│   ├── ConfigService.cs       — Config JSON + DPAPI encrypt/decrypt
+│   └── NetworkToolsService.cs — Ping, WoL, ARP, Port scan, Traceroute
+├── Commands/
+│   └── RelayCommand.cs        — ICommand, AsyncRelayCommand
+├── NovaSCMAgent/              — Agent .NET 9 Worker Service
+├── agent/                     — Agent Python (legacy/Linux)
+└── server/
+    └── api.py                 — API Flask + SQLite (~2700 righe)
 ```
-
-| Component | Technology | Platform |
-|-----------|-----------|----------|
-| Console (GUI) | C# / WPF / .NET 8 | Windows |
-| Server (API) | Python 3 / Flask | Linux / Docker |
-| Agent | Python 3 | Windows & Linux |
-| Database | SQLite | — |
-| Web UI | Alpine.js | Browser |
 
 ---
 
-## Quick Start
+## Deploy PXE — Flow completo
 
-### 1. Start the server
+```
+PC boot → DHCP Option 66/67 → TFTP NovaSCM
+    ↓
+iPXE → GET /api/boot/{mac} → crea host + CR automaticamente
+    ↓
+WinPE → autounattend.xml dinamico → Windows Setup
+    ↓
+postinstall.ps1 → enrollment token → installa NovaSCMAgent
+    ↓
+Agent poll ogni 30s → esegue workflow → riavvio → riprende da dove era rimasto
+```
+
+---
+
+## Workflow e automazione
+
+I workflow sono sequenze di step configurabili via GUI, assegnabili a singoli PC o gruppi. L'agent esegue ogni step e riporta il risultato al server.
+
+**Tipi di step supportati:**
+
+| Tipo | Descrizione |
+|------|-------------|
+| `powershell` | Esegue script PowerShell |
+| `cmd` / `shell` | Esegue comando shell |
+| `winget_install` | Installa pacchetto via winget |
+| `reg_set` | Imposta chiave di registro |
+| `file_copy` | Copia file |
+| `reboot` | Riavvia il PC (con resume automatico post-reboot) |
+| `wait` | Attende N secondi |
+| `systemd_service` | Gestisce servizi Linux |
+
+**Condizioni:** ogni step può essere condizionato a `windows`, `linux` o `hostname=NOME-PC`.
+
+**Reboot resume:** l'agent salva lo stato in modo atomico prima del riavvio e riprende dal passo successivo automaticamente.
+
+---
+
+## Server API
+
+Il server è un'API Flask + SQLite che gira come servizio **systemd** su LXC Proxmox (porta 9091).
 
 ```bash
-cd server
-docker compose up -d
-```
-
-Server runs at `http://localhost:9091`.
-Web UI available at `http://localhost:9091` (open in browser).
-
-Or without Docker:
-```bash
+# Installazione
 pip install flask gunicorn
-python api.py
+cp api.py /opt/novascm/
+systemctl enable --now novascm
 ```
 
-### 2. Seed demo data
+**Endpoint principali:**
+
+| Metodo | Endpoint | Descrizione |
+|--------|----------|-------------|
+| GET | `/health` | Healthcheck (no auth) |
+| GET/POST | `/api/cr` | Lista / crea Change Request |
+| PUT | `/api/cr/<id>/status` | Cambia stato CR |
+| GET | `/api/boot/<mac>` | Boot PXE (iPXE) |
+| GET | `/api/cr/<id>/autounattend.xml` | XML per WinPE |
+| POST | `/api/enrollment-token` | Token monouso per agent |
+| GET | `/api/workflows` | Lista workflow |
+| GET | `/api/version` | Versione (auto-update) |
+
+**Autenticazione:** header `X-Api-Key` oppure query param `?key=`. Confronto timing-safe con `hmac.compare_digest`. Token enrollment monouso con scadenza automatica.
+
+---
+
+## NovaSCM Agent
+
+Servizio Windows (.NET 9 Worker) che gira in background sui PC gestiti.
 
 ```bash
-python seed_demo.py --db /data/novascm.db
+# Installazione da PowerShell admin
+iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex
 ```
 
-Creates 3 workflows, 6 demo machines and 4 assignments in different states (completed / running / pending).
-
-### 3. Run the console
-
-Download **`NovaSCM-Console.zip`** from [Releases](https://github.com/ClaudioBecchis/NovaSCM/releases/latest), extract and run `NovaSCM.exe` on your **Windows admin PC**.
-Go to **Settings → NovaSCM API URL** and enter `http://<server-ip>:9091`.
-
-> This is the management console — you run it once on your PC to control everything.
-
-### 4. Deploy the agent on target machines
-
-Download **`NovaSCMAgent-Win-x64.zip`** from [Releases](https://github.com/ClaudioBecchis/NovaSCM/releases/latest), extract and run `NovaSCMAgent.exe` on each **PC you want to manage**.
-
-Or install it automatically via script:
-
-On a Windows target machine (admin PowerShell):
-```powershell
-iwr http://<server-ip>:9091/api/download/agent-install.ps1 | iex
-```
-
-On Linux:
-```bash
-curl -fsSL http://<server-ip>:9091/api/download/agent-install.sh | bash
-```
-
-> The agent runs silently in the background, polls the server for tasks and executes workflows.
+**Sicurezza:**
+- Comandi eseguiti con `ArgumentList` — no shell injection
+- API key passata via file temporaneo con ACL restrittiva (non env var)
+- Retry 3× con backoff esponenziale su errori di rete
+- State file scritto in modo atomico (temp + rename) — crash-safe
 
 ---
 
-## Console Tabs
+## Sicurezza
 
-| Tab | Description |
-|-----|-------------|
-| **Network** | Scan subnets, view devices, RDP/SSH |
-| **Certs** | Issue WiFi EAP-TLS certificates, manage CA |
-| **Apps** | Application catalog, remote install |
-| **PC** | Device list, Change Requests, enrollment |
-| **OPSI** | OPSI package management |
-| **Deploy** | Generate autounattend.xml + postinstall.ps1 for USB/PXE |
-| **Workflow** | Create and manage deployment workflows, assign to PCs |
-| **Requests** | Change Request tracker with status and log |
-| **Settings** | API URL, subnets, credentials |
+- DPAPI per credenziali in config (fallback plain:base64 se DPAPI non disponibile)
+- Security headers: `X-Content-Type-Options`, `X-Frame-Options`, `Cache-Control`
+- SSRF protection su webhook e validazione URL agent
+- Enrollment token UUID → `secrets.token_hex(32)`
+- SQLite WAL mode — no lock su letture concorrenti
 
 ---
 
-## Requirements
-
-### Console (management GUI)
-- Windows 10/11 x64
-- .NET 8 Runtime — or use the **self-contained** `.exe` from Releases (no runtime needed)
-
-### Server
-The server runs on anything that supports Docker or Python.
-
-**Option A — Docker (recommended, any OS)**
-
-| Platform | Notes |
-|----------|-------|
-| Linux (Ubuntu, Debian, any distro) | Install [Docker Engine](https://docs.docker.com/engine/install/) + Compose plugin |
-| Raspberry Pi (ARMv7/ARM64) | Use Docker Engine for ARM |
-| macOS | Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) |
-| Windows 10/11 | Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) with WSL2 backend |
-| Windows Server 2019/2022 | Install Docker Desktop with WSL2 — requires WSL2 enabled (`wsl --install`) |
-| Windows Server Core | ❌ WSL2 not supported — use Option B |
-| VPS / cloud VM | Any provider (Hetzner, DigitalOcean, AWS, etc.) with Linux |
-
-Minimum resources: **512 MB RAM**, **1 GB disk**
-
-**Option B — Python directly (no Docker)**
-
-- Python 3.10+
-- Works on Linux and Windows (including Windows Server Core)
+## Build
 
 ```bash
-pip install flask gunicorn flask-limiter python-json-logger tftpy
-python api.py
+# Debug
+dotnet build PolarisManager.csproj -c Debug
+
+# Release (richiede .NET 9 installato sul target)
+dotnet publish PolarisManager.csproj -c Release -r win-x64 --self-contained false -o publish/
 ```
 
-### Agent
-- **Windows**: no dependencies — standalone `.exe` from Releases
-- **Linux**: Python 3.8+ and `sudo` / root access
+---
+
+## Sito web
+
+[novascm.polariscore.it](https://novascm.polariscore.it)
 
 ---
 
-## Demo Styles
+## Licenza
 
-NovaSCM includes 3 GUI style demos (About tab → Demo Stili GUI) inspired by:
-- **SCCM Console** — ribbon toolbar, tree navigation, results + details pane
-- **Advanced Installer** — dark blue header, sidebar, stat cards
-- **MSIX Packaging Tool** — step-by-step wizard layout
-
-These are previews to choose the final UI design direction.
-
----
-
-## Legal & Compliance
-
-### License
-NovaSCM is released under the **MIT License** — free to use, modify and distribute.
-See [LICENSE](LICENSE) for the full text.
-© 2026 Claudio Becchis — [PolarisCore.it](https://polariscore.it)
-
-### Third-party software
-NovaSCM is a **deployment tool** — it does not bundle, distribute or license any
-third-party software. When you use NovaSCM to install applications (via winget,
-apt or other package managers), those applications are downloaded directly from
-their official sources and are subject to their own license agreements.
-
-**You are solely responsible for:**
-- Holding valid licenses for all software deployed through NovaSCM
-  (including Windows OS, Microsoft 365, and any other commercial product)
-- Complying with the End User License Agreements (EULAs) of all installed software
-- Ensuring that Windows licenses cover each machine you deploy to
-
-NovaSCM does not grant, transfer or sublicense any third-party software licenses.
-
-### Network scanning & data collection
-NovaSCM scans your local network to discover devices (IP addresses, MAC addresses,
-hostnames, open ports). This data is stored locally in a SQLite database on your
-own server — it is never transmitted to external servers.
-
-**If you deploy NovaSCM in a business environment (EU):**
-- Inform users/employees that network discovery is in use, as required by GDPR
-- Ensure your organization's IT policy covers automated network inventory
-- The API key protects access to collected data — keep it confidential
-
-### Disclaimer
-This software is provided **"as is"**, without warranty of any kind.
-The author is not liable for any data loss, system damage, or compliance issues
-arising from the use of NovaSCM. Always test in a non-production environment first.
+MIT — © 2026 [Claudio Becchis](https://github.com/ClaudioBecchis) · [PolarisCore.it](https://polariscore.it)
