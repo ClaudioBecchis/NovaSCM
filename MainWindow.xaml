@@ -2510,25 +2510,6 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                                     Click="BtnCheckUpdate_Click"/>
                         </StackPanel>
 
-                        <!-- Demo stili GUI -->
-                        <TextBlock Text="🎨  Demo Stili GUI" Foreground="#60a5fa"
-                                   FontWeight="SemiBold" FontSize="13" Margin="0,16,0,8" TextWrapping="Wrap"/>
-                        <TextBlock Text="Confronta i tre stili visivi per scegliere il design finale di NovaSCM."
-                                   Foreground="#94a3b8" FontSize="12" Margin="0,0,0,10" TextWrapping="Wrap"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                            <Button Content="🏢  SCCM Console Style" Padding="14,8" Margin="0,0,10,0"
-                                    Background="#1F3864" BorderBrush="#2B579A" Foreground="White"
-                                    Click="BtnDemoSCCM_Click"/>
-                            <Button Content="🔵  Advanced Installer Style" Padding="14,8" Margin="0,0,10,0"
-                                    Background="#073682" BorderBrush="#0A78C9" Foreground="White"
-                                    Click="BtnDemoAI_Click"/>
-                            <Button Content="📦  MSIX Packaging Tool Style" Padding="14,8" Margin="0,0,10,0"
-                                    Background="#0078D4" BorderBrush="#005A9E" Foreground="White"
-                                    Click="BtnDemoMSIX_Click"/>
-                            <Button Content="✨  Ibrido (SCCM + Advanced Installer)" Padding="14,8"
-                                    Background="#073682" BorderBrush="#0A78C9" Foreground="#A8D0F0"
-                                    Click="BtnDemoHybrid_Click"/>
-                        </StackPanel>
                         <TextBlock x:Name="TxtUpdateStatus" FontSize="12" Margin="0,0,0,16"
                                    TextWrapping="Wrap" Foreground="#475569"/>
 

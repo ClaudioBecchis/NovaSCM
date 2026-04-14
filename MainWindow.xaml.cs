@@ -2669,10 +2669,6 @@ public partial class MainWindow : Window
     private void BtnOpenGitHub_Click(object s, RoutedEventArgs e) =>
         Process.Start(new ProcessStartInfo("https://github.com/ClaudioBecchis/NovaSCM") { UseShellExecute = true });
 
-    private void BtnDemoSCCM_Click(object s, RoutedEventArgs e)   => new DemoSCCM().Show();
-    private void BtnDemoAI_Click(object s, RoutedEventArgs e)     => new DemoAI().Show();
-    private void BtnDemoMSIX_Click(object s, RoutedEventArgs e)   => new DemoMSIX().Show();
-    private void BtnDemoHybrid_Click(object s, RoutedEventArgs e) => new DemoHybrid().Show();
 
     // ── Sidebar navigation ────────────────────────────────────────────────────
     private static readonly string[] _navSections =
