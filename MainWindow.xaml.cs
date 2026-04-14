@@ -5407,103 +5407,104 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
     private static readonly Dictionary<string, (string Title, string Icon, string[] Sections)> WikiData = new()
     {
         ["overview"] = ("Panoramica", "🏠", [
-            "Cos'è NovaSCM|NovaSCM è uno strumento open source per la gestione di reti e fleet di PC. Combina scansione di rete, gestione certificati WiFi EAP-TLS, deploy Windows automatizzato, OPSI, SCCM e workflow di automazione in un'unica interfaccia WPF (stile SCCM Console).",
-            $"Versione corrente|v{CurrentVersion} — .NET 9 · WPF · SQLite · Windows 10/11 (64-bit)\nGitHub: https://github.com/ClaudioBecchis/NovaSCM",
-            "Funzionalità principali|• 📡 Scansione rete multi-VLAN con rilevamento vendor OUI\n• 🔐 Certificati WiFi EAP-TLS (Certportal + FreeRADIUS)\n• 💿 Deploy Windows zero-touch (autounattend.xml + postinstall.ps1)\n• ⚙️ Workflow automatizzati con agent distribuito\n• 📋 Change Request con tracking completo\n• 🏠 Dashboard con stat card in tempo reale\n• 🔍 Ricerca globale Ctrl+K\n• 🖥️ Integrazione Proxmox + SCCM",
-            "Requisiti|• Windows 10/11 (64-bit)\n• .NET 9.0 Runtime (scaricabile da microsoft.com/dotnet)\n• Accesso alla rete da gestire\n• (Opzionale) Server NovaSCM per workflow e change requests",
-            "Architettura|NovaSCM funziona in modalità offline-first: tutti i dati vengono salvati in un database SQLite locale (%APPDATA%\\PolarisManager\\novascm.db) e sincronizzati con il server quando disponibile. La config è in config.json — modifiche esterne vengono ricaricate automaticamente (hot reload).",
-            "Primo avvio|1. Lancia NovaSCM.exe\n2. Si apre automaticamente il tab ⚙️ Impostazioni\n3. Configura almeno 'URL API NovaSCM' se hai un server\n4. Clicca 💾 Salva impostazioni\n5. Torna al tab 🏠 Asset → 📡 Rete per iniziare\nPuoi usare l'app anche senza server — scansione rete, deploy e certificati funzionano offline."
+            "Cos'è NovaSCM|NovaSCM (Nova Software Configuration Manager) è uno strumento open source per la gestione di reti e fleet di PC. Combina scansione di rete, gestione certificati WiFi EAP-TLS, deploy Windows PXE automatizzato, workflow e change request in un'unica interfaccia WPF.",
+            $"Versione corrente|v{CurrentVersion} — .NET 9 · WPF · SQLite · Windows 10/11 (64-bit)\nArchitettura: MVVM con ViewModels per ogni tab\nGitHub: https://github.com/ClaudioBecchis/NovaSCM",
+            "Funzionalità principali|• 📡 Scansione rete multi-VLAN con rilevamento vendor OUI\n• 🔐 Certificati WiFi EAP-TLS (Certportal + FreeRADIUS)\n• 💿 Deploy Windows zero-touch via PXE (autounattend.xml + postinstall.ps1)\n• ⚙️ Workflow automatizzati con agent distribuito\n• 📋 Change Request con tracking completo\n• 🏠 Dashboard con metriche in tempo reale\n• 🖥️ Gestione Proxmox VM/CT\n• 🔍 Ricerca globale Ctrl+K",
+            "Requisiti|• Windows 10/11 (64-bit)\n• .NET 9.0 Runtime (microsoft.com/dotnet)\n• Rete da gestire raggiungibile\n• (Opzionale) Server NovaSCM per workflow, PXE e change request",
+            "Architettura|NovaSCM funziona offline-first: i dati sono salvati in SQLite locale (%APPDATA%\\PolarisManager\\novascm.db). La config è in config.json con hot reload automatico.\nLato server: Flask + SQLite + systemd su LXC Proxmox (porta 9091).",
+            "Primo avvio|1. Lancia NovaSCM.exe\n2. Si apre automaticamente ⚙️ Impostazioni\n3. Imposta URL API NovaSCM e API Key\n4. Clicca 💾 Salva — 🔍 Test connessione per verificare\n5. Vai in 📡 Rete per iniziare la scansione\nL'app funziona anche senza server (scansione rete, Proxmox, certificati)."
         ]),
         ["scan"] = ("Scansione Rete", "📡", [
-            "Come funziona|NovaSCM esegue ping ICMP su tutti gli IP della subnet. Per ogni host online, legge il MAC dall'ARP table e lo confronta con il database OUI per identificare il vendor.",
-            "Scansione base|1. Inserisci l'IP base (es. 192.168.10.0) e la subnet mask (es. 24)\n2. Clicca ▶ Scansiona\n3. I device vengono mostrati in tempo reale nella tabella\n4. Doppio click su un device per la scansione porte",
-            "Scansione multi-VLAN|Configura le subnet multiple in ⚙️ Impostazioni (una per riga, formato 192.168.x.0/24). Usa il pulsante 🌐 Tutte le VLAN per scansionare tutto in parallelo.",
-            "Vista Heatmap|Clicca ⬛ Heatmap per vedere tutti i 254 IP della subnet come griglia colorata:\n• 🟢 Verde = online\n• 🔵 Blu = ha certificato EAP-TLS\n• 🟡 Amber = gateway\n• ⬛ Scuro = offline o non scansionato",
-            "Vista Mappa|Clicca 🗺 Mappa per la vista grafica hub-and-spoke con animazioni pulse sui device online.",
-            "Live Ping|Seleziona un device nella tabella per avviare automaticamente il live ping graph nel pannello inferiore."
+            "Come funziona|NovaSCM esegue ping ICMP paralleli su tutti gli IP della subnet (max 50 concurrent). Per ogni host online legge il MAC dall'ARP table e lo confronta col database OUI per identificare il vendor.",
+            "Scansione base|1. Inserisci IP base (es. 192.168.10.0) e subnet mask (es. 24)\n2. Clicca ▶ Scansiona\n3. I device appaiono in tempo reale nella tabella\n4. Doppio click su un device per la scansione porte",
+            "Scansione multi-VLAN|In ⚙️ Impostazioni → 'Subnet da scansionare': inserisci una subnet per riga (formato CIDR). Usa 🌐 Tutte le VLAN per scansionare in parallelo.",
+            "Vista Heatmap|Griglia 16×16 di tutti i 254 IP della subnet:\n• 🟢 Verde = online\n• 🔵 Blu = ha certificato EAP-TLS\n• 🟡 Amber = gateway\n• ⬛ Scuro = offline",
+            "Vista Mappa|Layout hub-and-spoke con animazioni pulse sui device online. Icone per tipo device: 🔷 Proxmox, 🐧 Linux, 🖥️ Windows, 🌐 Router.",
+            "Live Ping|Seleziona un device per avviare il ping graph in tempo reale nel pannello inferiore."
         ]),
         ["certs"] = ("Certificati EAP-TLS", "🔐", [
-            "Cos'è EAP-TLS|EAP-TLS è un metodo di autenticazione WiFi enterprise che usa certificati digitali invece di password. Ogni device ha un certificato unico firmato dalla CA dell'organizzazione.",
-            "Prerequisiti|• FreeRADIUS configurato con la tua CA (es. CT 105: 192.168.1.105)\n• SSID WPA2-Enterprise sul controller WiFi\n• Certportal in esecuzione (CT 103: 192.168.1.100:9090)",
-            "Generare un certificato|1. Esegui una scansione di rete\n2. Seleziona il device\n3. Clicca 🔐 Genera Cert\n4. Il certificato viene generato dal Certportal e salvato nel database",
-            "Enrollment automatico|Su Windows, esegui da PowerShell admin:\n\n  iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex\n\nIl device si registrerà automaticamente ad ogni avvio."
+            "Cos'è EAP-TLS|Autenticazione WiFi enterprise con certificati digitali invece di password. Ogni device ha un certificato unico firmato dalla CA dell'organizzazione.",
+            "Prerequisiti|• FreeRADIUS con CA configurata\n• SSID WPA2-Enterprise sul controller WiFi (es. UniFi)\n• Certportal in esecuzione (default porta 9090)",
+            "Generare un certificato|1. Scansiona la rete → seleziona il device\n2. Clicca 🔐 Genera Cert\n3. Il certificato viene firmato dal Certportal e salvato nel DB\n4. Lo stato appare nella colonna 'Cert' della tabella rete",
+            "Enrollment automatico|Da PowerShell admin sul PC target:\n  iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex\nL'agent si registra e rinnova il certificato automaticamente."
         ]),
         ["deploy"] = ("Deploy Windows", "💿", [
-            "Zero-touch deployment|NovaSCM genera automaticamente i file necessari per installare Windows senza alcun intervento manuale:\n• autounattend.xml — risponde a tutte le domande di setup\n• postinstall.ps1 — installa software e agenti dopo il riavvio",
-            "Configurazione|Nel tab 💿 Deploy:\n1. Scegli edizione Windows (Pro/Home/Enterprise)\n2. Imposta template nome PC (es. PC-{MAC6})\n3. Imposta password Administrator\n4. Seleziona software winget da installare\n5. Clicca ⚙️ Genera file",
-            "Distribuzione USB|1. Scarica ISO Windows 11 da microsoft.com\n2. Estrai l'ISO su chiavetta FAT32\n3. Copia autounattend.xml + postinstall.ps1 nella RADICE della USB\n4. Avvia il PC dalla USB — installazione completamente automatica",
-            "Distribuzione PXE|Se hai un server PXE configurato (CT 110), usa il pulsante 🌐 Deploy PXE per copiare i file via SCP automaticamente.",
-            "Template nome PC|{MAC6} = ultimi 6 caratteri del MAC address (es. PC-B3CEEB)\n{nn} = contatore incrementale (es. PC-001)"
+            "Zero-touch deployment|NovaSCM genera autounattend.xml e postinstall.ps1 per installare Windows completamente senza intervento manuale. Integrato con il flow PXE del server.",
+            "Flow PXE completo|1. PC boots → DHCP Option 66/67 → TFTP NovaSCM\n2. iPXE → GET /api/boot/{mac} → crea host + CR automaticamente\n3. WinPE scarica autounattend.xml dinamico → Windows Setup\n4. postinstall.ps1 → enrollment token → installa NovaSCMAgent\n5. Agent fa poll → esegue workflow → riavvia → riprende",
+            "Configurazione deploy|Nel tab 💿 Deploy:\n• Edizione Windows (Pro/Enterprise/Home)\n• Locale e timezone\n• Nome PC (template con MAC)\n• Join: workgroup / Active Directory / AAD\n• Password Administrator\n• Pacchetti software (winget)",
+            "Distribuzione USB|1. ISO Windows 11 → USB FAT32\n2. Copia autounattend.xml nella RADICE della USB\n3. Avvia il PC → installazione automatica\npostinstall.ps1 viene scaricato automaticamente dall'agente",
+            "Template nome PC|{MAC6} = ultimi 6 caratteri MAC (es. PC-B3CEEB)\n{nn} = contatore incrementale (es. PC-001)"
         ]),
         ["workflow"] = ("Workflow", "⚙️", [
-            "Cos'è un Workflow|Un workflow è una sequenza di step automatizzati che vengono eseguiti su un PC. Simile alle Task Sequence di SCCM, ma più semplice e configurabile via GUI.",
-            "Creare un workflow|1. Vai nel tab ⚙️ Workflow\n2. Clicca + Nuovo Workflow\n3. Inserisci nome e descrizione\n4. Aggiungi step con + Aggiungi Step",
-            "Tipi di step|• cmd — esegui un comando\n• powershell — esegui script PS\n• winget — installa/aggiorna pacchetto\n• robocopy — copia file\n• reboot — riavvia il PC\n• wait — attendi X secondi",
-            "Assegnare a un PC|Usa il pulsante Assegna Workflow per collegare un workflow a un nome PC specifico. Il PC eseguirà il workflow al prossimo check-in.",
-            "Monitoraggio|La colonna Progresso mostra l'avanzamento in tempo reale. I colori indicano: Blu = in esecuzione, Verde = completato, Rosso = errore."
+            "Cos'è un Workflow|Sequenza di step automatizzati eseguiti dall'agent sui PC. Simile alle Task Sequence SCCM, configurabile via GUI con drag-drop.",
+            "Creare un workflow|1. Tab ⚙️ Workflow → + Nuovo Workflow\n2. Inserisci nome e descrizione\n3. Aggiungi step con + Aggiungi Step\n4. Ordina con drag-drop\n5. Assegna a un PC con Assegna Workflow",
+            "Tipi di step|• powershell — script PowerShell\n• cmd / shell — comando shell\n• winget_install — installa pacchetto winget\n• reg_set — imposta chiave registro\n• file_copy — copia file\n• reboot — riavvia (con resume automatico post-reboot)\n• wait — attendi N secondi\n• systemd_service — gestisce servizi Linux",
+            "Condizioni step|• windows / linux — solo su quel OS\n• hostname=NOME — solo su quel PC",
+            "Reboot e resume|Quando uno step 'reboot' viene eseguito, l'agent salva lo stato (Phase=rebooting) in modo atomico. Al riavvio rileva la fase e riprende dal passo successivo automaticamente.",
+            "Monitoraggio|La colonna Progresso mostra avanzamento in tempo reale. Blu = in esecuzione, Verde = completato, Rosso = errore."
         ]),
         ["pc"] = ("Fleet PC", "🖥️", [
-            "Gestione PC|Il tab 🖥️ PC mostra tutti i PC registrati con il loro stato agente, OS, CPU e RAM.",
-            "Agent NovaSCM|L'agent è un servizio Windows che:\n• Fa check-in sul server ogni 30s\n• Esegue i workflow assegnati\n• Riporta inventario hardware/software\n• Mantiene il certificato WiFi aggiornato",
-            "Inventario|Clicca 📊 Inventario su un PC selezionato per raccogliere:\n• Hardware (CPU, RAM, disco, schede di rete)\n• OS e versione\n• Software installato (da registro Windows)\n• Patch mancanti",
-            "RDP|Clicca 🖥️ RDP per aprire una connessione Remote Desktop al PC selezionato (richiede porta 3389 aperta).",
-            "Gauge risorse|I 4 gauge animati mostrano le risorse del PC locale in tempo reale: CPU%, RAM, Disco% e stato rete."
+            "Gestione PC|Il tab 🖥️ PC mostra tutti i PC registrati con stato agente, OS, CPU, RAM e ultima connessione.",
+            "NovaSCM Agent|Servizio Windows (.NET Worker) che:\n• Fa check-in ogni 30s\n• Esegue workflow assegnati\n• Riporta inventario hardware/software\n• Riprende dopo reboot grazie allo state file atomico",
+            "Inventario|Doppio click su un PC → raccoglie:\n• CPU, RAM, disco, schede di rete\n• OS e versione build\n• Software installato (da Registro Windows)\n• Ultimi aggiornamenti installati",
+            "Connessione remota|• 🖥️ RDP — Remote Desktop (porta 3389)\n• ⚡ WoL — Wake on LAN via MAC\n• SSH — per PC Linux",
+            "Gauge risorse|I gauge animati mostrano CPU%, RAM%, Disco% e rete del PC locale in tempo reale."
         ]),
         ["opsi"] = ("OPSI Software", "📦", [
-            "Cos'è OPSI|OPSI è un sistema open source per la distribuzione automatica di software su PC Windows. NovaSCM si integra con il server OPSI per gestire i pacchetti.",
-            "Configurare OPSI|In ⚙️ Impostazioni, imposta l'URL del server OPSI. Assicurati che il server OPSI sia raggiungibile dalla rete.",
-            "Gestire pacchetti|Nel tab 📦 OPSI puoi:\n• Vedere tutti i pacchetti disponibili\n• Installare/aggiornare pacchetti su PC specifici\n• Verificare lo stato di deployment",
-            "Integrazione con Workflow|Puoi usare step di tipo 'winget' nei workflow come alternativa a OPSI per distribuzione software senza server dedicato."
+            "Cos'è OPSI|Sistema open source per distribuzione automatica di software su Windows. NovaSCM si integra con il server OPSI tramite REST API.",
+            "Configurare OPSI|In ⚙️ Impostazioni: imposta URL server OPSI. Il tab 📦 OPSI mostra tutti i pacchetti disponibili.",
+            "Alternativa senza OPSI|Usa step 'winget_install' nei workflow per installare software senza server OPSI dedicato — winget è integrato in Windows 11.",
+            "Stato attuale|Il tab OPSI è in sviluppo attivo. Le funzionalità base (lista pacchetti, stato deployment) sono disponibili; CRUD completo in arrivo."
         ]),
         ["sccm"] = ("SCCM / OSD", "🏢", [
-            "Integrazione SCCM|NovaSCM include un visualizzatore di Task Sequence compatibile con SCCM (Microsoft Endpoint Configuration Manager).",
-            "Task Sequence Debugger|Nel tab 🏢 SCCM puoi:\n• Visualizzare le Task Sequence attive\n• Monitorare lo stato di esecuzione\n• Visualizzare variabili e log",
-            "OSD (OS Deployment)|Per ambienti con SCCM esistente, NovaSCM può lavorare in parallelo per:\n• Registrare device nel database locale\n• Monitorare il progresso del deployment\n• Gestire certificati post-deploy",
-            "Infrastruttura suggerita|• VM Windows Server 2025 con AD + SQL + SCCM 2403\n• Dominio: corp.nomeazienda.it\n• Task Sequence per Windows 11 Pro con scelta dominio/workgroup"
+            "Integrazione SCCM|NovaSCM include un visualizzatore read-only per SCCM (Microsoft Endpoint Configuration Manager) tramite AdminService REST API.",
+            "Console SCCM|Nel tab 🏢 SCCM puoi:\n• Visualizzare Task Sequence attive\n• Consultare device nel database SCCM\n• Monitorare OSD (OS Deployment) in corso",
+            "OSD parallelo|In ambienti con SCCM esistente, NovaSCM affianca SCCM per:\n• Registrare device nel DB locale\n• Monitorare il deploy\n• Gestire certificati post-deploy",
+            "Nota|L'integrazione SCCM è read-only. Per operazioni di scrittura (avvio TS, modifica collection) usa la console SCCM nativa."
         ]),
         ["cr"] = ("Change Requests", "📋", [
-            "Cos'è una CR|Una Change Request (CR) è una richiesta di provisioning di un nuovo PC. Permette di tracciare il ciclo di vita completo: dalla richiesta alla consegna.",
-            "Creare una CR|1. Vai nel tab 📋 Richieste\n2. Clicca + Nuova Richiesta\n3. Compila: nome PC, dominio, OU, utente assegnato\n4. Seleziona software da installare\n5. Clicca Crea\nLa CR viene salvata localmente se offline.",
-            "Stati CR|• ⏳ Pending — in attesa di approvazione\n• 🔄 In Progress — deployment in corso\n• ✅ Completata — PC consegnato e configurato\n• ❌ Rifiutata — richiesta respinta",
-            "Modalità offline|NovaSCM salva le CR nel database locale quando il server non è raggiungibile. Vengono sincronizzate automaticamente al prossimo collegamento."
-        ]),
-        ["faq"] = ("FAQ", "❓", [
-            "Come faccio a scansionare più subnet?|Vai in ⚙️ Impostazioni → campo 'Subnet multiple' → inserisci una subnet per riga in formato CIDR (es. 192.168.10.0/24). Poi usa il pulsante 🌐 Tutte le VLAN nel tab Rete.",
-            "Il MAC non viene trovato|Il MAC viene letto dall'ARP table Windows. Se il device è su una subnet diversa (router in mezzo), il MAC potrebbe non essere visibile. Usa uno switch managed con VLAN access.",
-            "Il certificato non viene generato|Verifica che:\n1. Il Certportal sia raggiungibile all'URL configurato\n2. La CA sia presente in /ca/ca.crt sul server\n3. Il MAC del device sia noto al Certportal",
-            "La scansione è lenta|Su subnet /24 sono normali 15-30 secondi. Reti con firewall aggressivo possono richiedere più tempo. Il semaforo scansiona max 50 IP in parallelo.",
-            "Come aggiorno NovaSCM?|L'aggiornamento è automatico: all'avvio viene confrontata la versione locale con GitHub Releases. Se disponibile, appare un banner giallo con pulsante 'Installa ora'.",
-            "Come cambio tema chiaro/scuro?|Vai in ⚙️ Impostazioni → sezione '🎨 Aspetto' → clicca il pulsante 'Modalità chiara' / 'Modalità scura'.",
-            "Come uso il log viewer?|Clicca '📋 Log' nella barra di stato in basso a sinistra per aprire il pannello log. Mostra tutti gli eventi dell'applicazione in tempo reale.",
-            "Il Matrix Rain si attiva?|Sì! Apri il tab ℹ️ About per vederlo. Esiste anche un Easter Egg nascosto... cerca il codice Konami. 😏"
+            "Cos'è una CR|Una Change Request traccia il ciclo di vita completo del provisioning di un PC: dalla richiesta alla consegna. Creata automaticamente al boot PXE o manualmente.",
+            "Creare una CR|1. Tab 📋 Richieste → + Nuova Richiesta\n2. Compila: nome PC, dominio, OU, utente assegnato, note\n3. Seleziona pacchetti software\n4. Clicca Crea\nSe offline, la CR viene salvata nel DB locale e sincronizzata al ricollegamento.",
+            "Stati CR|• ⏳ Pending — in attesa\n• 🔄 In Progress — deploy in corso (agent collegato)\n• ✅ Completata — PC consegnato\n• ❌ Rifiutata — richiesta respinta",
+            "CR da PXE|Quando un PC fa boot PXE per la prima volta, il server crea automaticamente una CR con MAC, IP e timestamp. Il workflow assegnato parte subito dopo il setup Windows.",
+            "Debug|Usa il pulsante 🔍 Debug per aprire la finestra dettaglio CR con log step-by-step, output dei comandi e codici di uscita."
         ]),
         ["ui"] = ("Interfaccia", "🎨", [
-            "Navigazione SCCM-style|La sidebar sinistra usa il modello console SCCM con 4 workspace:\n• 🏠 Asset e Conformità — Rete, PC, Certificati, Dashboard\n• 📦 Libreria Software — App, OPSI, Deploy, Workflow, Script\n• 📊 Monitoraggio — Richieste CR, Console SCCM\n• ⚙️ Amministrazione — Proxmox, Impostazioni, About",
-            "Sidebar collapse (UI-07)|Clicca il pulsante ◀ nell'header della sidebar per nasconderla e guadagnare spazio. Clicca la sottile barra ▶ a sinistra per riaprirla. L'animazione dura 180ms.",
-            "Ricerca globale Ctrl+K (FEAT-03)|Premi Ctrl+K in qualsiasi momento per aprire la ricerca. Cerca tra:\n• Device scansionati (per IP, nome, vendor)\n• Workflow definiti\n• PC con workflow assegnati\nPremi Invio o clicca per navigare direttamente.",
-            "Shortcut tastiera (DX-03)|• Ctrl+K — ricerca globale\n• F5 / Ctrl+R — aggiorna tab corrente\n• Ctrl+N — nuova Change Request\n• Ctrl+1..9 — naviga al tab N\n• Escape — chiudi overlay",
-            "Dashboard (FEAT-01)|La 🏠 Dashboard mostra 4 stat card in tempo reale con auto-refresh ogni 30 secondi:\n• PC online vs totale scansionati\n• Workflow in esecuzione\n• Change Request aperte\n• Device rilevati\nIncludes activity feed con gli ultimi eventi CR e workflow.",
-            "Tema chiaro/scuro (UI-02)|In ⚙️ Impostazioni → sezione '🎨 Aspetto' puoi alternare tra tema scuro (default) e chiaro. La preferenza NON è ancora salvata — verrà aggiunta in una versione futura.",
-            "Log viewer (DX-02)|Clicca '📋 Log' nella status bar in basso per aprire il pannello log (160px). Mostra timestamp e messaggio per ogni azione. Pulsante 🗑️ per pulire, ✕ per chiudere.",
-            "Badge counters nav (UI-04)|I nodi Workflow e Richieste CR nella sidebar mostrano automaticamente il conteggio pending tra parentesi (es. '⚙️  Workflow  [3]'). Si aggiorna ogni 30s insieme alla Dashboard."
+            "Navigazione|Sidebar SCCM-style con 4 workspace:\n• 🏠 Asset — Rete, PC, Certificati, Dashboard\n• 📦 Software — App, OPSI, Deploy, Workflow, Script\n• 📊 Monitoraggio — Richieste CR, Console SCCM\n• ⚙️ Amministrazione — Proxmox, Impostazioni, About",
+            "Sidebar|◀ per nascondere, ▶ per riaprire. Animazione 180ms.",
+            "Ricerca globale — Ctrl+K|Cerca in tempo reale tra device, workflow e PC assegnati. Invio o click per navigare direttamente al risultato.",
+            "Shortcut tastiera|• Ctrl+K — ricerca globale\n• F5 / Ctrl+R — aggiorna tab corrente\n• Ctrl+N — nuova Change Request\n• Escape — chiudi overlay",
+            "Dashboard|4 stat card con auto-refresh 30s: PC online, workflow attivi, CR aperte, device totali. Activity feed con ultimi eventi.",
+            "Log viewer|Clicca '📋 Log' nella status bar per il pannello log in tempo reale. 🗑️ per pulire.",
+            "Tema|⚙️ Impostazioni → 🎨 Aspetto → alterna chiaro/scuro.",
+            "Architettura MVVM|L'interfaccia usa il pattern MVVM: ogni tab ha un ViewModel dedicato (SettingsViewModel, NetworkViewModel, ecc.) che gestisce lo stato e la logica. I binding XAML si aggiornano automaticamente."
         ]),
         ["agent"] = ("NovaSCM Agent", "🤖", [
-            "Cos'è l'agent|NovaSCM Agent è un Windows Service (.NET Worker Service) che gira in background sui PC gestiti. Si connette al server ogni 30 secondi, scarica i workflow assegnati ed esegue gli step.",
-            "Installazione|Da PowerShell come amministratore:\n  iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex\nL'installer crea il servizio Windows 'NovaSCMAgent' con avvio automatico.",
-            "Configurazione|File: C:\\ProgramData\\NovaSCMAgent\\agent.json\n  {\n    \"ApiUrl\": \"http://192.168.1.100:9091\",\n    \"ApiKey\": \"chiave-segreta\",\n    \"PollIntervalSeconds\": 30\n  }",
-            "Tipi di step supportati|• winget_install — installa pacchetto via winget\n• powershell — esegue script PowerShell\n• cmd / shell — esegue comando shell\n• reg_set — imposta chiave di registro\n• reboot — riavvia il PC\n• wait — attende N secondi\n• file_copy — copia file localmente\n• systemd_service — gestisce servizi (Linux)",
-            "Condizioni step|Ogni step può avere una condizione:\n• windows — esegue solo su Windows\n• linux — esegue solo su Linux\n• os=windows / os=linux — alias\n• hostname=NOME-PC — solo su quel PC",
-            "Sicurezza (BUG-02)|L'agent usa ProcessStartInfo.ArgumentList per passare i parametri ai comandi — nessuna shell injection possibile. Ogni chiamata API include l'ApiKey per autenticazione.",
-            "Log e monitoraggio|Il log dell'agent è in:\n  C:\\ProgramData\\NovaSCMAgent\\agent.log\nPuoi seguirlo in tempo reale con:\n  Get-Content -Wait -Tail 50 agent.log"
+            "Cos'è|Windows Service (.NET 9 Worker) che gira in background sui PC gestiti. Poll ogni 30s, esegue workflow, riporta stato.",
+            "Installazione|Da PowerShell admin:\n  iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex\nCrea il servizio 'NovaSCMAgent' con avvio automatico.",
+            "Configurazione|File: C:\\ProgramData\\NovaSCMAgent\\agent.json\n{\n  \"ApiUrl\": \"http://<SERVER>:9091\",\n  \"deploy_token\": \"<token-monouso-dal-server>\",\n  \"pc_name\": \"NOME-PC\",\n  \"poll_sec\": 30\n}\nIl deploy_token viene emesso dal server e sostituito dall'API key definitiva al primo check-in.",
+            "Sicurezza|• Comandi eseguiti con ArgumentList (no shell injection)\n• API key passata via file temporaneo con ACL restrittiva (non env var)\n• Retry 3× con backoff esponenziale su errori di rete\n• State file scritto in modo atomico (temp + rename) — crash-safe",
+            "Reboot resume|L'agent salva Phase='rebooting' prima del riavvio. Al riavvio legge lo state file e riprende dal passo successivo senza ricominciare da capo.",
+            "Log|C:\\ProgramData\\NovaSCMAgent\\agent.log\nIn tempo reale: Get-Content -Wait -Tail 50 agent.log"
         ]),
         ["server"] = ("Server API", "🖧", [
-            "Architettura|Il server NovaSCM è un'API Flask + SQLite in esecuzione su Docker (consigliato) o direttamente su un container LXC Proxmox. Porta default: 9091.",
-            "Avvio con Docker|Nella cartella server/:\n  docker compose up -d\nL'API è disponibile su http://localhost:9091. Il database è persistente nel volume 'novascm-data'.",
-            "Avvio manuale (LXC)|  pip install flask gunicorn\n  NOVASCM_DB=/opt/novascm/cr.db gunicorn -w1 -t4 -b0.0.0.0:9091 api:app",
-            "Endpoint principali|• GET/POST /api/cr — lista e crea Change Request\n• PUT /api/cr/<id>/status — cambia stato CR\n• GET /api/cr/<id>/steps — step di una CR\n• POST /api/cr/<id>/step — report step da postinstall\n• GET /api/version — versione per auto-update\n• GET /health — healthcheck Docker",
-            "Autenticazione (BUG-01)|Tutte le route (eccetto /health) richiedono l'header:\n  X-Api-Key: tua-chiave-segreta\nConfigurata in docker-compose.yml come NOVASCM_API_KEY. Usa hmac.compare_digest per confronto timing-safe.",
-            "Database SQLite|Tabelle principali:\n• cr — Change Request (id, pc_name, domain, status, odj_blob, ...)\n• cr_steps — step eseguiti (cr_id, step_name, status, timestamp)\nWAL mode attivo per evitare lock concorrenti.",
-            "Aggiornare il server|  docker compose pull && docker compose up -d\nIl DB persiste nel volume — nessun dato va perso."
+            "Architettura|Flask + SQLite, gira come servizio systemd su LXC Proxmox (NON Docker). Porta default: 9091. DB in WAL mode per concorrenza.",
+            "Installazione|  pip install flask gunicorn\n  cp api.py /opt/novascm/\n  systemctl enable --now novascm\nIl servizio si chiama 'novascm.service'.",
+            "Endpoint principali|• GET /health — healthcheck (no auth)\n• GET/POST /api/cr — list/crea Change Request\n• PUT /api/cr/<id>/status — cambia stato\n• GET /api/boot/<mac> — iPXE boot (PXE)\n• GET /api/cr/<id>/autounattend.xml — XML per WinPE\n• POST /api/enrollment-token — emette token monouso\n• GET /api/workflows — lista workflow\n• GET /api/version — versione per auto-update",
+            "Autenticazione|Tutte le route (eccetto /health e boot PXE) richiedono:\n  Header: X-Api-Key: <chiave>\n  oppure query param: ?key=<chiave>\nI token di enrollment sono monouso e scadono automaticamente.\nConfronto timing-safe con hmac.compare_digest.",
+            "Database SQLite|Tabelle: cr, cr_steps, workflows, workflow_steps, pc_workflows, pxe_hosts, deploy_tokens, enrollment_tokens\nWAL mode — no lock su letture concorrenti.",
+            "Aggiornare il server|  systemctl stop novascm\n  cp api.py /opt/novascm/\n  systemctl start novascm\nIl DB è persistente — nessun dato va perso.",
+            "Security headers|Il server aggiunge automaticamente:\n  X-Content-Type-Options: nosniff\n  X-Frame-Options: DENY\n  Cache-Control: no-store (su route sensibili)"
+        ]),
+        ["faq"] = ("FAQ", "❓", [
+            "Come scansiono più subnet?|⚙️ Impostazioni → 'Subnet da scansionare' → una per riga in CIDR (es. 192.168.10.0/24). Poi usa 🌐 Tutte le VLAN nel tab Rete.",
+            "Il MAC non viene trovato|Il MAC viene letto dall'ARP table locale. Se il device è su una subnet diversa (router tra mezzo) il MAC non è visibile. Soluzione: esegui la scansione da un PC nella stessa subnet.",
+            "Il certificato non viene generato|Verifica: 1) Certportal raggiungibile all'URL in Impostazioni, 2) CA presente sul server Certportal, 3) MAC del device noto.",
+            "La scansione è lenta|/24 = 15-30s normali. Firewall aggressivi rallentano. Il concurrency è 50 IP in parallelo — non modificare se la rete è instabile.",
+            "Come aggiorno NovaSCM?|Automatico: all'avvio confronta la versione con GitHub Releases. Banner giallo con 'Installa ora' se disponibile. Oppure: tab ℹ️ About → 🔄 Controlla aggiornamenti.",
+            "Dove sono i file di configurazione?|Config: %APPDATA%\\PolarisManager\\config.json\nDatabase: %APPDATA%\\PolarisManager\\novascm.db\nProfili deploy: %APPDATA%\\PolarisManager\\profiles\\",
+            "Come funziona il Konami Code?|↑↑↓↓←→←→BA — prova sulla tastiera. 😏",
+            "Posso usare NovaSCM senza server?|Sì. Scansione rete, Proxmox, certificati e la maggior parte delle funzioni funzionano offline. Workflow, CR e PXE richiedono il server."
         ])
     };
 
