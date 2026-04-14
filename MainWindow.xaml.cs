@@ -1905,41 +1905,15 @@ public partial class MainWindow : Window
         catch (Exception ex) { App.Log($"[UniFi] EnrichConnection errore: {ex.Message}"); }
     }
 
-    // ── Dati demo (altri tab) ─────────────────────────────────────────────────
     private void LoadFromDatabase()
     {
         // ── Certificati ──────────────────────────────────────────────────────
-        var certs = Database.GetCerts();
-        if (certs.Count == 0)
-        {
-            // Prima esecuzione: popola con dati demo e salva nel DB
-            certs =
-            [
-                new("💻","PC-OFFICE-01","AA:BB:CC:11:22:33","2026-01-15","2036-01-15","✅ Attivo"),
-                new("💻","PC-OFFICE-02","AA:BB:CC:11:22:34","2026-01-15","2036-01-15","✅ Attivo"),
-                new("📱","Smartphone-1","AA:BB:CC:11:22:35","2026-02-01","2036-02-01","✅ Attivo"),
-                new("💻","LAPTOP-01",   "AA:BB:CC:11:22:36","2026-03-01","2036-03-01","✅ Attivo"),
-                new("💻","PC-VECCHIO",  "AA:BB:CC:11:22:37","2025-06-01","2035-06-01","⏸ Revocato"),
-            ];
-            foreach (var c in certs) Database.UpsertCert(c);
-        }
-        CertGrid.ItemsSource = new ObservableCollection<CertRow>(certs);
+        CertGrid.ItemsSource = new ObservableCollection<CertRow>(Database.GetCerts());
 
         // ── App Queue ─────────────────────────────────────────────────────────
-        var queue = Database.GetAppQueue();
-        if (queue.Count == 0)
-        {
-            queue =
-            [
-                new("💻 pc-office-01","192.168.1.101","AA:BB:CC:11:22:33","VLC, Firefox","⏳ In installazione"),
-                new("💻 pc-office-02","192.168.1.102","AA:BB:CC:11:22:34","—",           "✅ Aggiornato"),
-                new("💻 laptop-01",   "192.168.1.103","AA:BB:CC:11:22:36","7-Zip",       "⏳ In attesa"),
-            ];
-            foreach (var q in queue) Database.UpsertAppQueue(q);
-        }
-        AppQueueGrid.ItemsSource = new ObservableCollection<AppQueueRow>(queue);
+        AppQueueGrid.ItemsSource = new ObservableCollection<AppQueueRow>(Database.GetAppQueue());
 
-        // ── Catalogo App (statico) ─────────────────────────────────────────────
+        // ── Catalogo App (statico winget) ──────────────────────────────────────
         AppCatalog.ItemsSource = new[]
         {
             new AppCatRow("🌐 Browser",  "Firefox   │   Chrome   │   Brave   │   Edge"),
@@ -1947,39 +1921,13 @@ public partial class MainWindow : Window
             new AppCatRow("🎬 Media",    "VLC   │   Spotify   │   MPC-HC   │   Kodi"),
             new AppCatRow("🔧 Utility",  "7-Zip   │   WinRAR   │   Everything   │   TreeSize"),
             new AppCatRow("💻 Dev",      "VS Code   │   Git   │   Python   │   Node.js"),
-            new AppCatRow("⭐ Mie App",  "Pioneer MCACC   │   Custom App 1"),
         };
 
         // ── OPSI ──────────────────────────────────────────────────────────────
-        var opsi = Database.GetOpsi();
-        if (opsi.Count == 0)
-        {
-            opsi =
-            [
-                new("firefox",       "132.0", "✅ OK",        "2026-03-01"),
-                new("vlc",           "3.0.21","✅ OK",        "2026-02-28"),
-                new("pioneer-mcacc", "1.0.0", "✅ OK",        "2026-03-04"),
-                new("chrome",        "124.0", "⚠️ Aggiorna","2026-01-15"),
-                new("7zip",          "24.08", "✅ OK",        "2026-03-02"),
-            ];
-            foreach (var o in opsi) Database.UpsertOpsi(o);
-        }
-        OpsiGrid.ItemsSource = new ObservableCollection<OpsiRow>(opsi);
+        OpsiGrid.ItemsSource = new ObservableCollection<OpsiRow>(Database.GetOpsi());
 
         // ── PC Gestiti ────────────────────────────────────────────────────────
-        var pcs = Database.GetPcs();
-        if (pcs.Count == 0)
-        {
-            pcs =
-            [
-                new("💻","PC-OFFICE-01","192.168.1.101","Win 11 Pro", "12%","8.2/32 GB","🟢 Online","✅"),
-                new("💻","PC-OFFICE-02","192.168.1.102","Win 11 Pro", "4%", "4.1/32 GB","🟢 Online","✅"),
-                new("💻","LAPTOP-01",   "192.168.1.103","Win 11 Home","8%", "6.3/16 GB","🟢 Online","✅"),
-                new("💻","PC-VECCHIO",  "—",            "Win 10 Pro", "—",  "—",        "🔴 Offline","⚠️"),
-            ];
-            foreach (var p in pcs) Database.UpsertPc(p);
-        }
-        PcGrid.ItemsSource = new ObservableCollection<PcRow>(pcs);
+        PcGrid.ItemsSource = new ObservableCollection<PcRow>(Database.GetPcs());
 
         // ── Dispositivi rete (ultima scansione) ───────────────────────────────
         var devices = Database.GetDevices();
