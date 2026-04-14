@@ -1,58 +1,24 @@
-# .NET build output
+# Build
 bin/
 obj/
-
-# Visual Studio / Rider
 *.user
 *.suo
 .vs/
-.idea/
-*.DotSettings.user
 
-# Publish output (single-file exe, too large for git)
-**/publish/
+# Publish
+publish/
 
-# Database files (contain real data)
-*.db
-*.db-shm
-*.db-wal
-*.sqlite
+# Config locali con dati reali
+config.json
+*.local.json
 
-# Python cache
+# Python
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
-
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
+.venv/
+venv/
 
 # Logs
 *.log
-
-# NovaSCM Agent build output
-NovaSCMAgent/bin/
-NovaSCMAgent/obj/
-
-# Installer binaries (troppo grandi per git, usa GitHub Releases)
-installer/*.exe
-
-# Secrets / config locale
-appsettings.local.json
-config.local.json
-.env
-server/.env
-config.json
-
-# Publish output specifico (binari compilati)
-publish_v2/
-publish_release/
-publish_small/
-NovaSCM-v*.zip
-
-# Binari dist server (troppo grandi per git — scaricare manualmente)
-server/dist/ipxe.efi
-server/dist/NovaSCMDeployScreen.exe
-server/dist/winpe/
+logs/

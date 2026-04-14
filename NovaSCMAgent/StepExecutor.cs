@@ -147,6 +147,8 @@ public class StepExecutor
         if (!IsSafe(src) || !IsSafe(dst))
             return Task.FromResult(new StepResult(false, "Path non consentito (path traversal)"));
 
+        if (!File.Exists(src))
+            return Task.FromResult(new StepResult(false, $"Sorgente non trovata: {src}"));
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
@@ -181,10 +183,19 @@ public class StepExecutor
             # Installa PSWindowsUpdate se mancante
             if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
                 Write-Output 'Installazione modulo PSWindowsUpdate...'
-                Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers | Out-Null
-                Install-Module PSWindowsUpdate -Force -Scope AllUsers -AllowClobber -SkipPublisherCheck
+                try {
+                    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -Scope AllUsers -ErrorAction Stop | Out-Null
+                    Install-Module PSWindowsUpdate -Force -Scope AllUsers -AllowClobber -SkipPublisherCheck -ErrorAction Stop
+                } catch {
+                    Write-Error "Impossibile installare PSWindowsUpdate: $_"
+                    exit 1
+                }
             }
-            Import-Module PSWindowsUpdate -Force
+            if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
+                Write-Error 'PSWindowsUpdate non disponibile dopo installazione'
+                exit 1
+            }
+            Import-Module PSWindowsUpdate -Force -ErrorAction Stop
 
             # Filtro categoria per PSWindowsUpdate
             $catArgs = @()
@@ -234,7 +245,12 @@ public class StepExecutor
             psi.ArgumentList.Add("-r");
             psi.ArgumentList.Add($"+{Math.Max(1, delay / 60)}");
         }
-        Process.Start(psi);
+        var proc = Process.Start(psi);
+        if (proc == null)
+            return new(false, "Impossibile avviare il comando shutdown");
+        proc.WaitForExit(5000);
+        if (proc.ExitCode != 0)
+            return new(false, $"Shutdown fallito con exit code {proc.ExitCode}");
         return new(true, $"Riavvio programmato tra {delay}s");
     }
 

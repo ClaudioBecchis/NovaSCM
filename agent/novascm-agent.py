@@ -79,7 +79,8 @@ _BLOCKED_HOSTS = {
 }
 
 def _validate_api_url(url: str) -> str:
-    """Valida api_url: solo http/https, no metadata service. Esce se non valido."""
+    """Valida api_url: solo http/https, no metadata service, no loopback. Esce se non valido."""
+    import ipaddress as _ipaddr
     try:
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https"):
@@ -89,6 +90,14 @@ def _validate_api_url(url: str) -> str:
         if host in _BLOCKED_HOSTS:
             log.error("[SSRF] api_url punta a host non consentito: %s", host)
             sys.exit(1)
+        # Blocca loopback IP (127.x.x.x, ::1)
+        try:
+            addr = _ipaddr.ip_address(host)
+            if addr.is_loopback:
+                log.error("[SSRF] api_url punta a loopback: %s", host)
+                sys.exit(1)
+        except ValueError:
+            pass  # hostname non IP — ok, sarà risolto via DNS
     except Exception as e:
         log.error("[SSRF] api_url non valido: %s", e)
         sys.exit(1)
@@ -117,7 +126,8 @@ def load_config():
     cfg.setdefault("poll_sec", POLL_SEC)
     cfg.setdefault("api_key", "")
     if "YOUR-SERVER-IP" in cfg.get("api_url", ""):
-        log.error("[ATTENZIONE] agent.json non configurato! Modifica api_url in: %s", CONFIG_FILE)
+        log.error("[ERRORE CRITICO] agent.json non configurato! Modifica api_url in: %s", CONFIG_FILE)
+        sys.exit(1)
     # SSRF: valida schema e host prima di usare l'URL
     cfg["api_url"] = _validate_api_url(cfg.get("api_url", ""))
     _cfg_cache = cfg
@@ -130,13 +140,19 @@ def load_state():
         try:
             with open(STATE_FILE) as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except Exception as e:
+            log.error("State file corrotto (%s) — reset stato: %s", STATE_FILE, e)
+            try:
+                os.remove(STATE_FILE)
+            except OSError:
+                pass
     return {}
 
 def save_state(state):
     with open(STATE_FILE, "w") as f:
         json.dump(state, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
 
 def clear_state():
     if os.path.exists(STATE_FILE):

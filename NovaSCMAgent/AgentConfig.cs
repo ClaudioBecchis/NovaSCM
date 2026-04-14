@@ -61,23 +61,41 @@ public class AgentConfig
     }
 
     // ── Stato persistente (per resume dopo reboot) ────────────────────────────
-    public record AgentState(int PwId, int ResumeStep, bool HwSent = false);
+    // Phase: "rebooting" = reboot schedulato, "resumed" = reboot completato e step reboot confermato
+    public record AgentState(int PwId, int ResumeStep, bool HwSent = false, string Phase = "rebooting");
 
     public static AgentState? LoadState()
     {
         if (!File.Exists(StatePath)) return null;
-        try { return JsonSerializer.Deserialize<AgentState>(File.ReadAllText(StatePath), _opts); }
-        catch { return null; }
+        try
+        {
+            return JsonSerializer.Deserialize<AgentState>(File.ReadAllText(StatePath), _opts);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[NovaSCM] State file corrotto: {ex.Message} — reset");
+            try { File.Delete(StatePath); } catch { }
+            return null;
+        }
     }
 
     public static void SaveState(AgentState state)
-        => File.WriteAllText(StatePath, JsonSerializer.Serialize(state, _opts));
+    {
+        var json = JsonSerializer.Serialize(state, _opts);
+        // Atomic write: scrivi su file temp, poi rinomina (previene corruzione su crash)
+        var tmpPath = StatePath + ".tmp";
+        File.WriteAllText(tmpPath, json);
+        File.Move(tmpPath, StatePath, overwrite: true);
+    }
 
     public static void MarkHwSent(int pwId, int resumeStep)
-        => SaveState(new AgentState(pwId, resumeStep, HwSent: true));
+        => SaveState(new AgentState(pwId, resumeStep, HwSent: true, Phase: "resumed"));
+
+    public static void MarkResumed(AgentState state)
+        => SaveState(state with { Phase = "resumed" });
 
     public static void ClearState()
     {
-        if (File.Exists(StatePath)) File.Delete(StatePath);
+        try { if (File.Exists(StatePath)) File.Delete(StatePath); } catch { }
     }
 }

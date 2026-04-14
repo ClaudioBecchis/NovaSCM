@@ -43,6 +43,10 @@ except ImportError:
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
+# ── Directory costanti (C-1 fix: dichiarate in alto, usate da PXE endpoints) ──
+DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
+_WINPE_DIR = os.path.join(DIST_DIR, "winpe")
+
 _CORS_ORIGINS = [o.strip() for o in os.environ.get("NOVASCM_CORS_ORIGINS", "").split(",") if o.strip()]
 
 @app.after_request
@@ -53,6 +57,10 @@ def add_cors(response):
         response.headers["Access-Control-Allow-Headers"] = "X-Api-Key, Content-Type"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
         response.headers["Vary"] = "Origin"
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
     return response
 
 @app.route("/api/<path:_>", methods=["OPTIONS"])
@@ -195,17 +203,20 @@ def require_auth(fn):
         if not API_KEY:
             log.error("NOVASCM_API_KEY non configurata — accesso bloccato")
             return jsonify({"error": "Server non configurato: NOVASCM_API_KEY mancante"}), 500
-        token = request.headers.get("X-Api-Key", "")
+        token = request.headers.get("X-Api-Key", "") or request.args.get("key", "")
         # Controlla API key diretta
-        if hmac.compare_digest(token, API_KEY):
+        if token and hmac.compare_digest(token, API_KEY):
             return fn(*args, **kwargs)
-        # Controlla session token (emesso da /api/ui-token)
+        # Controlla session token (emesso da /api/ui-token, oppure ?key= query param)
         with _ui_tokens_lock:
             # C-3: purge periodico anche su auth check
             if len(_ui_tokens) > _UI_TOKENS_MAX // 2:
                 _purge_expired_tokens()
-            exp = _ui_tokens.get(token)
+            exp = _ui_tokens.get(token) if token else None
         if exp and exp > time.time():
+            return fn(*args, **kwargs)
+        # Controlla enrollment token monouso (agent enrollment)
+        if token and _validate_enrollment_token_peek(token):
             return fn(*args, **kwargs)
         log.warning("Accesso non autorizzato da %s", request.remote_addr)
         return jsonify({"error": "Non autorizzato"}), 401
@@ -461,7 +472,8 @@ def _fire_webhook(event: str, data: dict):
     try:
         from urllib.parse import urlparse
         parsed = urlparse(url)
-        if parsed.hostname and (parsed.hostname in _WEBHOOK_BLOCKED_HOSTS or parsed.hostname.startswith(_WEBHOOK_BLOCKED_PREFIXES)):
+        hostname = (parsed.hostname or "").lower()
+        if hostname and (hostname in _WEBHOOK_BLOCKED_HOSTS or hostname.startswith(_WEBHOOK_BLOCKED_PREFIXES)):
             log.warning("Webhook URL bloccato (SSRF): %s", url)
             return
     except Exception:
@@ -529,6 +541,22 @@ def _cleanup_stale_workflows():
                 DELETE FROM pxe_boot_log
                 WHERE id < (SELECT MAX(id) - 10000 FROM pxe_boot_log)
             """)
+    except Exception:
+        pass
+    # Cleanup token scaduti (deploy_tokens e enrollment_tokens)
+    try:
+        now_iso = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
+        now_ts  = time.time()
+        with get_db_ctx() as conn:
+            deleted_dt = conn.execute(
+                "DELETE FROM deploy_tokens WHERE expires_at < ? OR used = 1", (now_iso,)
+            ).rowcount
+            deleted_et = conn.execute(
+                "DELETE FROM enrollment_tokens WHERE expires_at < ? OR used = 1", (now_ts,)
+            ).rowcount
+            conn.commit()
+        if deleted_dt or deleted_et:
+            log.info("Token cleanup: %d deploy_tokens, %d enrollment_tokens rimossi", deleted_dt, deleted_et)
     except Exception:
         pass
 
@@ -1084,7 +1112,10 @@ def import_workflow():
             wf_id = conn.execute(
                 "SELECT id FROM workflows WHERE nome=?", (wf_data["nome"].strip(),)
             ).fetchone()["id"]
-            for step in wf_data.get("steps", []):
+            for i, step in enumerate(wf_data.get("steps", [])):
+                for req_field in ("ordine", "nome", "tipo"):
+                    if req_field not in step:
+                        return jsonify({"error": f"Step #{i+1}: campo obbligatorio mancante: {req_field}"}), 400
                 parametri = step.get("parametri", "{}")
                 if isinstance(parametri, dict):
                     parametri = json.dumps(parametri)
@@ -1267,7 +1298,7 @@ def get_pc_workflow(pw_id):
                    COALESCE(pws.status,'pending') as status,
                    COALESCE(pws.elapsed_sec, 0) as elapsed_sec,
                    0 as est_sec,
-                   pws.output as log, pws.timestamp
+                   COALESCE(pws.output, '') as log, COALESCE(pws.timestamp, '') as timestamp
             FROM workflow_steps ws
             LEFT JOIN pc_workflow_steps pws ON pws.step_id=ws.id AND pws.pc_workflow_id=?
             WHERE ws.workflow_id=?
@@ -1275,7 +1306,11 @@ def get_pc_workflow(pw_id):
         """, (pw_id, dict(pw)["workflow_id"])).fetchall()
     result = dict(pw)
     hw_raw = result.pop("hardware_json", None)
-    result["hardware"]   = json.loads(hw_raw) if hw_raw else None
+    try:
+        result["hardware"] = json.loads(hw_raw) if hw_raw else None
+    except (json.JSONDecodeError, TypeError):
+        log.warning("hardware_json non valido per pw_id=%s", pw_id)
+        result["hardware"] = None
     result["screenshot"] = result.pop("screenshot_b64", None)
     result["log"]        = result.pop("log_text", None)
     result["steps"] = [dict(s) for s in steps]
@@ -1357,16 +1392,13 @@ def deploy_start():
         )
         conn.commit()
         # Crea nuovo pc_workflow in stato running
-        conn.execute(
+        cursor = conn.execute(
             "INSERT INTO pc_workflows (pc_name, workflow_id, status, assigned_at) VALUES (?,?,?,?)",
             (pc_name, wf_id, "running", now)
         )
         conn.commit()
-        pw = conn.execute(
-            "SELECT id FROM pc_workflows WHERE pc_name=? AND workflow_id=? ORDER BY id DESC LIMIT 1",
-            (pc_name, wf_id)
-        ).fetchone()
-    return jsonify({"pw_id": pw["id"], "workflow_id": wf_id, "pc_name": pc_name}), 201
+        pw_id = cursor.lastrowid
+    return jsonify({"pw_id": pw_id, "workflow_id": wf_id, "pc_name": pc_name}), 201
 
 
 @app.route("/api/deploy/<int:pw_id>/step", methods=["POST"])
@@ -1499,7 +1531,11 @@ def get_pc_assigned_workflow(pc_name):
                 setting = conn.execute(
                     "SELECT value FROM settings WHERE key='default_workflow_id'"
                 ).fetchone()
-                wf_id = int(setting["value"]) if setting and setting["value"] else None
+                try:
+                    wf_id = int(setting["value"]) if setting and setting["value"] else None
+                except (ValueError, TypeError):
+                    log.warning("default_workflow_id non valido: %s", setting["value"] if setting else None)
+                    wf_id = None
 
             if wf_id:
                 wf_exists = conn.execute("SELECT id FROM workflows WHERE id=?", (wf_id,)).fetchone()
@@ -1684,7 +1720,7 @@ def download_agent():
 @require_auth
 def create_enrollment_token():
     """Genera un token monouso (1h) per l'enrollment agent — M-7."""
-    token = str(uuid.uuid4())
+    token = secrets.token_hex(32)
     now   = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     exp   = time.time() + 3600
     with get_db_ctx() as conn:
@@ -1696,7 +1732,7 @@ def create_enrollment_token():
     return jsonify({"token": token, "expires_at": exp, "expires_in_sec": 3600})
 
 def _validate_enrollment_token(token: str) -> bool:
-    """Verifica token monouso: deve esistere, non essere scaduto e non essere già usato."""
+    """Verifica e CONSUMA token monouso: deve esistere, non essere scaduto e non essere già usato."""
     with get_db_ctx() as conn:
         row = conn.execute(
             "SELECT expires_at, used FROM enrollment_tokens WHERE token=?", (token,)
@@ -1707,13 +1743,26 @@ def _validate_enrollment_token(token: str) -> bool:
         conn.commit()
     return True
 
+def _validate_enrollment_token_peek(token: str) -> bool:
+    """Verifica token enrollment SENZA consumarlo — per auth ripetibile (agent polling)."""
+    try:
+        with get_db_ctx() as conn:
+            row = conn.execute(
+                "SELECT expires_at, used FROM enrollment_tokens WHERE token=?", (token,)
+            ).fetchone()
+            if not row or row["used"] or time.time() > row["expires_at"]:
+                return False
+        return True
+    except Exception:
+        return False
+
 @app.route("/api/download/agent-install.ps1", methods=["GET"])
 @require_auth
 def download_agent_installer_ps1():
     """Genera install-windows.ps1 con token enrollment monouso (M-7)."""
     api_url = _get_public_url()
     # M-7: genera token monouso invece di iniettare API key master
-    token = str(uuid.uuid4())
+    token = secrets.token_hex(32)
     exp   = time.time() + 3600
     with get_db_ctx() as conn:
         conn.execute(
@@ -1771,7 +1820,7 @@ Write-Host "[NovaSCM] Installato. Config: $CfgFile"
 def download_agent_installer_sh():
     """Genera install-linux.sh con token enrollment monouso (M-7)."""
     api_url = _get_public_url()
-    token = str(uuid.uuid4())
+    token = secrets.token_hex(32)
     exp   = time.time() + 3600
     with get_db_ctx() as conn:
         conn.execute(
@@ -2023,7 +2072,11 @@ def pxe_boot_script(mac: str):
                         ).fetchone()
                         cr_id = cr_row["id"] if cr_row else None
 
-            wf_id = int(pxe_cfg["default_workflow_id"]) if pxe_cfg.get("default_workflow_id") else None
+            try:
+                wf_id = int(pxe_cfg["default_workflow_id"]) if pxe_cfg.get("default_workflow_id") else None
+            except (ValueError, TypeError):
+                log.warning("PXE default_workflow_id non valido: %s", pxe_cfg.get("default_workflow_id"))
+                wf_id = None
             conn.execute("""
                 INSERT OR IGNORE INTO pxe_hosts
                     (mac, pc_name, cr_id, workflow_id, boot_action,
@@ -2160,6 +2213,8 @@ def get_pxe_host(mac: str):
     return jsonify(dict(row))
 
 
+_VALID_BOOT_ACTIONS = {"auto", "deploy", "local", "block"}
+
 @app.route("/api/pxe/hosts", methods=["POST"])
 @require_auth
 def create_pxe_host():
@@ -2167,6 +2222,9 @@ def create_pxe_host():
     mac = _normalize_mac(data.get("mac", ""))
     if not mac:
         return jsonify({"error": "MAC non valido o mancante"}), 400
+    boot_action = data.get("boot_action", "auto")
+    if boot_action not in _VALID_BOOT_ACTIONS:
+        return jsonify({"error": f"boot_action non valido: {boot_action}. Valori ammessi: {', '.join(sorted(_VALID_BOOT_ACTIONS))}"}), 400
     now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
     with get_db_ctx() as conn:
         try:
@@ -2179,7 +2237,7 @@ def create_pxe_host():
                 data.get("pc_name", "").upper().strip(),
                 data.get("cr_id") or None,
                 data.get("workflow_id") or None,
-                data.get("boot_action", "auto"),
+                boot_action,
                 data.get("notes", ""),
                 now,
             ))
@@ -2203,6 +2261,8 @@ def update_pxe_host(mac: str):
     updates = {k: v for k, v in data.items() if k in allowed}
     if not updates:
         return jsonify({"error": "Nessun campo aggiornabile fornito"}), 400
+    if "boot_action" in updates and updates["boot_action"] not in _VALID_BOOT_ACTIONS:
+        return jsonify({"error": f"boot_action non valido: {updates['boot_action']}. Valori ammessi: {', '.join(sorted(_VALID_BOOT_ACTIONS))}"}), 400
     set_clause = ", ".join(f"{k}=?" for k in updates)
     values     = list(updates.values()) + [norm]
     with get_db_ctx() as conn:
@@ -2410,16 +2470,17 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
       </DiskConfiguration>
       <ImageInstall>
         <OSImage>
+          <InstallTo>
+            <DiskID>0</DiskID>
+            <PartitionID>3</PartitionID>
+          </InstallTo>
           <InstallFrom>
             <Path>{_pxe_wim_path}</Path>
             <MetaData wcm:action="add">
               <Key>/IMAGE/INDEX</Key><Value>5</Value>
             </MetaData>
           </InstallFrom>
-          <InstallTo>
-            <DiskID>0</DiskID>
-            <PartitionID>3</PartitionID>
-          </InstallTo>
+          <WillShowUI>OnError</WillShowUI>
         </OSImage>
       </ImageInstall>
       <UserData>
@@ -2473,17 +2534,17 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>2</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Invoke-WebRequest -Uri &apos;{xurl}/api/download/agent&apos; -Headers @{{&apos;X-Api-Key&apos;=&apos;{xkey}&apos;}} -OutFile &apos;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&apos; -UseBasicParsing&quot;</CommandLine>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Invoke-WebRequest -Uri &apos;{xurl}/api/download/agent?key={xkey}&apos; -OutFile &apos;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&apos; -UseBasicParsing&quot;</CommandLine>
           <Description>NovaSCM: scarica agente</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>3</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Invoke-WebRequest -Uri &apos;{xurl}/api/download/deploy-screen&apos; -Headers @{{&apos;X-Api-Key&apos;=&apos;{xkey}&apos;}} -OutFile &apos;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&apos; -UseBasicParsing&quot;</CommandLine>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Invoke-WebRequest -Uri &apos;{xurl}/api/download/deploy-screen?key={xkey}&apos; -OutFile &apos;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&apos; -UseBasicParsing&quot;</CommandLine>
           <Description>NovaSCM: scarica DeployScreen</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>4</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;@{{api_url=&apos;{xurl}&apos;;api_key=&apos;{xkey}&apos;;pc_name=&apos;{xpc}&apos;;poll_sec=30;domain=&apos;{xdom}&apos;}}|ConvertTo-Json|Set-Content &apos;C:\\ProgramData\\NovaSCM\\agent.json&apos; -Encoding UTF8&quot;</CommandLine>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;@{{api_url=&apos;{xurl}&apos;;deploy_token=&apos;{xkey}&apos;;pc_name=&apos;{xpc}&apos;;poll_sec=30;domain=&apos;{xdom}&apos;}}|ConvertTo-Json|Set-Content &apos;C:\\ProgramData\\NovaSCM\\agent.json&apos; -Encoding UTF8&quot;</CommandLine>
           <Description>NovaSCM: crea config agente</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
@@ -2591,8 +2652,6 @@ def download_deploy_screen():
 # ── Web UI ────────────────────────────────────────────────────────────────────
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
-DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
-_WINPE_DIR = os.path.join(DIST_DIR, "winpe")
 
 @app.route("/")
 def ui_index():

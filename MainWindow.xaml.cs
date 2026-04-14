@@ -251,6 +251,9 @@ public partial class MainWindow : Window
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                      "PolarisManager", "config.json");
 
+    // MVVM Phase 2: ViewModel principale — DataContext della finestra
+    private NovaSCM.ViewModels.MainViewModel _vm = null!;
+
     private AppConfig _config = new();
     private CancellationTokenSource? _scanCts;
     private readonly ObservableCollection<DeviceRow>   _netRows       = [];
@@ -326,7 +329,9 @@ public partial class MainWindow : Window
 
     public MainWindow()
     {
+        _vm = new NovaSCM.ViewModels.MainViewModel();
         InitializeComponent();
+        DataContext = _vm;
         Database.Initialize();
         // Forza render del primo tab al caricamento
         Dispatcher.BeginInvoke(() =>
@@ -359,8 +364,8 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(() =>
             {
                 MainTabs.SelectedIndex = MainTabs.Items.Count - 1; // tab Impostazioni (ultimo)
-                TxtSettingsStatus.Text = "👋  Prima esecuzione — configura il server NovaSCM e salva.";
-                TxtSettingsStatus.Foreground = System.Windows.Media.Brushes.Gold;
+                // MVVM Phase 2: TxtSettingsStatus è ora binding su Settings.StatusMessage
+                _vm.Settings.StatusMessage = "👋  Prima esecuzione — configura il server NovaSCM e salva.";
             }, System.Windows.Threading.DispatcherPriority.Loaded);
         }
     }
@@ -404,6 +409,8 @@ public partial class MainWindow : Window
         _apiSvc = string.IsNullOrWhiteSpace(_config.NovaSCMApiUrl)
             ? null
             : new NovaSCMApiService(_config.NovaSCMApiUrl, _config.NovaSCMApiKey, _apiCache);
+        // MVVM Phase 2: carica le impostazioni nel ViewModel (aggiorna i binding del tab Impostazioni)
+        _vm?.Settings.Load();
         ApplyConfigToUI();
         InitConfigWatcher();
     }
@@ -434,49 +441,40 @@ public partial class MainWindow : Window
 
     private void ApplyConfigToUI()
     {
-        TxtCertportalUrl.Text = _config.CertportalUrl;
-        TxtUnifiUrl.Text      = _config.UnifiUrl;
-        TxtUnifiUser.Text     = _config.UnifiUser;
-        TxtUnifiPass.Password = _config.UnifiPass;
-        TxtSsid.Text          = _config.Ssid;
-        TxtRadiusIp.Text      = _config.RadiusIp;
-        TxtCertDays.Text      = _config.CertDays;
-        TxtOrgName.Text       = _config.OrgName;
-        TxtDomain.Text        = _config.Domain;
-        TxtScanIp.Text        = _config.ScanNetwork;
-        TxtScanSubnet.Text    = _config.ScanSubnet;
-        TxtScanNetworks.Text  = _config.ScanNetworks;
-        TxtAdminUser.Text     = _config.AdminUser;
-        TxtAdminPass.Password = _config.AdminPass;
-        TxtNovaSCMApiUrl.Text    = _config.NovaSCMApiUrl;
-        TxtNovaSCMApiKey.Password = _config.NovaSCMApiKey;
+        // MVVM Phase 2: i TextBox del tab Impostazioni sono ora gestiti via binding su _vm.Settings.
+        // Qui restano solo i controlli non-bindable (PasswordBox) e i controlli del tab Rete.
+        TxtScanIp.Text     = _config.ScanNetwork;
+        TxtScanSubnet.Text = _config.ScanSubnet;
+
+        // PasswordBox: non supportano Binding → aggiornati dal ViewModel dopo Load()
+        TxtUnifiPass.Password     = _vm.Settings.UnifiPass;
+        TxtAdminPass.Password     = _vm.Settings.AdminPass;
+        TxtNovaSCMApiKey.Password = _vm.Settings.ApiKey;
     }
 
     private void SaveConfig()
     {
-        _config.CertportalUrl = TxtCertportalUrl.Text.Trim();
-        _config.UnifiUrl      = TxtUnifiUrl.Text.Trim();
-        _config.UnifiUser     = TxtUnifiUser.Text.Trim();
-        _config.Ssid          = TxtSsid.Text.Trim();
-        _config.RadiusIp      = TxtRadiusIp.Text.Trim();
-        _config.CertDays      = TxtCertDays.Text.Trim();
-        _config.OrgName       = TxtOrgName.Text.Trim();
-        _config.Domain        = TxtDomain.Text.Trim();
-        _config.ScanNetwork   = TxtScanIp.Text.Trim();
-        _config.ScanSubnet    = TxtScanSubnet.Text.Trim();
-        _config.ScanNetworks  = TxtScanNetworks.Text;
-        _config.AdminUser     = TxtAdminUser.Text.Trim();
-        _config.NovaSCMApiUrl = TxtNovaSCMApiUrl.Text.Trim();
-        // BUG-04: cifra le credenziali con DPAPI, non salvare plaintext
-        _config.UnifiPassE     = DpapiEncrypt(TxtUnifiPass.Password);
-        _config.AdminPassE     = DpapiEncrypt(TxtAdminPass.Password);
-        _config.NovaSCMApiKeyE = DpapiEncrypt(TxtNovaSCMApiKey.Password);
-        _config.UnifiPass      = "";
-        _config.AdminPass      = "";
-        _config.NovaSCMApiKey  = "";
-        Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-        File.WriteAllText(ConfigPath,
-            JsonSerializer.Serialize(_config, new JsonSerializerOptions { WriteIndented = true }));
+        // MVVM Phase 2: le impostazioni del tab Impostazioni vengono salvate tramite SettingsViewModel.
+        // Qui salviamo i campi che il ViewModel non gestisce (ScanNetwork/ScanSubnet del tab Rete)
+        // e sincronizziamo _config per le parti ancora in code-behind.
+        _vm.Settings.Save();
+
+        // Sync i campi del tab Rete (non ancora migrati a ViewModel) nel vecchio AppConfig
+        _config.ScanNetwork = TxtScanIp.Text.Trim();
+        _config.ScanSubnet  = TxtScanSubnet.Text.Trim();
+        // Rileggi i valori MVVM nel vecchio _config per compatibilità con il resto del code-behind
+        _config.CertportalUrl = _vm.Settings.CertportalUrl;
+        _config.UnifiUrl      = _vm.Settings.UnifiUrl;
+        _config.UnifiUser     = _vm.Settings.UnifiUser;
+        _config.Ssid          = _vm.Settings.WifiSsid;
+        _config.RadiusIp      = _vm.Settings.RadiusIp;
+        _config.CertDays      = _vm.Settings.CertValidityDays;
+        _config.OrgName       = _vm.Settings.OrgName;
+        _config.Domain        = _vm.Settings.OrgDomain;
+        _config.ScanNetworks  = _vm.Settings.ScanSubnets;
+        _config.AdminUser     = _vm.Settings.AdminUser;
+        _config.NovaSCMApiUrl = _vm.Settings.ApiUrl;
+        SetStatus("💾 Configurazione salvata");
     }
 
     // ── Scansione rete ────────────────────────────────────────────────────────
@@ -567,7 +565,8 @@ public partial class MainWindow : Window
                                 try
                                 {
                                     var host = await Dns.GetHostEntryAsync(ip.ToString()).ConfigureAwait(false);
-                                    row.Name = host.HostName.Split('.')[0];
+                                    if (!string.IsNullOrEmpty(host.HostName))
+                                        row.Name = host.HostName.Split('.')[0];
                                 }
                                 catch { }
                             });
@@ -2650,36 +2649,18 @@ public partial class MainWindow : Window
             "Avvia Task Sequence", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
-    private void BtnSaveSettings_Click(object s, RoutedEventArgs e)
-    {
-        SaveConfig();
-        TxtSettingsStatus.Text = "✅ Impostazioni salvate";
-        TxtSettingsStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
-        SetStatus("💾 Configurazione salvata");
-    }
+    // MVVM Phase 2: BtnSaveSettings e BtnTestConnection ora usano Command binding nel XAML.
+    // Questi handler rimangono per compatibilità con eventuali chiamate dirette al codice.
 
-    private async void BtnTestConnection_Click(object s, RoutedEventArgs e)
-    {
-        TxtSettingsStatus.Text = "🔄 Test in corso...";
-        TxtSettingsStatus.Foreground = System.Windows.Media.Brushes.Gray;
-        var url = TxtCertportalUrl.Text.Trim();
-        try
-        {
-            using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            var resp = await http.GetAsync(url + "/api/status");
-            TxtSettingsStatus.Text = resp.IsSuccessStatusCode
-                ? $"✅ Connesso a {url}"
-                : $"⚠️ HTTP {(int)resp.StatusCode}";
-            TxtSettingsStatus.Foreground = resp.IsSuccessStatusCode
-                ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61))
-                : System.Windows.Media.Brushes.Orange;
-        }
-        catch (Exception ex)
-        {
-            TxtSettingsStatus.Text = $"❌ {ex.Message}";
-            TxtSettingsStatus.Foreground = System.Windows.Media.Brushes.Salmon;
-        }
-    }
+    // ── PasswordBox changed handlers (PasswordBox non supporta Binding WPF) ──
+    private void TxtUnifiPass_PasswordChanged(object s, RoutedEventArgs e)
+        => _vm.Settings.UnifiPass = ((System.Windows.Controls.PasswordBox)s).Password;
+
+    private void TxtAdminPass_PasswordChanged(object s, RoutedEventArgs e)
+        => _vm.Settings.AdminPass = ((System.Windows.Controls.PasswordBox)s).Password;
+
+    private void TxtNovaSCMApiKey_PasswordChanged(object s, RoutedEventArgs e)
+        => _vm.Settings.ApiKey = ((System.Windows.Controls.PasswordBox)s).Password;
 
     // ── Helpers ───────────────────────────────────────────────────────────────
     private void BtnOpenWebsite_Click(object s, RoutedEventArgs e) =>

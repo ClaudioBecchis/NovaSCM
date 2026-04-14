@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:ui="http://schemas.modernwpf.com/2019"
         ui:WindowHelper.UseModernWindowStyle="True"
-        Title="NovaSCM — by Claudio Becchis" Icon="Assets/novascm.ico"
+        Title="Nova Software Configuration Manager — by Claudio Becchis" Icon="Assets/novascm.ico"
         Height="780" Width="1300"
         MinHeight="560" MinWidth="900"
         FontSize="14"
@@ -2415,8 +2415,11 @@
                         <!-- Titolo -->
                         <TextBlock Text="NovaSCM" FontSize="36" FontWeight="Bold" Foreground="#60a5fa"
                                    TextWrapping="Wrap"/>
+                        <TextBlock Text="Nova Software Configuration Manager"
+                                   FontSize="15" Foreground="#e2e8f0" FontWeight="SemiBold"
+                                   Margin="0,4,0,2" TextWrapping="Wrap"/>
                         <TextBlock Text="Open Source Fleet &amp; Network Manager"
-                                   FontSize="14" Foreground="#94a3b8" Margin="0,4,0,20"
+                                   FontSize="12" Foreground="#64748b" Margin="0,0,0,20"
                                    TextWrapping="Wrap"/>
 
                         <!-- Autore -->
@@ -2646,35 +2649,42 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         <TextBlock Text="🌐 Server" Style="{StaticResource GroupTitle}"/>
 
                         <TextBlock Text="Certportal URL" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtCertportalUrl" Style="{StaticResource SettingsBox}"
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.CertportalUrl, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Es: https://certportal.miarete.it oppure http://192.168.1.110:9090"/>
 
                         <TextBlock Text="UniFi Controller URL" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtUnifiUrl" Style="{StaticResource SettingsBox}"
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.UnifiUrl, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Es: https://192.168.1.1"/>
 
                         <TextBlock Text="UniFi Username" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtUnifiUser" Style="{StaticResource SettingsBox}"/>
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.UnifiUser, UpdateSourceTrigger=PropertyChanged}"/>
 
                         <TextBlock Text="UniFi Password" Style="{StaticResource SettingsLabel}"/>
-                        <PasswordBox x:Name="TxtUnifiPass" Style="{StaticResource SettingsPass}"/>
+                        <PasswordBox x:Name="TxtUnifiPass" Style="{StaticResource SettingsPass}"
+                                     PasswordChanged="TxtUnifiPass_PasswordChanged"/>
 
                         <!-- Sezione WiFi / RADIUS -->
                         <TextBlock Text="📡 WiFi / RADIUS" Style="{StaticResource GroupTitle}"/>
 
                         <TextBlock Text="SSID rete sicura (EAP-TLS)" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtSsid" Style="{StaticResource SettingsBox}"
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.WifiSsid, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Es: MiaRete-Secure"/>
 
                         <TextBlock Text="RADIUS Server IP" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtRadiusIp" Style="{StaticResource SettingsBox}"
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.RadiusIp, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Es: 192.168.1.105"/>
 
                         <!-- Sezione Certificati -->
                         <TextBlock Text="🔐 Certificati" Style="{StaticResource GroupTitle}"/>
 
                         <TextBlock Text="Validità certificati (giorni)" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtCertDays" Style="{StaticResource SettingsBox}" Text="3650"
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.CertValidityDays, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Default: 3650 (10 anni)"/>
 
                         <!-- Sezione subnet multiple -->
@@ -2682,23 +2692,25 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
 
                         <TextBlock Text="Reti (una per riga, formato 192.168.x.0/24)"
                                    Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtScanNetworks"
-                                 Background="White" Foreground="#1a1a1a"
+                        <TextBox Background="White" Foreground="#1a1a1a"
                                  BorderBrush="#C8CDD5" Padding="8,4" FontSize="13"
                                  Width="320" HorizontalAlignment="Left"
                                  AcceptsReturn="True" TextWrapping="Wrap" Height="110"
                                  VerticalScrollBarVisibility="Auto"
+                                 Text="{Binding Settings.ScanSubnets, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Usato dal pulsante 'Tutte le VLAN' nel tab Rete"/>
 
                         <!-- Sezione WinRM / Inventario -->
                         <TextBlock Text="🖥️ Inventario / WinRM" Style="{StaticResource GroupTitle}"/>
 
                         <TextBlock Text="Username admin remoto" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtAdminUser" Style="{StaticResource SettingsBox}"
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.AdminUser, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Es: Administrator — usato per WMI remoto e inventario hardware/software"/>
 
                         <TextBlock Text="Password admin remoto" Style="{StaticResource SettingsLabel}"/>
-                        <PasswordBox x:Name="TxtAdminPass" Style="{StaticResource SettingsPass}"/>
+                        <PasswordBox x:Name="TxtAdminPass" Style="{StaticResource SettingsPass}"
+                                     PasswordChanged="TxtAdminPass_PasswordChanged"/>
 
                         <TextBlock Foreground="#475569" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"
                                    Text="⚠️  Abilita WinRM sui PC target con:  Enable-PSRemoting -Force  (da PowerShell admin)"/>
@@ -2707,21 +2719,25 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         <TextBlock Text="🏢 Organizzazione" Style="{StaticResource GroupTitle}"/>
 
                         <TextBlock Text="Nome organizzazione" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtOrgName" Style="{StaticResource SettingsBox}"
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.OrgName, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Es: PolarisCore / MiaAzienda Srl"/>
 
                         <TextBlock Text="Dominio" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtDomain" Style="{StaticResource SettingsBox}"
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.OrgDomain, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Es: polariscore.it / miazienda.local"/>
 
                         <!-- Sezione NovaSCM API -->
                         <TextBlock Text="🔧 NovaSCM / CR" Style="{StaticResource GroupTitle}"/>
                         <TextBlock Text="URL API NovaSCM (tab Richieste)" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtNovaSCMApiUrl" Style="{StaticResource SettingsBox}"
+                        <TextBox Style="{StaticResource SettingsBox}"
+                                 Text="{Binding Settings.ApiUrl, UpdateSourceTrigger=PropertyChanged}"
                                  ToolTip="Es: http://192.168.1.100:9091/api/cr"/>
                         <TextBlock Text="API Key (X-Api-Key header)" Style="{StaticResource SettingsLabel}"/>
                         <PasswordBox x:Name="TxtNovaSCMApiKey" Style="{StaticResource SettingsPass}"
-                                     ToolTip="Chiave NOVASCM_API_KEY configurata nel server Docker"/>
+                                     PasswordChanged="TxtNovaSCMApiKey_PasswordChanged"
+                                     ToolTip="Chiave NOVASCM_API_KEY configurata nel server"/>
 
                         <!-- UI-02: Aspetto -->
                         <TextBlock Text="🎨 Aspetto" Style="{StaticResource GroupTitle}"/>
@@ -2737,13 +2753,13 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         <!-- Pulsanti -->
                         <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
                             <Button Content="💾  Salva impostazioni" Style="{StaticResource BtnGreen}"
-                                    Click="BtnSaveSettings_Click"/>
+                                    Command="{Binding Settings.SaveCommand}"/>
                             <Button Content="🔍  Test connessione" Style="{StaticResource BtnBlue}"
-                                    Click="BtnTestConnection_Click"/>
+                                    Command="{Binding Settings.TestConnectionCommand}"/>
                         </StackPanel>
 
-                        <TextBlock x:Name="TxtSettingsStatus" Foreground="#10b981"
-                                   FontSize="12" Margin="0,10,0,0" Text=""/>
+                        <TextBlock Foreground="#10b981" FontSize="12" Margin="0,10,0,0"
+                                   Text="{Binding Settings.StatusMessage}"/>
 
                     </StackPanel>
                 </ScrollViewer>

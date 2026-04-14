@@ -54,25 +54,35 @@ public class ApiClient
                                       string status, string output, CancellationToken ct,
                                       string apiKey = "", double elapsedSec = 0)
     {
-        try
+        const int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++)
         {
-            var url  = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow/step";
-            var body = JsonSerializer.Serialize(new
+            try
             {
-                step_id     = stepId,
-                status,
-                output      = output.Length > 2000 ? output[^2000..] : output,
-                ts          = DateTime.Now.ToString("o"),
-                elapsed_sec = elapsedSec
-            });
-            var content = new StringContent(body, Encoding.UTF8, "application/json");
-            using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);
-            await _http.SendAsync(req, ct);
+                var url  = $"{apiUrl.TrimEnd('/')}/api/pc/{pcName}/workflow/step";
+                var body = JsonSerializer.Serialize(new
+                {
+                    step_id     = stepId,
+                    status,
+                    output      = output.Length > 2000 ? output[^2000..] : output,
+                    ts          = DateTime.Now.ToString("o"),
+                    elapsed_sec = elapsedSec
+                });
+                var content = new StringContent(body, Encoding.UTF8, "application/json");
+                using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);
+                var resp = await _http.SendAsync(req, ct);
+                if (resp.IsSuccessStatusCode) return;
+                _log.LogWarning("POST step {StepId}: HTTP {Code} (tentativo {A}/{M})", stepId, (int)resp.StatusCode, attempt, maxRetries);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _log.LogWarning("POST step {StepId}: {Err} (tentativo {A}/{M})", stepId, ex.Message, attempt, maxRetries);
+            }
+            if (attempt < maxRetries)
+                await Task.Delay(TimeSpan.FromSeconds(2 * attempt), ct);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _log.LogWarning("POST step {StepId}: {Err}", stepId, ex.Message);
-        }
+        _log.LogError("POST step {StepId}: fallito dopo {M} tentativi", stepId, maxRetries);
     }
 
     public async Task SendHardwareAsync(string apiUrl, int pwId, HardwareData hw, CancellationToken ct, string apiKey = "")

@@ -91,15 +91,34 @@ public class Worker : BackgroundService
             var exePath = exePaths.FirstOrDefault(File.Exists);
             if (exePath == null) return;
 
+            // SEC: passa API key via file temporaneo (non env var, non visibile a tutti i processi)
+            var keyFile = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+                "NovaSCM", ".deploy_key");
+            File.WriteAllText(keyFile, cfg.ApiKey);
+            // Restringe permessi al solo SYSTEM/Administrators (best-effort)
+            try
+            {
+                var fi = new FileInfo(keyFile);
+                var acl = fi.GetAccessControl();
+                acl.SetAccessRuleProtection(true, false);
+                acl.AddAccessRule(new System.Security.AccessControl.FileSystemAccessRule(
+                    "BUILTIN\\Administrators",
+                    System.Security.AccessControl.FileSystemRights.FullControl,
+                    System.Security.AccessControl.AccessControlType.Allow));
+                fi.SetAccessControl(acl);
+            }
+            catch { /* best-effort ACL */ }
+
             var args = $"hostname={cfg.PcName} domain={cfg.Domain} pw_id={pwId} " +
-                       $"server={cfg.ApiUrl} wf={Uri.EscapeDataString(wfNome)}";
+                       $"server={cfg.ApiUrl} wf={Uri.EscapeDataString(wfNome)} " +
+                       $"keyfile={keyFile}";
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName        = exePath,
                 Arguments       = args,
                 UseShellExecute = false,
             };
-            psi.EnvironmentVariables["NOVASCM_API_KEY"] = cfg.ApiKey;
             System.Diagnostics.Process.Start(psi);
         }
         catch (Exception ex)
@@ -175,9 +194,16 @@ public class Worker : BackgroundService
             AgentConfig.ClearState();
             state = null;
         }
+        // State machine: se fase="rebooting" → il reboot è avvenuto, conferma e marca "resumed"
+        if (state != null && state.Phase == "rebooting")
+        {
+            _log.LogInformation("Reboot completato — conferma step_id={StepId} e resume workflow", state.ResumeStep);
+            AgentConfig.MarkResumed(state);
+            state = AgentConfig.LoadState();
+        }
         var resumeFrom = state?.ResumeStep ?? 0;
         if (resumeFrom > 0)
-            _log.LogInformation("Resume dopo reboot — da step_id={StepId}", resumeFrom);
+            _log.LogInformation("Resume dopo reboot — da step_id={StepId} (fase: {Phase})", resumeFrom, state?.Phase ?? "none");
 
         // Lancia DeployScreen sul PC in deploy (solo primo avvio, non su resume)
         if (resumeFrom == 0)
@@ -284,11 +310,11 @@ public class Worker : BackgroundService
                 return;
             }
 
-            // Reboot: salva stato e lascia che il sistema si riavvii
+            // Reboot: salva stato con fase "rebooting" e lascia che il sistema si riavvii
             if (step["tipo"]?.GetValue<string>() == "reboot" && result.Ok.Value)
             {
-                AgentConfig.SaveState(new AgentConfig.AgentState(pwId, stepId));
-                _log.LogInformation("Stato salvato per resume dopo reboot");
+                AgentConfig.SaveState(new AgentConfig.AgentState(pwId, stepId, HwSent: true, Phase: "rebooting"));
+                _log.LogInformation("Stato salvato (fase=rebooting) per resume dopo reboot");
                 return;
             }
         }

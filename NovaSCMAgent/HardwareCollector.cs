@@ -43,7 +43,11 @@ public static class HardwareCollector
             {
                 var line = File.ReadLines("/proc/cpuinfo")
                     .FirstOrDefault(l => l.StartsWith("model name", StringComparison.Ordinal));
-                if (line != null) return line.Split(':')[1].Trim();
+                if (line != null)
+                {
+                    var parts = line.Split(':');
+                    if (parts.Length >= 2) return parts[1].Trim();
+                }
             }
             catch { }
         }
