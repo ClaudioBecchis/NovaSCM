@@ -8,6 +8,7 @@ Dipendenza: pip install tftpy
 import logging
 import os
 import threading
+import time
 
 log = logging.getLogger("novascm-tftp")
 
@@ -58,12 +59,11 @@ def _launch_tftp_thread() -> None:
     def _run() -> None:
         global _tftp_healthy
         server = tftpy.TftpServer(_dist_dir)
-        log.info("TFTP server avviato su %s:%d — dist_dir=%s", _host, _port, _dist_dir)
-        _tftp_healthy = True
         try:
-            server.listen(_host, _port)
+            log.info("TFTP server in ascolto su %s:%d — dist_dir=%s", _host, _port, _dist_dir)
+            _tftp_healthy = True
+            server.listen(_host, _port)  # bloccante — esce solo su errore o stop
         except PermissionError:
-            _tftp_healthy = False
             log.error(
                 "Permesso negato per porta %d. "
                 "Su Linux la porta 69 richiede root o CAP_NET_BIND_SERVICE. "
@@ -72,8 +72,11 @@ def _launch_tftp_thread() -> None:
                 _port,
             )
         except OSError as exc:
-            _tftp_healthy = False
             log.error("TFTP server errore: %s", exc)
+        finally:
+            # Garantisce stato coerente anche su eccezioni impreviste
+            # (non solo PermissionError/OSError) o su uscita normale del loop.
+            _tftp_healthy = False
 
     _tftp_thread = threading.Thread(target=_run, name="tftp-server", daemon=True)
     _tftp_thread.start()
@@ -86,9 +89,10 @@ def is_tftp_alive() -> bool:
 
 
 def restart_tftp_if_dead() -> bool:
-    """Riavvia il TFTP se il thread è morto. Ritorna True se riavviato."""
+    """Riavvia il TFTP se il thread è morto. Ritorna True solo se il riavvio è confermato riuscito."""
     if _tftp_thread is not None and not _tftp_thread.is_alive() and _dist_dir:
         log.warning("TFTP thread morto — tentativo di restart...")
         _launch_tftp_thread()
-        return True
+        time.sleep(0.4)  # tempo minimo perché il thread tenti il bind
+        return is_tftp_alive()
     return False
