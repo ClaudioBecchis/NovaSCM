@@ -23,6 +23,9 @@ venv/
 *.log
 logs/
 
-# PXE binary assets (troppo grandi / licenza Windows — vedi server/dist/README.md)
+# PXE binary assets (troppo grandi / licenza Windows / specifici per-ambiente — vedi server/dist/README.md)
 server/dist/ipxe.efi
 server/dist/winpe/
+server/dist/NovaSCMDeployScreen.exe
+server/dist/autoexec.ipxe
+server/*.db

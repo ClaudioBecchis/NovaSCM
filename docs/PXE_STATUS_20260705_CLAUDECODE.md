@@ -32,3 +32,25 @@ Verificato con `/api/pxe/status`: `ipxe_efi: true, tftp_alive: true, winpe_ready
 1. Deploy di questo server (con `dist/` popolato) su un host reale — CT112 (sostituendo il Reborn) o un container nuovo
 2. Config DHCP Option 66/67 su UniFi verso l'host scelto
 3. Test di boot fisico reale (richiede presenza fisica o accesso IPMI/KVM — nessuna IA può farlo da sola)
+
+---
+
+## Aggiornamento — Test reale eseguito (stessa sera, 5 luglio 2026)
+
+Eseguito un test end-to-end completo con infrastruttura temporanea (CT104 test + VM 105 con boot di rete su Proxmox, DHCP Option 66/67 reindirizzato). Dettagli completi in memoria Claude (`novascm-pxe-test-20260705.md`), riepilogo qui per chi lavora dal repo:
+
+### Risultato: catena di rete VERIFICATA FUNZIONANTE per la prima volta
+
+DHCP → TFTP → iPXE (`autoexec.ipxe`) → chain HTTP `/api/boot/{mac}` → NovaSCM riconosce il MAC (auto-provisioning crea host+CR) → serve wimboot+BCD+boot.sdi+boot.wim → Windows Setup parte e richiede `/api/autounattend/{pc_name}` → XML ricevuto. Confermato con log server e screenshot reali della VM.
+
+### Bug reali trovati e corretti in questa sessione
+
+1. **Setting `pxe_install_wim_path` con default obsoleto** (`\\192.168.10.201\wininstall\...`, vecchio IP/share inesistente) — causava fallimento rapido (loop di riavvio ogni ~15-30s, troppo veloce per un vero apply) perché Windows Setup non trovava l'immagine. Il setting non è esposto da `/api/settings` (schema ristretto) — va scritto direttamente nel DB. Vedi `server/dist/README.md` per i dettagli.
+2. **`.gitignore` incompleto** — non escludeva `autoexec.ipxe` e `NovaSCMDeployScreen.exe` oltre a `ipxe.efi`/`winpe/`. Corretto.
+3. Confermato che il disco VM **SATA** funziona meglio di virtio-scsi per i test (evita di dover iniettare driver VirtIO in WinPE, che richiederebbe ADK).
+
+### Problema NON ancora risolto
+
+Dopo il fix del percorso SMB, il loop di riavvio si è fermato (buon segno) ma la VM di test resta bloccata senza un errore visibile, anche dopo aver disabilitato l'auto-restart-on-failure nel BCD offline (`bcdedit /set "{default}" bootstatuspolicy IgnoreAllFailures` + `recoveryenabled No` — **nota**: in PowerShell le graffe vanno tra virgolette, altrimenti vengono interpretate come script block).
+
+**Prossimo passo concreto**: verificare con `Dism /Get-WimInfo /WimFile:server\dist\winpe\install.wim` (richiede prompt admin) che l'indice 5 configurato nell'autounattend corrisponda davvero a "Windows 11 Pro" in QUESTA iso specifica (`Z:\isos\Windows\Win11_25H2_Italian_x64.iso`) — non ancora verificato, è il sospetto principale rimasto.
