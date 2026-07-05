@@ -22,3 +22,7 @@ venv/
 # Logs
 *.log
 logs/
+
+# PXE binary assets (troppo grandi / licenza Windows — vedi server/dist/README.md)
+server/dist/ipxe.efi
+server/dist/winpe/
