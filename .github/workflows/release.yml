@@ -20,7 +20,8 @@ jobs:
         run: dotnet publish PolarisManager.csproj -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
       - name: Smoke test — l'exe deve essere > 3 MB (no apphost nudo)
         shell: pwsh
-        run: if ((Get-Item publish/NovaSCM.exe).Length -lt 3MB) { throw "Exe troppo piccolo: packaging rotto" }
+        run: |
+          if ((Get-Item publish/NovaSCM.exe).Length -lt 3MB) { throw "Exe troppo piccolo - packaging rotto" }
       - name: Upload asset alla release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
