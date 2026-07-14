@@ -1276,7 +1276,10 @@ class TestPxeFileServing:
         resp = client.get("/api/pxe/file/evil.exe")
         assert resp.status_code == 404
 
-    def test_allowed_file_missing_returns_404(self, client):
+    def test_allowed_file_missing_returns_404(self, client, tmp_path, monkeypatch):
+        empty_winpe = tmp_path / "winpe"
+        empty_winpe.mkdir()
+        monkeypatch.setattr(api, "_WINPE_DIR", str(empty_winpe))
         resp = client.get("/api/pxe/file/wimboot")
         assert resp.status_code == 404
         assert b"non trovato" in resp.data or b"not found" in resp.data.lower()

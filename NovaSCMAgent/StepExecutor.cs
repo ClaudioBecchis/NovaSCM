@@ -281,9 +281,10 @@ public class StepExecutor
             foreach (var (k, v) in env)
                 psi.Environment[k] = v;
 
+        Process? proc = null;
         try
         {
-            using var proc = new Process { StartInfo = psi };
+            proc = new Process { StartInfo = psi };
             var sbOut = new System.Text.StringBuilder();
             var sbErr = new System.Text.StringBuilder();
             proc.OutputDataReceived += (_, e) => { if (e.Data != null) sbOut.AppendLine(e.Data); };
@@ -299,10 +300,14 @@ public class StepExecutor
         }
         catch (OperationCanceledException)
         {
-            try { proc.Kill(true); } catch { /* best effort */ }
+            try { if (proc is { HasExited: false }) proc.Kill(true); } catch { /* best effort */ }
             return new(false, $"Timeout dopo {StepTimeoutSec}s");
         }
         catch (Exception ex)               { return new(false, ex.Message); }
+        finally
+        {
+            proc?.Dispose();
+        }
     }
 
 }
