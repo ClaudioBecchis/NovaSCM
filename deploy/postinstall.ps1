@@ -10,7 +10,44 @@ $SERVER = $null
 $APIKEY = $null
 $PXE    = $null
 
+# ── Attesa rete pronta: FirstLogonCommands girano molto presto nel boot,
+#    spesso prima che il DHCP/stack di rete sia completamente inizializzato.
+#    Prova una connessione TCP reale all'host/porta del server enrollment,
+#    con retry ed backoff, prima di tentare qualsiasi chiamata HTTP.
+function Wait-NetworkReady {
+    param([string]$ServerUrl, [int]$MaxTries = 20, [int]$DelaySec = 3)
+    if (-not $ServerUrl) { return $false }
+    try {
+        $uri = [Uri]$ServerUrl
+        $targetHost = $uri.Host
+        $port = if ($uri.Port -gt 0) { $uri.Port } else { 80 }
+    } catch {
+        return $false
+    }
+    for ($i = 1; $i -le $MaxTries; $i++) {
+        try {
+            $client = New-Object Net.Sockets.TcpClient
+            $iar = $client.BeginConnect($targetHost, $port, $null, $null)
+            $ok = $iar.AsyncWaitHandle.WaitOne(2000, $false)
+            if ($ok -and $client.Connected) {
+                $client.Close()
+                return $true
+            }
+            $client.Close()
+        } catch {}
+        Start-Sleep -Seconds $DelaySec
+    }
+    return $false
+}
+
 if ($ENROLL_TOKEN -and $ENROLL_SERVER) {
+    $netReady = Wait-NetworkReady -ServerUrl $ENROLL_SERVER
+    if (-not $netReady) {
+        Write-Warning "NovaSCM: rete non raggiungibile verso $ENROLL_SERVER dopo i retry — enrollment saltato"
+    }
+}
+
+if ($ENROLL_TOKEN -and $ENROLL_SERVER -and $netReady) {
     try {
         $body = [Text.Encoding]::UTF8.GetBytes(
             (ConvertTo-Json @{ token = $ENROLL_TOKEN } -Compress))

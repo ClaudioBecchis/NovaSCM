@@ -476,3 +476,158 @@ type X:\pxe-startnet.log
 **File sincronizzati in questa sessione** (`Y:\NovaSCM` con le versioni live su CT104, erano divergenti): `server/api.py`, `server/tests/test_api.py`, `server/web/deploy-client.html`, `server/web/index.html`, `docs/startnet_PE_current.cmd`.
 
 Vedi memoria Claude: `pve-minipc-swap-oom-fix-20260716.md` per il log cronologico completo di tutti i crash/fix di stasera.
+
+---
+
+## AGGIORNAMENTO sera/notte 16/07/2026 (Grok) — da unattend/offlineServicing a DISM + boot SATA
+
+### Contesto
+- Continua dopo la sezione sera (Samba/startnet/unattend ComplianceCheck).
+- **Vincolo utente:** non toccare RAM/CPU della VM (durante la sessione `memory` osservata a **3072** MB in config; non modificata da Grok in questa fase salvo dove già era).
+- Host: **pve-minipc** `.10.202` — OOM/crash se VM 6G + CT; swap `rpool/swap-pxe` ~4G da riattivare dopo reboot host se assente.
+- CT104: `novascm-pxe-test` `.10.104` — share `\\192.168.10.104\wininstall`.
+
+---
+
+### Diagnosi definitiva errore “offlineServicing” / “Installazione annullata”
+
+Log reali su share: `sources/setuperr-last.log` + `setupact-last.log` (copiati da startnet quando Setup falliva).
+
+**Causa vera (non un bug generico offlineServicing):**
+
+```
+Callback_Productkey_Validate_Unattend:Invalid product key; halting Setup
+hr = 0x80300006
+```
+
+| Chiave provata | Esito |
+|----------------|--------|
+| `3XF2F-…`, `WNMTR-…` | Rifiutate da Setup |
+| `W269N-WFGWX-YVC9B-4J6C9-T83GX` (GVLK Pro) | **Rifiutata su ISO Retail** — GVLK valida solo su media **Volume** |
+| Nessuna ProductKey + `EI.cfg` Retail | Setup prosegue (superata fase key) |
+
+Messaggio UI *offlineServicing* = fallimento generico dopo blocco Product Key / apply interrotto, **non** un package offline mancante nell’XML.
+
+**Fix unattend retail:**
+- **Niente** `<ProductKey>` in `sources/autounattend.xml` e in `api.py` generator.
+- `sources/EI.cfg`:
+  ```ini
+  [EditionID]
+  Professional
+  [Channel]
+  Retail
+  [VL]
+  0
+  ```
+- Per usare GVLK in unattend serve **ISO Volume** + KMS in rete (documentato a voce in chat; non applicato senza media VL).
+
+Con unattend senza key: install Setup arrivata ~**80%** copia da `install.wim` (SMB lock su `install.wim` verificato), poi di nuovo UI offlineServicing — a quel punto si è abbandonato `setup.exe` per percorso DISM.
+
+---
+
+### Percorso DISM PE-first (sostituisce setup.exe)
+
+**Idea:** applicare immagine con `dism /Apply-Image` + `bcdboot` + unattend solo specialize/oobe in `C:\Windows\Panther\unattend.xml` — **niente** pass offlineServicing di Setup.
+
+| Asset | Path |
+|-------|------|
+| `install.wim` index **5** | Windows 11 Pro |
+| Driver vioscsi (share) | `/opt/novascm-pxe/smb/drivers/vioscsi/` (da `virtio-win-0.1.285.iso` host → w11/amd64) |
+| Unattend post-apply | `sources/unattend-specialize.xml` → Panther |
+| Log PE | `sources/pxe-startnet-last.log`, poi `sources/pxe-auto-repair.log` |
+
+#### Bug critici incontrati e fix
+
+1. **diskpart + `echo select disk 0>file` senza spazio**  
+   In `cmd`, `0>` è redirezione: disco **non** selezionato → “Nessun disco selezionato”.  
+   **Fix:** blocco `(echo select disk 0\necho clean\n...) > X:\part.txt` con spazio corretto.
+
+2. **`dism /Add-Driver` vioscsi sull’immagine offline**  
+   Errore ricorrente **`0x80004002` Interfaccia non supportata** in questo WinPE — driver virtio **non** iniettato.
+
+3. **Boot order `boot: order=net0` only**  
+   Dopo apply, reboot → **sempre PXE** (schermo nero / prompt PE).  
+   Serve `sata0`/`scsi0` **prima** di `net0` per avviare Windows.
+
+4. **Controller virtio-scsi senza driver nell’OS**  
+   Con vioscsi non iniettato: Windows non vede il disco → **schermo nero** post-bcdboot.  
+   **Fix lab:** disco VM105 da `scsi0` (virtio-scsi) a **`sata0` (AHCI)** — driver inbox Win11.  
+   Config finale osservata:
+   ```
+   boot: order=sata0   (o sata0;net0)
+   sata0: local-zfs:vm-105-disk-0,size=64G
+   sata1: virtio-win ISO cdrom
+   bios: ovmf
+   ```
+
+5. **startnet FULL install con `clean`**  
+   Rischio di **cancellare** Windows già applicato se PE non trova subito `ntoskrnl` (lettere volume).  
+   **Fix:** modalità **SAFE / REPAIR ONLY** — se non trova Windows → `cmd /k` e **niente wipe**.  
+   Poi **AUTO-REPAIR** che mappa `S:` (EFI) + `W:` (Windows) e lancia `bcdboot` senza clean.
+
+#### Esito DISM (log `pxe-startnet-last.log`)
+
+- diskpart GPT EFI 260 + MSR + Windows 63G: **OK** (dopo fix echo).
+- `dism /Apply-Image … /Index:5` → **100% Operazione completata**.
+- `bcdboot … /f UEFI` → **Creazione dei file di avvio completata** (warning MUI mancanti: normali).
+- Driver vioscsi offline: **FAIL 0x80004002**.
+- Unattend specialize copiato in Panther: **OK**.
+
+#### Console utente
+
+- Prompt `X:\Windows\System32\cmd.exe - startnet.cmd` = **ancora in PE**, non desktop Windows.
+- `list vol` manuale (dopo confusione paste output diskpart come comandi):  
+  - `W:` **Windows** NTFS 63 GB  
+  - `S:` **SYSTEM** FAT32 260 MB (EFI, Nascosto)  
+  - `D:` virtio-win ISO  
+- Messaggio startnet *NO WINDOWS FOUND* = false negative su lettere; Windows **c’era** su `W:`.
+
+#### Auto-repair (Grok, su richiesta “fallo tu”)
+
+- `startnet` aggiornato a scan multi-lettera + `bcdboot W:\Windows /s S: /f UEFI` + copia `bootx64.efi`.
+- Boot temporaneo `net0;sata0` per un ciclo PE, poi target `sata0` only.
+- Sessione **interrotta** dall’utente (“fermati”) durante il poll di completamento auto-repair — verificare se `sources/pxe-auto-repair.log` contiene `AUTO-REPAIR-OK`.
+
+---
+
+### Stato a salvataggio documento
+
+| Elemento | Stato |
+|----------|--------|
+| Host pve-minipc | Operativo (verificare swap dopo ogni reboot host) |
+| CT104 | Servizi PXE/SMB/nginx attesi running |
+| VM105 | Disco **SATA** + OVMF; boot tipicamente **sata0**; image Win11 Pro index 5 **applicata** via DISM (se non wiped da un PE successivo) |
+| Desktop Windows / OOBE | **Non confermato** end-to-end in sessione (nero / PE / interruzioni) |
+| setup.exe unattend e2e | Abbandonato per ProductKey retail + offlineServicing UI |
+| Percorso consigliato avanti | 1) Confermare `W:\Windows` intatto in PE 2) `bcdboot` + boot **solo sata0** 3) Se nero: menu OVMF Esc → Windows Boot Manager 4) In futuro: iniettare vioscsi in install.wim **prima** dell’apply (host/DISM offline) se si torna a virtio-scsi |
+
+### Comandi utili (host Proxmox)
+
+```bash
+qm status 105
+qm config 105 | grep -E 'boot|sata|scsi|memory'
+qm set 105 --boot order=sata0          # solo disco
+qm set 105 --boot order=net0\;sata0    # un ciclo PE repair
+# log PE
+pct exec 104 -- cat /opt/novascm-pxe/smb/sources/pxe-startnet-last.log | tail -50
+pct exec 104 -- cat /opt/novascm-pxe/smb/sources/pxe-auto-repair.log 2>/dev/null | tail -50
+```
+
+### File/log rilevanti su CT104
+
+- `/opt/novascm-pxe/smb/sources/autounattend.xml` — no ProductKey (retail)
+- `/opt/novascm-pxe/smb/sources/EI.cfg`
+- `/opt/novascm-pxe/smb/sources/unattend-specialize.xml`
+- `/opt/novascm-pxe/smb/sources/setuperr-last.log` — ProductKey invalid (run Setup)
+- `/opt/novascm-pxe/smb/drivers/vioscsi/*`
+- `/opt/novascm-pxe/server/dist/winpe/boot.wim` — startnet DISM/REPAIR/AUTO (backup `.bak-pre-*`)
+
+### File correlati repo
+
+- `docs/PXE_PE_SMB_ERROR53_ACCORGIMENTI.md`
+- `docs/startnet_PE_current.cmd` (allineare a startnet live se diverge)
+- Memoria: `novascm-pxe-test-20260705.md`, `pve-minipc-swap-oom-fix-20260716.md`
+
+---
+
+*Salvato da Grok 16/07/2026 — sessione ProductKey/offlineServicing → DISM → nero/vioscsi → SATA → auto-repair (stop utente).*

@@ -2673,10 +2673,8 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
         </OSImage>
       </ImageInstall>
       <UserData>
-        <ProductKey>
-          <Key>VK7JG-NPHTM-C97JM-9MPGT-3V66T</Key>
-          <WillShowUI>Never</WillShowUI>
-        </ProductKey>
+        <!-- ProductKey rimossa: GVLK valida solo su media Volume Licensing,
+             rifiutata su ISO Retail con hr=0x80300006 (Callback_Productkey_Validate_Unattend) -->
         <AcceptEula>true</AcceptEula>
       </UserData>
     </component>
