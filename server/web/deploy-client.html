@@ -209,10 +209,10 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
     </div>
     <div>
       <div class="pc-name" id="pc-name">PC-HOSTNAME</div>
-      <div class="pc-domain">workgroup</div>
+      <div class="pc-domain" id="pc-domain">workgroup</div>
     </div>
     <div style="text-align:right">
-      <div class="wf-badge"><span class="led"></span>Deploy Base Win 11</div>
+      <div class="wf-badge"><span class="led"></span><span id="wf-name">Deploy Windows 11</span></div>
       <div class="hdr-time" id="clock">--:--:--</div>
     </div>
   </header>
@@ -312,9 +312,9 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 
   <!-- FOOTER -->
   <footer class="ftr">
-    <div class="ftr-item">NovaSCM <b>1.8.1</b></div>
+    <div class="ftr-item">NovaSCM <b id="ftr-ver">2.5.0</b></div>
     <div class="ftr-warn">▲ Non spegnere il PC durante la configurazione</div>
-    <div class="ftr-item">Server <b>your-server</b></div>
+    <div class="ftr-item">Server <b id="ftr-server">—</b></div>
   </footer>
 </div>
 
@@ -350,8 +350,22 @@ html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-famil
 
 <script>
 // ══════════════════════════════════════════════════
-//  DEMO DATA
+//  CONFIG — URL params (postinstall.ps1 / PXE)
 // ══════════════════════════════════════════════════
+const CFG=(()=>{
+  const p=new URLSearchParams(location.search);
+  return{
+    hostname:(p.get("hostname")||"PC-HOSTNAME").toUpperCase(),
+    domain:  p.get("domain")||"workgroup",
+    server:  p.get("server")||location.origin,
+    api_key: p.get("key")||"",
+    pw_id:   p.get("pw_id")||"",
+    version: p.get("ver")||"2.5.0",
+    demo:    p.get("demo")==="1",
+  };
+})();
+
+// Demo fallback (solo ?demo=1 o senza pw_id)
 const DEMO_STEPS=[
   {id:1, nome:"Partizionamento disco",         tipo:"ps_script",       dur:16,  est:18},
   {id:2, nome:"Formattazione partizioni",       tipo:"ps_script",       dur:8,   est:9},
@@ -379,42 +393,184 @@ const DEMO_STEPS=[
   {id:24,nome:"Pulizia file temporanei",        tipo:"shell_script",    dur:5,   est:6},
   {id:25,nome:"Riavvio finale",                 tipo:"reboot",          dur:3,   est:4},
 ];
-
-// Log simulati per step
 const DEMO_LOGS={
   1:["[INFO] Avvio partizionamento...","[INFO] Rilevato disco: Samsung SSD 980 500GB","[INFO] Creazione partizione EFI (500MB)","[INFO] Creazione partizione Windows (450GB)","[OK] Partizionamento completato"],
   2:["[INFO] Formattazione EFI: FAT32","[INFO] Formattazione C:\\: NTFS (quick)","[OK] Formattazione completata in 7s"],
   3:["[INFO] Avvio setup.exe /unattend:X:\\autounattend.xml","[INFO] Fase 1: Copia file Windows...","[INFO] Fase 2: Preparazione file da installare...","[INFO] Fase 3: Installazione feature...","[INFO] Fase 4: Installazione aggiornamenti...","[WARN] Riavvio richiesto dal setup","[OK] Windows 11 Pro 23H2 installato"],
-  4:["[INFO] Configurazione OOBE silente","[INFO] Disabilita telemetria consumer","[INFO] Imposta lingua: it-IT, tastiera: it","[OK] OOBE completato"],
-  5:["[INFO] winget install --id Intel.Chipset --silent","[OK] Driver chipset installato v10.1.18"],
-  14:["[INFO] netsh advfirewall set allprofiles state on","[INFO] Regola IN: blocco porte non standard","[INFO] Regola OUT: DNS solo 192.168.1.1","[OK] Policy firewall applicata"],
-  15:["[INFO] Add-Computer -DomainName workgroup","[INFO] Autenticazione con account di join...","[INFO] Creazione oggetto computer in OU=Workstations","[OK] Join al dominio completato — riavvio richiesto"],
-  18:["[INFO] Scaricamento Office 365 ProPlus (2.1 GB)...","[INFO] Download: 45% — 180 MB/s","[INFO] Download: 78% — 195 MB/s","[INFO] Download: 100% completato","[INFO] Installazione componenti...","[OK] Microsoft 365 Apps for Enterprise installato"],
 };
-
 const HW_DEMO={cpu:"Intel Core i5-12400",ram:"16 GB DDR4",disk:"Samsung SSD 980 500GB",mac:"00:1A:2B:3C:4D:5E",ip:"192.168.10.42"};
+const EST_BY_TIPO={ps_script:12,windows_update:180,winget_install:20,reg_set:6,shell_script:5,reboot:3};
 
 let steps=[],activeIdx=-1,startTime=null,stepTimer=null,demoElapsed=0,logLines=[];
+let polling=null,lastLogKey="",liveMode=false;
 const $=id=>document.getElementById(id);
+
+function mapStatus(s){
+  if(s==="running")return"active";
+  if(s==="done"||s==="skipped")return"done";
+  if(s==="error")return"error";
+  return"future";
+}
+
+function apiUrl(path){
+  const base=(CFG.server||location.origin).replace(/\/$/,"");
+  const sep=path.includes("?")?"&":"?";
+  return CFG.api_key?`${base}${path}${sep}key=${encodeURIComponent(CFG.api_key)}`:`${base}${path}`;
+}
+
+// ── INIT ──
+function init(){
+  $("pc-name").textContent=CFG.hostname;
+  $("pc-domain").textContent=CFG.domain;
+  $("ov-host").textContent=CFG.hostname;
+  $("ftr-ver").textContent=CFG.version;
+  $("ftr-server").textContent=CFG.server.replace(/^https?:\/\//,"");
+  startTime=Date.now();
+  tick();setInterval(tick,1000);
+  if(CFG.demo||!CFG.pw_id)initDemo();
+  else initLive();
+}
+
+function initLive(){
+  liveMode=true;
+  $("cur-name").textContent="Connessione al server…";
+  $("cur-tipo").textContent="polling API";
+  fetchStatus();
+  polling=setInterval(fetchStatus,3000);
+  stepTimer=setInterval(()=>{
+    if(activeIdx>=0&&steps[activeIdx]?.status==="active"){
+      steps[activeIdx].elapsed=(steps[activeIdx].elapsed||0)+0.12;
+      const el=document.getElementById("lt-"+steps[activeIdx].id);
+      if(el)el.textContent=fmt(steps[activeIdx].elapsed);
+      $("cur-box-time").textContent=fmt(steps[activeIdx].elapsed);
+    }
+    $("stat-ela").textContent=fmtMs(Date.now()-startTime);
+    updateETA();
+  },120);
+}
+
+async function fetchStatus(){
+  try{
+    const r=await fetch(apiUrl(`/api/pc-workflows/${CFG.pw_id}`));
+    if(!r.ok){
+      $("cur-tipo").textContent=`errore API ${r.status}`;
+      return;
+    }
+    applyServerState(await r.json());
+  }catch(e){
+    $("cur-tipo").textContent="server non raggiungibile";
+  }
+}
+
+function applyServerState(data){
+  if(data.pc_name)$("pc-name").textContent=data.pc_name;
+  if(data.workflow_nome)$("wf-name").textContent=data.workflow_nome;
+  if(data.assigned_at){
+    const t=Date.parse(data.assigned_at);
+    if(!isNaN(t))startTime=t;
+  }
+  if(data.hardware)setHardware(data.hardware);
+
+  if(data.steps?.length){
+    steps=data.steps.map((s,i)=>({
+      id:s.step_id||s.ordine||(i+1),
+      ordine:s.ordine,
+      nome:s.nome,
+      tipo:s.tipo,
+      status:mapStatus(s.status),
+      elapsed:s.elapsed_sec||0,
+      est:s.est_sec||EST_BY_TIPO[s.tipo]||15,
+      log:s.log||"",
+    }));
+    $("steps-count").textContent=steps.length+" step";
+    activeIdx=steps.findIndex(s=>s.status==="active");
+    if(activeIdx<0){
+      const errIdx=steps.findIndex(s=>s.status==="error");
+      if(errIdx>=0)activeIdx=errIdx;
+      else if(data.status==="running"){
+        const pend=steps.findIndex(s=>s.status==="future");
+        if(pend>=0)activeIdx=pend;
+      }
+    }
+    updateLogFromActive();
+  }else if(!steps.length){
+    $("cur-name").textContent="In attesa workflow…";
+    $("cur-tipo").textContent="nessuno step dal server";
+  }
+
+  if(data.log)appendGlobalLog(data.log);
+  updateLeft();renderPipeline();updateETA();
+
+  if(data.status==="completed"){
+    clearInterval(polling);clearInterval(stepTimer);
+    if(data.screenshot)showScreenshot(data.screenshot);
+    showDone(data);
+  }else if(data.status==="failed"){
+    clearInterval(polling);clearInterval(stepTimer);
+    const err=steps.find(s=>s.status==="error")||steps[activeIdx];
+    $("cur-name").textContent="Errore deploy";
+    $("cur-tipo").textContent=err?err.nome:"step sconosciuto";
+    $("cur-spinner").classList.add("done");
+    $("cur-spinner").textContent="✕";
+    $("cur-spinner").style.color="var(--err)";
+    $("cur-spinner").style.borderColor="var(--err)";
+  }
+}
+
+function updateLogFromActive(){
+  const active=activeIdx>=0?steps[activeIdx]:null;
+  if(!active)return;
+  const key=active.id+"|"+active.log;
+  if(key===lastLogKey)return;
+  lastLogKey=key;
+  clearLog(active.nome);
+  if(active.log){
+    active.log.split(/\r?\n/).filter(Boolean).forEach(line=>{
+      const cls=line.includes("[ERR]")||line.includes("ERRORE")?"err"
+        :line.includes("[WARN]")?"warn"
+        :line.includes("[OK]")?"ok":"info";
+      addLog(line,cls);
+    });
+  }else if(active.status==="active"){
+    addLog(`[INFO] ${active.nome} in corso…`,"info");
+  }else if(active.status==="future"){
+    addLog(`[INFO] In attesa: ${active.nome}`,"info");
+  }
+}
+
+function appendGlobalLog(text){
+  if(!text||liveMode&&activeIdx>=0)return;
+  text.split(/\r?\n/).filter(Boolean).forEach(line=>addLog(line,"info"));
+}
+
+function showScreenshot(b64){
+  if(!b64)return;
+  const img=$("ss-img"),ph=$("ss-placeholder");
+  img.src="data:image/png;base64,"+b64;
+  img.style.display="block";
+  ph.style.display="none";
+  $("ss-status").textContent="Screenshot acquisito ✓";
+  $("ss-time").textContent=new Date().toLocaleTimeString("it-IT");
+}
 
 // ── INIT DEMO ──
 function initDemo(){
-  startTime=Date.now();
+  liveMode=false;
   steps=DEMO_STEPS.map(s=>({...s,status:"future",elapsed:0}));
   $("steps-count").textContent=steps.length+" step";
   renderPipeline();updateLeft();
-  // simula arrivo hw dopo 2s
   setTimeout(()=>setHardware(HW_DEMO),2000);
   runDemoStep(0);
 }
 
 // ── HARDWARE ──
 function setHardware(hw){
-  $("hw-cpu").textContent=hw.cpu;
-  $("hw-ram").textContent=hw.ram;
-  $("hw-disk").textContent=hw.disk;
-  $("hw-mac").textContent=hw.mac;
-  $("hw-ip").textContent=hw.ip;
+  if(!hw)return;
+  if(hw.cpu) $("hw-cpu").textContent=hw.cpu;
+  if(hw.ram) $("hw-ram").textContent=hw.ram;
+  if(hw.disk)$("hw-disk").textContent=hw.disk;
+  if(hw.mac) $("hw-mac").textContent=hw.mac;
+  if(hw.ip)  $("hw-ip").textContent=hw.ip;
 }
 
 // ── DEMO STEP ──
@@ -524,24 +680,22 @@ function updateLeft(){
 }
 
 // ── DONE ──
-function showDone(){
+function showDone(data){
+  const done=steps.filter(s=>s.status==="done").length;
   $("bar").style.width="100%";$("bar").classList.add("done");
   $("ring-fill").style.strokeDashoffset=0;$("ring-fill").classList.add("done");
   $("ring-pct").textContent="100%";
-  $("ov-detail").textContent=`25 step · durata ${fmtMs(Date.now()-startTime)}`;
-  $("ov-hw").innerHTML=`
-    <div class="ov-hw-chip">🖥 <b>${HW_DEMO.cpu}</b></div>
-    <div class="ov-hw-chip">💾 <b>${HW_DEMO.ram}</b></div>
-    <div class="ov-hw-chip">💿 <b>${HW_DEMO.disk}</b></div>
-    <div class="ov-hw-chip">🌐 <b>${HW_DEMO.mac}</b> · ${HW_DEMO.ip}</div>`;
-  $("ss-status").textContent="Acquisizione in corso…";
+  $("ov-detail").textContent=`${done} step · durata ${fmtMs(Date.now()-startTime)}`;
+  const hw=data?.hardware||null;
+  if(hw){
+    $("ov-hw").innerHTML=`
+      <div class="ov-hw-chip">🖥 <b>${hw.cpu||"—"}</b></div>
+      <div class="ov-hw-chip">💾 <b>${hw.ram||"—"}</b></div>
+      <div class="ov-hw-chip">💿 <b>${hw.disk||"—"}</b></div>
+      <div class="ov-hw-chip">🌐 <b>${hw.mac||"—"}</b>${hw.ip?" · "+hw.ip:""}</div>`;
+  }
+  if(!$("ss-img").src)$("ss-status").textContent="Screenshot non disponibile";
   $("ov-done").classList.add("show");
-  // simula screenshot dopo 2s
-  setTimeout(()=>{
-    $("ss-status").textContent="Screenshot acquisito ✓";
-    $("ss-time").textContent=new Date().toLocaleTimeString("it-IT");
-    // in produzione qui arriva l'immagine base64 dal server
-  },2000);
   let n=30;const t=setInterval(()=>{$("reboot-n").textContent=--n;if(n<=0)clearInterval(t);},1000);
 }
 
@@ -549,8 +703,7 @@ function fmt(s){s=Math.round(s);return s<60?s+"s":Math.floor(s/60)+"m "+String(s
 function fmtMs(ms){const s=Math.floor(ms/1000);return s<60?s+"s":Math.floor(s/60)+"m "+String(s%60).padStart(2,"0")+"s"}
 function tick(){$("clock").textContent=new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
 
-tick();setInterval(tick,1000);
-initDemo();
+init();
 </script>
 </body>
 </html>

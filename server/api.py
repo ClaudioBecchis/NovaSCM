@@ -5,7 +5,7 @@ DB:    /data/novascm.db (configurabile con NOVASCM_DB env var)
 """
 from flask import Flask, request, jsonify, Response, send_from_directory, send_file
 from werkzeug.middleware.proxy_fix import ProxyFix
-import sqlite3, json, datetime, os, functools, hmac, logging, re, secrets, threading, time, uuid
+import sqlite3, json, datetime, os, functools, hmac, logging, re, secrets, threading, time, uuid, queue
 import urllib.request as _urllib_req
 from xml.sax.saxutils import escape as _xe
 
@@ -141,6 +141,24 @@ def _get_public_url() -> str:
     """Restituisce l'URL pubblico del server, con priorità a NOVASCM_PUBLIC_URL."""
     return _PUBLIC_URL if _PUBLIC_URL else request.host_url.rstrip("/")
 
+
+def _get_pxe_static_url() -> str:
+    """URL base HTTP per file WinPE statici (nginx), separato dall'API Flask."""
+    custom = _get_setting("pxe_static_url", "").strip().rstrip("/")
+    if custom:
+        return custom
+    if _PUBLIC_URL:
+        from urllib.parse import urlparse
+        p = urlparse(_PUBLIC_URL)
+        host = p.hostname or "localhost"
+        scheme = p.scheme or "http"
+        return f"{scheme}://{host}/winpe"
+    from urllib.parse import urlparse
+    p = urlparse(request.host_url)
+    host = p.hostname or "localhost"
+    scheme = p.scheme or "http"
+    return f"{scheme}://{host}/winpe"
+
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
@@ -184,6 +202,23 @@ if not API_KEY:
 _ui_tokens: dict[str, float] = {}  # {token_hex: expiry_timestamp}
 _ui_tokens_lock = threading.Lock()
 _UI_TOKENS_MAX = 10000  # C-3: limite massimo token in memoria
+
+# ── SSE live event broadcaster (dashboard real-time) ────────────────────────
+_sse_clients: list = []
+_sse_clients_lock = threading.Lock()
+
+def _broadcast_event(kind: str, data: dict | None = None):
+    """Notifica tutti i client SSE connessi (Deploy/PXE dashboard) di un cambio stato."""
+    payload = json.dumps({"kind": kind, "data": data or {}, "ts": datetime.datetime.now().isoformat()})
+    with _sse_clients_lock:
+        dead = []
+        for q in _sse_clients:
+            try:
+                q.put_nowait(payload)
+            except queue.Full:
+                dead.append(q)
+        for q in dead:
+            _sse_clients.remove(q)
 
 def _purge_expired_tokens() -> None:
     now = time.time()
@@ -525,6 +560,8 @@ def _cleanup_stale_workflows():
                 [now.isoformat()] + ids
             )
             conn.commit()
+            for r in timed_out:
+                _broadcast_event("workflow_status", {"pc_name": r["pc_name"], "status": "error"})
         else:
             conn.rollback()
     for row in timed_out:
@@ -1448,6 +1485,7 @@ def deploy_step(pw_id):
                     (now, pw_id)
                 )
         conn.commit()
+        _broadcast_event("workflow_step", {"pc_name": pw["pc_name"], "pw_id": pw_id, "step_status": status})
     return jsonify({"ok": True})
 
 
@@ -1571,6 +1609,7 @@ def get_pc_assigned_workflow(pc_name):
                          (now, pw_dict["id"]))
             conn.commit()
             pw_dict["status"] = "running"
+            _broadcast_event("workflow_status", {"pc_name": pw_dict["pc_name"], "status": "running"})
 
     pw_dict["steps"] = [dict(s) for s in steps]
     return jsonify(pw_dict)
@@ -1628,6 +1667,10 @@ def report_wf_step(pc_name):
             "pw_id":   pw_id,
             "status":  "completed",
         })
+    _broadcast_event("workflow_status", {
+        "pc_name": pc_name, "pw_id": pw_id,
+        "status": final_status if workflow_completed else "running",
+    })
     return jsonify({"ok": True, "step_id": step_id, "status": status})
 
 @app.route("/api/pc/<pc_name>/workflow/checkin", methods=["POST"])
@@ -1649,6 +1692,32 @@ def checkin_wf(pc_name):
 
 VERSION_FILE = os.path.join(os.path.dirname(DB), "version.json")
 EXE_FILE     = os.path.join(os.path.dirname(DB), "NovaSCM.exe")
+
+@app.route("/api/events", methods=["GET"])
+@require_auth
+def sse_events():
+    """Stream SSE: notifica la dashboard in tempo reale su boot PXE / cambi stato workflow."""
+    client_q = queue.Queue(maxsize=100)
+    with _sse_clients_lock:
+        _sse_clients.append(client_q)
+
+    def gen():
+        try:
+            yield "event: connected\ndata: {}\n\n"
+            while True:
+                try:
+                    payload = client_q.get(timeout=25)
+                    yield f"data: {payload}\n\n"
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+        finally:
+            with _sse_clients_lock:
+                if client_q in _sse_clients:
+                    _sse_clients.remove(client_q)
+
+    return Response(gen(), mimetype="text/event-stream", headers={
+        "Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive",
+    })
 
 @app.route("/api/version", methods=["GET"])
 @require_auth
@@ -1957,19 +2026,23 @@ def _sizeof_fmt(num: int) -> str:
     return f"{num:.1f}TB"
 
 
-def _ipxe_deploy(pc_name: str, server_url: str) -> str:
+def _ipxe_deploy(pc_name: str, server_url: str, static_url: str) -> str:
     """Script iPXE: avvia deploy Windows via wimboot + WinPE."""
+    # File grandi (boot.wim, install.wim) via nginx; API solo per autounattend dinamico.
     return f"""#!ipxe
-kernel {server_url}/api/pxe/file/wimboot
-initrd {server_url}/api/pxe/file/BCD              BCD
-initrd {server_url}/api/pxe/file/boot.sdi         boot.sdi
-initrd {server_url}/api/pxe/file/boot.wim         boot.wim
-initrd {server_url}/api/autounattend/{pc_name}     autounattend.xml
+echo NovaSCM PXE deploy — {pc_name}
+kernel {static_url}/wimboot index=1
+imgfetch {static_url}/BCD            BCD
+imgfetch {static_url}/boot.sdi       boot.sdi
+imgfetch {static_url}/boot.wim       boot.wim
+imgfetch --name autounattend.xml {server_url}/api/autounattend/{pc_name}
+imgstat
 boot || goto failed
 
 :failed
-sleep 10
-sanboot --no-describe --drive 0x80
+echo Boot wimboot fallito
+sleep 30
+reboot
 """
 
 
@@ -2129,13 +2202,15 @@ def pxe_boot_script(mac: str):
 
     log.info("PXE boot: MAC=%s PC=%s IP=%s action=%s pw_id=%s",
              norm_mac, pc_name, client_ip, action, pw_id)
+    _broadcast_event("pxe_boot", {"mac": norm_mac, "pc_name": pc_name, "ip": client_ip, "action": action})
 
     server_url = _get_public_url()
+    static_url = _get_pxe_static_url()
 
     if action == "block":
         return _ipxe_block(pc_name), 200, {"Content-Type": "text/plain"}
     elif action == "deploy":
-        return _ipxe_deploy(pc_name, server_url), 200, {"Content-Type": "text/plain"}
+        return _ipxe_deploy(pc_name, server_url, static_url), 200, {"Content-Type": "text/plain"}
     else:
         return _ipxe_local(pc_name), 200, {"Content-Type": "text/plain"}
 
@@ -2346,8 +2421,17 @@ def serve_pxe_file(name: str):
     if not os.path.isfile(filepath):
         log.warning("PXE file: %s non trovato in %s", name, _WINPE_DIR)
         return f"File {name} non trovato — copiare in server/dist/winpe/", 404
-    log.info("PXE file: serving %s (%s) a %s", name, _sizeof_fmt(os.path.getsize(filepath)), client_ip)
-    return _send_file(filepath, mimetype="application/octet-stream", as_attachment=False)
+    fsize = os.path.getsize(filepath)
+    log.info("PXE file: serving %s (%s) a %s", name, _sizeof_fmt(fsize), client_ip)
+    # Niente conditional/etag: iPXE vuole Content-Length fisso, no 206 parziali
+    return _send_file(
+        filepath,
+        mimetype="application/octet-stream",
+        as_attachment=False,
+        conditional=False,
+        etag=False,
+        max_age=0,
+    )
 
 
 # ── ENDPOINT AUTOUNATTEND DINAMICO (no auth, subnet allow-list) ──────────────
@@ -2376,6 +2460,7 @@ def serve_autounattend_pxe(pc_name: str):
         pw_id = pw["id"] if pw else None
         deploy_token = _generate_deploy_token(conn, pc_name, pw_id)
     cr_dict["_deploy_token"] = deploy_token
+    cr_dict["_pw_id"] = pw_id or 1
     xml = _build_autounattend_xml_pxe(cr_dict)
     log.info("autounattend PXE: servito XML per %s a %s (deploy token)", pc_name, client_ip)
     return xml, 200, {"Content-Type": "application/xml"}
@@ -2393,14 +2478,18 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
     server_url = _get_public_url()
     # C-1: usa deploy token monouso invece dell'API key globale
     deploy_token = d.get("_deploy_token", "")
+    _pw_id = _x(str(d.get("_pw_id", "1")))
     # C-2: path install.wim configurabile (evita hardcoded IP)
-    _pxe_wim_path = _x(_get_setting("pxe_install_wim_path", "\\\\192.168.10.201\\wininstall\\sources\\install.wim"))
+    _pxe_wim_index = _x(_get_setting("pxe_wim_index", "5"))
+    _smb_user = _get_setting("pxe_smb_user", "").strip()
+    _smb_pass = _get_setting("pxe_smb_pass", "")
+    _smb_domain = _x(_get_setting("pxe_smb_domain", "WORKGROUP"))
     xpc   = _x(d.get("pc_name", ""))
     xdom  = _x(d.get("domain", ""))
     xou   = _x(d.get("ou", ""))
     xju   = _x(d.get("join_user", ""))
     xjp   = _x(d.get("join_pass", ""))
-    xap   = _x(d.get("admin_pass", ""))
+    xap   = _x(d.get("admin_pass") or _get_setting("pxe_default_admin_pass", "Polaris2026!"))
     xkey  = _x(deploy_token)
     xurl  = _x(server_url)
 
@@ -2421,6 +2510,105 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
       </Identification>
     </component>"""
 
+    # install.wim: smb (UNC in ImageInstall, dopo DiskConfiguration) o http (download su C: post-diskpart)
+    _install_mode = _get_setting("pxe_install_wim_mode", "smb").lower()
+    _smb_creds_xml = ""
+    _wim_run_sync = ""
+    _raw_wim = _get_setting(
+        "pxe_install_wim_path", "\\\\192.168.10.104\\wininstall\\sources\\install.wim"
+    ).replace("/", "\\")
+    # LabConfig: bypass requisiti hardware Win11 in VM/test (reg, no PowerShell — $ espansi da setup)
+    _labconfig_sync = """
+        <RunSynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
+          <Description>Bypass check TPM (test VM)</Description>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
+          <Description>Bypass check Secure Boot (test VM)</Description>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
+          <Description>Bypass check RAM (test VM)</Description>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>4</Order>
+          <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassStorageCheck /t REG_DWORD /d 1 /f</Path>
+          <Description>Bypass check storage (test VM)</Description>
+        </RunSynchronousCommand>"""
+    _wpeinit_sync = f"""
+        {_labconfig_sync}
+        <RunSynchronousCommand wcm:action="add">
+          <Order>5</Order>
+          <Path>%WINDIR%\\System32\\wpeinit.exe</Path>
+          <Description>Inizializza rete WinPE (wpeinit)</Description>
+          <ContinueOnError>true</ContinueOnError>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>6</Order>
+          <Path>cmd /c ping -n 5 192.168.10.104</Path>
+          <Description>Attende rete (ping PXE server)</Description>
+          <ContinueOnError>true</ContinueOnError>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>7</Order>
+          <Path>net start LanmanWorkstation</Path>
+          <Description>Avvia client SMB</Description>
+          <ContinueOnError>true</ContinueOnError>
+        </RunSynchronousCommand>"""
+    # RunSynchronous gira PRIMA di DiskConfiguration: niente download su C: qui.
+    # ImageInstall (dopo DiskConfiguration) legge install.wim da UNC o da C: locale.
+    _smb_domain_raw = _get_setting("pxe_smb_domain", "WORKGROUP")
+    _wim_run_sync = f"""
+      <RunSynchronous>{_wpeinit_sync}
+        <RunSynchronousCommand wcm:action="add">
+          <Order>8</Order>
+          <Path>reg add HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanWorkstation\\Parameters /v AllowInsecureGuestAuth /t REG_DWORD /d 1 /f</Path>
+          <Description>Abilita SMB guest</Description>
+          <ContinueOnError>true</ContinueOnError>
+        </RunSynchronousCommand>
+      </RunSynchronous>"""
+    if _install_mode == "http":
+        _wim_url = f"{_get_pxe_static_url()}/install.wim"
+        _pxe_wim_path = _x("C:\\install.wim")
+        _curl_dl = _x(
+            "powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "
+            f"\"Invoke-WebRequest -Uri '{_wim_url}' -OutFile 'C:\\install.wim' -UseBasicParsing\""
+        )
+        # Diskpart anticipato: crea C: prima del download HTTP (6.7GB non sta su X:)
+        _diskpart_script = _x(
+            "cmd /c (echo SELECT DISK=0& echo CLEAN& echo CONVERT GPT& "
+            "echo CREATE PARTITION EFI SIZE=300& echo FORMAT QUICK FS=FAT32 LABEL=System& "
+            "echo CREATE PARTITION MSR SIZE=128& echo CREATE PARTITION PRIMARY& "
+            "echo FORMAT QUICK FS=NTFS LABEL=Windows& echo ASSIGN LETTER=C) "
+            "> X:\\diskpart.txt && diskpart /s X:\\diskpart.txt"
+        )
+        _wim_run_sync = f"""
+      <RunSynchronous>{_wpeinit_sync}
+        <RunSynchronousCommand wcm:action="add">
+          <Order>8</Order>
+          <Path>{_diskpart_script}</Path>
+          <Description>Partiziona disco 0 (diskpart) per download HTTP</Description>
+        </RunSynchronousCommand>
+        <RunSynchronousCommand wcm:action="add">
+          <Order>9</Order>
+          <Path>{_curl_dl}</Path>
+          <Description>Scarica install.wim via HTTP su C:</Description>
+        </RunSynchronousCommand>
+      </RunSynchronous>"""
+    else:
+        _pxe_wim_path = _x(_raw_wim)
+        if _smb_user:
+            _smb_creds_xml = f"""
+            <Credentials>
+              <Domain>{_x(_smb_domain_raw)}</Domain>
+              <Username>{_x(_smb_user)}</Username>
+              <Password>{_x(_smb_pass)}</Password>
+            </Credentials>"""
+
     return f"""<?xml version="1.0" encoding="utf-8"?>
 <unattend xmlns="urn:schemas-microsoft-com:unattend">
 
@@ -2440,6 +2628,7 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
                processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
                language="neutral" versionScope="nonSxS"
                xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <!-- ComplianceCheck rimosso: AllowUpgrades* non valido in windowsPE -->{_wim_run_sync}
       <DiskConfiguration>
         <WillShowUI>OnError</WillShowUI>
         <Disk wcm:action="add">
@@ -2447,7 +2636,7 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
           <WillWipeDisk>true</WillWipeDisk>
           <CreatePartitions>
             <CreatePartition wcm:action="add">
-              <Order>1</Order><Type>EFI</Type><Size>100</Size>
+              <Order>1</Order><Type>EFI</Type><Size>300</Size>
             </CreatePartition>
             <CreatePartition wcm:action="add">
               <Order>2</Order><Type>MSR</Type><Size>16</Size>
@@ -2474,16 +2663,20 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
             <DiskID>0</DiskID>
             <PartitionID>3</PartitionID>
           </InstallTo>
-          <InstallFrom>
+          <InstallFrom>{_smb_creds_xml}
             <Path>{_pxe_wim_path}</Path>
             <MetaData wcm:action="add">
-              <Key>/IMAGE/INDEX</Key><Value>5</Value>
+              <Key>/IMAGE/INDEX</Key><Value>{_pxe_wim_index}</Value>
             </MetaData>
           </InstallFrom>
           <WillShowUI>OnError</WillShowUI>
         </OSImage>
       </ImageInstall>
       <UserData>
+        <ProductKey>
+          <Key>VK7JG-NPHTM-C97JM-9MPGT-3V66T</Key>
+          <WillShowUI>Never</WillShowUI>
+        </ProductKey>
         <AcceptEula>true</AcceptEula>
       </UserData>
     </component>
@@ -2549,6 +2742,11 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>5</Order>
+          <CommandLine>cmd /c start &quot;&quot; &quot;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&quot; hostname={xpc} domain={xdom or "WORKGROUP"} server={xurl} key={xkey} pw_id={_pw_id} wf=Deploy</CommandLine>
+          <Description>NovaSCM: avvia Deploy Screen</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>6</Order>
           <CommandLine>cmd /c start &quot;&quot; /b &quot;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&quot;</CommandLine>
           <Description>NovaSCM: avvia agente</Description>
         </SynchronousCommand>
@@ -2708,4 +2906,4 @@ if _PXE_ENABLED and _pxe_server_available:
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 9091))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)

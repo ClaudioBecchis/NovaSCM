@@ -1229,7 +1229,7 @@ function app() {
     serverVersion: '',
     lastUpdate: '',
     toast: { show: false, msg: '', type: 'ok' },
-    apiKey: document.querySelector('meta[name="x-api-key"]')?.content || '',
+    apiKey: localStorage.getItem('novascm_ui_token') || document.querySelector('meta[name="x-api-key"]')?.content || '',
 
     workflows: [],
     assignments: [],
@@ -1255,17 +1255,54 @@ function app() {
       setTimeout(() => { this.toast.show = false; }, 3000);
     },
 
+    async ensureAuth() {
+      // Se non abbiamo ancora un token valido, chiedi la API key una sola volta
+      // e scambiala per un session token via /api/ui-token (C-4: mai iniettata nel DOM).
+      if (this.apiKey) {
+        const r = await this.api('/api/pxe/status');
+        if (r) return true;
+      }
+      const key = prompt('Inserisci la API key NovaSCM (richiesta una sola volta, poi salvata in questo browser):');
+      if (!key) return false;
+      try {
+        const resp = await fetch('/api/ui-token', { headers: { 'X-Api-Key': key } });
+        if (!resp.ok) { this.notify('API key non valida', 'error'); return false; }
+        const data = await resp.json();
+        this.apiKey = data.token;
+        localStorage.setItem('novascm_ui_token', data.token);
+        return true;
+      } catch { this.notify('Impossibile contattare il server', 'error'); return false; }
+    },
     async init() {
+      const ok = await this.ensureAuth();
+      if (!ok) { this.notify('Accesso non autenticato', 'error'); }
       await this.loadAll();
-      // Polling: 5s quando ci sono workflow running, 30s altrimenti
+      // Polling di sicurezza (fallback se SSE cade): 5s se running, 30s altrimenti
       setInterval(() => {
         const hasRunning = this.assignments.some(a => a.status === 'running');
         if (hasRunning || (Date.now() - this._lastFull > 30000)) {
           this.loadAll();
+          if (this.section === 'pxe') this.loadPxeData();
           this._lastFull = Date.now();
         }
       }, 5000);
       this._lastFull = Date.now();
+      this.connectLiveEvents();
+    },
+    connectLiveEvents() {
+      if (!this.apiKey) return;
+      if (this._sse) this._sse.close();
+      const es = new EventSource(`/api/events?key=${encodeURIComponent(this.apiKey)}`);
+      es.onmessage = (ev) => {
+        let msg; try { msg = JSON.parse(ev.data); } catch { return; }
+        if (msg.kind === 'workflow_status' && (msg.data.status === 'error' || msg.data.status === 'failed')) {
+          this.notify(`Errore su ${msg.data.pc_name}`, 'error');
+        }
+        this.loadAll();
+        if (this.section === 'pxe') this.loadPxeData();
+      };
+      es.onerror = () => { /* EventSource riprova a riconnettersi da solo */ };
+      this._sse = es;
     },
 
     async loadAll() {
@@ -1345,6 +1382,7 @@ function app() {
         const opts = { method, headers };
         if (body) opts.body = JSON.stringify(body);
         const r = await fetch(url, opts);
+        if (r.status === 401) { localStorage.removeItem('novascm_ui_token'); this.apiKey = ''; }
         if (!r.ok) return null;
         return await r.json();
       } catch { return null; }
