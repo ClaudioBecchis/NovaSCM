@@ -3649,13 +3649,20 @@ public partial class MainWindow : Window
 
     private async void BtnCrCreate_Click(object s, RoutedEventArgs e)
     {
-        if (!EnsureApiConfigured()) return;
+        if (!EnsureApiConfigured())
+        {
+            MessageBox.Show("Configura l'URL API NovaSCM nelle Impostazioni prima di creare una Change Request.",
+                "API non configurata", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         var pcName = TxtCrPcName.Text.Trim().ToUpper();
         var domain = TxtCrDomain.Text.Trim();
         if (string.IsNullOrEmpty(pcName) || string.IsNullOrEmpty(domain))
         {
             TxtCrStatus.Text       = "⚠️  Nome PC e Dominio sono obbligatori";
             TxtCrStatus.Foreground = System.Windows.Media.Brushes.Orange;
+            MessageBox.Show("Nome PC e Dominio sono campi obbligatori.",
+                "Dati mancanti", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
