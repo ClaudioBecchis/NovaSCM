@@ -2669,9 +2669,12 @@ public partial class MainWindow : Window
             TxtPxeDefaultDcIp.Text         = d.GetProperty("pxe_default_dc_ip").GetString();
             TxtPxeDefaultJoinUser.Text     = d.GetProperty("pxe_default_join_user").GetString();
             TxtPxeDefaultWorkflowId.Text   = d.GetProperty("pxe_default_workflow_id").GetString();
-            TxtPxeImageIndex.Text          = d.GetProperty("pxe_image_index").GetString();
+            TxtPxeWimIndex.Text            = d.GetProperty("pxe_wim_index").GetString();
             TxtPxeWimPath.Text             = d.GetProperty("pxe_install_wim_path").GetString();
-            // Le password (join/admin) sono mascherate dal server con "••••••••" se già impostate — non le ricarichiamo nel campo per non sovrascriverle involontariamente al salvataggio.
+            TxtPxeSmbDomain.Text           = d.GetProperty("pxe_smb_domain").GetString();
+            TxtPxeSmbUser.Text             = d.GetProperty("pxe_smb_user").GetString();
+            TxtPxeStaticUrl.Text           = d.GetProperty("pxe_static_url").GetString();
+            // Le password (join/admin/smb) sono mascherate dal server con "••••••••" se già impostate — non le ricarichiamo nel campo per non sovrascriverle involontariamente al salvataggio.
 
             var applyMode = d.GetProperty("pxe_apply_mode").GetString();
             foreach (ComboBoxItem it in CmbPxeApplyMode.Items)
@@ -2711,16 +2714,21 @@ public partial class MainWindow : Window
                 ["pxe_default_dc_ip"]       = TxtPxeDefaultDcIp.Text.Trim(),
                 ["pxe_default_join_user"]   = TxtPxeDefaultJoinUser.Text.Trim(),
                 ["pxe_default_workflow_id"] = TxtPxeDefaultWorkflowId.Text.Trim(),
-                ["pxe_image_index"]         = TxtPxeImageIndex.Text.Trim(),
+                ["pxe_wim_index"]           = TxtPxeWimIndex.Text.Trim(),
                 ["pxe_install_wim_path"]    = TxtPxeWimPath.Text.Trim(),
                 ["pxe_apply_mode"]          = (CmbPxeApplyMode.SelectedItem as ComboBoxItem)?.Tag as string ?? "dism",
                 ["pxe_install_wim_mode"]    = (CmbPxeWimMode.SelectedItem as ComboBoxItem)?.Tag as string ?? "",
+                ["pxe_smb_domain"]          = TxtPxeSmbDomain.Text.Trim(),
+                ["pxe_smb_user"]            = TxtPxeSmbUser.Text.Trim(),
+                ["pxe_static_url"]          = TxtPxeStaticUrl.Text.Trim(),
             };
             // Password inviate solo se l'utente le ha digitate in questa sessione (non vuote)
             if (!string.IsNullOrEmpty(TxtPxeDefaultJoinPass.Password))
                 payload["pxe_default_join_pass"] = TxtPxeDefaultJoinPass.Password;
             if (!string.IsNullOrEmpty(TxtPxeDefaultAdminPass.Password))
                 payload["pxe_default_admin_pass"] = TxtPxeDefaultAdminPass.Password;
+            if (!string.IsNullOrEmpty(TxtPxeSmbPass.Password))
+                payload["pxe_smb_pass"] = TxtPxeSmbPass.Password;
 
             await _apiSvc!.PutPxeSettingsAsync(payload);
             TxtPxeSettingsStatus.Text       = "✅  Impostazioni salvate sul server";

@@ -2771,9 +2771,14 @@ _PXE_SETTINGS_DEFAULTS = {
     # specifico: se mancanti, l'endpoint di config restituisce errore esplicito
     # invece di un path "fantasma" di un lab.
     "pxe_apply_mode":          "dism",  # "dism" (Apply-Image) o "setup" (legacy setup.exe)
-    "pxe_image_index":         "",
+    "pxe_wim_index":           "5",     # indice immagine WIM — gia' usato da _build_autounattend_xml_pxe
     "pxe_install_wim_mode":    "",      # "smb" o "http"
     "pxe_install_wim_path":    "",      # UNC (\\host\share\install.wim) o URL http
+    # Condivisione SMB per install.wim (flusso setup.exe/ImageInstall esistente)
+    "pxe_smb_user":            "",
+    "pxe_smb_pass":            "",
+    "pxe_smb_domain":          "WORKGROUP",
+    "pxe_static_url":          "",      # URL base file WinPE statici, se diverso dall'host API
 }
 
 

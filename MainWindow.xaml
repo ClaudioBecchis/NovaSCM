@@ -2671,7 +2671,7 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         </ComboBox>
 
                         <TextBlock Text="Indice immagine WIM" Style="{StaticResource SettingsLabel}"/>
-                        <TextBox x:Name="TxtPxeImageIndex" Style="{StaticResource SettingsBox}"
+                        <TextBox x:Name="TxtPxeWimIndex" Style="{StaticResource SettingsBox}"
                                  ToolTip="Verificare con: Dism /Get-WimInfo /WimFile:install.wim"/>
 
                         <TextBlock Text="Origine install.wim" Style="{StaticResource SettingsLabel}"/>
@@ -2683,6 +2683,22 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         <TextBlock Text="Percorso install.wim" Style="{StaticResource SettingsLabel}"/>
                         <TextBox x:Name="TxtPxeWimPath" Style="{StaticResource SettingsBox}"
                                  ToolTip="UNC (\\server\share\install.wim) o URL http, a seconda dell'origine scelta sopra"/>
+
+                        <!-- Condivisione SMB -->
+                        <TextBlock Text="📁 Condivisione SMB (se origine = SMB)" Style="{StaticResource GroupTitle}"/>
+
+                        <TextBlock Text="Dominio/Workgroup" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeSmbDomain" Style="{StaticResource SettingsBox}"/>
+
+                        <TextBlock Text="Utente SMB" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeSmbUser" Style="{StaticResource SettingsBox}"/>
+
+                        <TextBlock Text="Password SMB" Style="{StaticResource SettingsLabel}"/>
+                        <PasswordBox x:Name="TxtPxeSmbPass" Style="{StaticResource SettingsPass}"/>
+
+                        <TextBlock Text="URL file WinPE statici (opzionale)" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeStaticUrl" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Lascia vuoto per usare lo stesso host del server API"/>
 
                         <!-- Pulsanti -->
                         <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
