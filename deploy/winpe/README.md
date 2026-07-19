@@ -12,11 +12,27 @@ Contenuto di questa cartella:
 
 `setup.exe` con unattend completo (`ImageInstall`) si è rivelato fragile sulla fase `offlineServicing`, con fallimenti intermittenti privi di diagnostica utile. SCCM/MDT non usano quel percorso — usano DISM Apply-Image (estrazione diretta dei file) + `bcdboot`, più un unattend minimo solo per i pass `specialize`/`oobeSystem`. Stesso approccio qui.
 
-## Stato attuale: injection manuale
+## Injection: `inject_startnet.ps1` (consigliato)
 
-**Questo script vive nel repo come sorgente versionato, ma iniettarlo in un `boot.wim` è ancora un'operazione manuale** — non esiste ancora un tool automatico (`inject_startnet.ps1`, pianificato ma non scritto). Finché questo resta vero, il flusso non è "riproducibile da repo" al 100%: chiunque volesse rifare l'operazione deve seguire i passi sotto a mano.
+```powershell
+# 1. Copia il template e compilalo con i valori reali del tuo ambiente
+Copy-Item novascm-pe.ini.example novascm-pe.local.ini
+notepad novascm-pe.local.ini
 
-### Procedura manuale (richiede `wimlib-imagex` — Linux/WSL, o Windows con wimlib installato)
+# 2. Verifica senza modificare nulla
+.\inject_startnet.ps1 -WimPath D:\dist\winpe\boot.wim -ConfigIni .\novascm-pe.local.ini -DryRun
+
+# 3. Esegui davvero (richiede PowerShell come amministratore, usa dism.exe)
+.\inject_startnet.ps1 -WimPath D:\dist\winpe\boot.wim -ConfigIni .\novascm-pe.local.ini
+```
+
+Fa da solo: valida che WIM/ini esistano e che i parametri obbligatori siano popolati, crea un backup timestampato del WIM (`boot.wim.bak-YYYYMMDD-HHMMSS`) prima di toccarlo, monta/copia/smonta con commit via `dism.exe`, e in caso di errore a metà indica esplicitamente come smontare a mano senza corrompere l'immagine.
+
+`novascm-pe.local.ini` (o qualsiasi nome con dati reali) **non va mai committato** — resta locale a chi esegue l'injection.
+
+## Procedura manuale (fallback, o su Linux/WSL senza accesso a `dism.exe`)
+
+Se non si ha accesso a Windows con DISM, la stessa cosa si può fare con `wimlib-imagex`:
 
 ```bash
 # 1. Monta l'immagine WinPE (indice 1 tipicamente) in scrittura

@@ -29,3 +29,7 @@ server/dist/winpe/
 server/dist/NovaSCMDeployScreen.exe
 server/dist/autoexec.ipxe
 server/*.db
+
+# Config PXE con credenziali reali di un ambiente specifico — solo l'.example va committato
+deploy/winpe/*.ini
+!deploy/winpe/novascm-pe.ini.example
