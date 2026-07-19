@@ -1,5 +1,7 @@
 # NovaSCM — CLAUDE.md
 
+> ⚠️ **IP/CT storici**: i riferimenti a `CT 103` / `192.168.1.100` in questo file sono **obsoleti** — non corrispondono a nessun host live verificato. Per l'ambiente reale (CT104 lab, CT112 produzione, IP, servizi), fonte di verità unica: `docs/AMBIENTE_NOVASCM.md`.
+
 ## La visione
 
 NovaSCM è un **sostituto completo di Microsoft SCCM**, self-hosted e open-source.
