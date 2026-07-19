@@ -138,6 +138,17 @@ Se il tuo ambiente è un container LXC Proxmox (Debian), lo script `server/deplo
 ./server/deploy/install-flask-ct.sh <CTID> <API_KEY> <SERVER_IP>
 ```
 
+### Collegare il client al server
+
+Una volta che il server è avviato (con una qualsiasi delle 3 opzioni sopra):
+
+1. Recupera l'API key: con Docker/Python nativo viene generata al primo avvio e salvata in `data/.api_key` (o stampata nei log all'avvio); con lo script Proxmox l'hai passata tu come argomento.
+2. Apri NovaSCM.exe → **Impostazioni** → **URL API NovaSCM**.
+3. Inserisci l'indirizzo del server, es. `http://localhost:9091` (stessa macchina) o `http://192.168.x.x:9091` (server su un'altra macchina/rete).
+4. Inserisci l'API key nel campo corrispondente.
+
+Da qui il client comunica col server per tutte le funzioni che lo richiedono (deploy PXE, workflow, gestione flotta).
+
 **Endpoint principali:**
 
 | Metodo | Endpoint | Descrizione |
@@ -163,6 +174,8 @@ Servizio Windows (.NET 9 Worker) che gira in background sui PC gestiti.
 # Installazione da PowerShell admin
 iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex
 ```
+
+**Come dialoga con il server:** l'agent fa polling HTTP verso il server ogni 30 secondi (nessuna porta in ingresso richiesta sul PC gestito). Ad ogni poll: controlla se ci sono workflow assegnati, esegue lo step successivo, riporta l'esito al server (`/api/cr/by-name/<pc>/step`). Se il PC viene riavviato durante un workflow (es. dopo un `winget_install` che lo richiede), l'agent riprende automaticamente dal passo successivo al riavvio.
 
 **Sicurezza:**
 - Comandi eseguiti con `ArgumentList` — no shell injection
