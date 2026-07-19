@@ -77,6 +77,23 @@ postinstall.ps1 → enrollment token → installa NovaSCMAgent
 Agent poll ogni 30s → esegue workflow → riavvio → riprende da dove era rimasto
 ```
 
+### Configurare la rete per il boot PXE
+
+Il PC da installare deve ricevere via DHCP due opzioni che puntano al server NovaSCM:
+- **Option 66 (boot server)**: l'IP del server NovaSCM (es. `192.168.1.50`)
+- **Option 67 (boot filename)**: `ipxe.efi`
+
+Questo si configura sul router/gateway che eroga il DHCP alla rete dove si trova il PC (non nel client NovaSCM). Ogni gateway/router ha un percorso diverso per queste opzioni (spesso "opzioni DHCP avanzate" o "network boot"); consulta la documentazione del tuo dispositivo di rete.
+
+### Cos'è una Change Request (CR) e come si crea
+
+Una **CR** è la "pratica" di provisioning associata a un PC: nome macchina, dominio da joinare, workflow da eseguire, stato del ciclo di vita. **Va creata dal client NovaSCM.exe** (sezione Change Request → Nuova), **prima** di accendere il PC via rete, specificando almeno:
+- Nome PC
+- Dominio (campo obbligatorio)
+- Il **workflow da eseguire** — questo è il passaggio che rende effettivo il deploy
+
+**Importante:** se il PC fa boot PXE e nessuna CR esiste ancora per il suo MAC, il server ne crea una automaticamente — ma **senza un workflow assegnato l'azione resta "solo boot locale"**, il deploy Windows non parte. Per far sì che ogni PC sconosciuto riceva subito un workflow di default, imposta un workflow predefinito in **Impostazioni PXE** del client (si traduce nel campo `pxe_default_workflow_id` lato server). In assenza di questa impostazione, crea sempre la CR manualmente dal client prima di avviare il PC.
+
 ---
 
 ## Workflow e automazione
