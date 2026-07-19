@@ -65,5 +65,10 @@ wimlib-imagex unmount /tmp/pemount --commit
 | `SMB_USER` / `SMB_PASS` | sì | Credenziali della condivisione SMB |
 | `IMAGE_INDEX` | sì | Indice dell'immagine nel WIM — verificare con `Dism /Get-WimInfo /WimFile:install.wim` |
 | `LABCONFIG_BYPASS` | no (default `0`) | `1` per bypassare i controlli TPM/Secure Boot/RAM/CPU — solo per hardware/VM di test che non li soddisfa |
+| `BRAND_NAME` | no (default `NovaSCM`) | Nome mostrato nel banner e nel titolo della finestra durante il deploy — per chi vuole white-label il proprio deployment |
 
 Se un parametro obbligatorio manca, lo script si ferma con un errore esplicito in `X:\pxe-startnet.log`, non prosegue con un valore indovinato.
+
+## Progresso a schermo
+
+Lo script mostra un banner all'avvio e un indicatore `[N/8] descrizione fase` (a schermo e nel titolo della finestra) per ogni fase — prima la console restava vuota per minuti durante l'apply immagine (tutto l'output andava solo nel file di log), dando l'impressione di essere bloccata. Ispirato a come Microsoft ConfigMgr sostituisce la shell WinPE con una UI grafica (`tsbootshell.exe`) invece del cmd nudo, ma restando su testo semplice: nessuna dipendenza aggiuntiva richiesta all'immagine WinPE.

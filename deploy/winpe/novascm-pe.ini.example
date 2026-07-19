@@ -9,3 +9,7 @@ SMB_USER=novascm
 SMB_PASS=CambiaQuestaPassword
 IMAGE_INDEX=5
 LABCONFIG_BYPASS=0
+
+rem Opzionale — personalizza il nome mostrato nel banner e nel titolo della
+rem finestra durante il deploy. Default "NovaSCM" se omesso.
+BRAND_NAME=NovaSCM
