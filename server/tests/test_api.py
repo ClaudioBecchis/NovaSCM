@@ -1276,7 +1276,12 @@ class TestPxeFileServing:
         resp = client.get("/api/pxe/file/evil.exe")
         assert resp.status_code == 404
 
-    def test_allowed_file_missing_returns_404(self, client):
+    def test_allowed_file_missing_returns_404(self, client, tmp_path, monkeypatch):
+        # Isolato da _WINPE_DIR reale: su un ambiente con dist/ popolato
+        # (es. lab PXE) il file esiste davvero e il test fallirebbe non per
+        # un bug ma per lo stato dell'ambiente — non quello che vogliamo
+        # verificare qui (B5.3 del piano DISM E2E).
+        monkeypatch.setattr(api, "_WINPE_DIR", str(tmp_path))
         resp = client.get("/api/pxe/file/wimboot")
         assert resp.status_code == 404
         assert b"non trovato" in resp.data or b"not found" in resp.data.lower()
@@ -1313,6 +1318,51 @@ class TestAutounattendPxe:
                           "admin_pass": "Pass123"},
                     headers=AUTH)
         resp = client.get("/api/autounattend/PXE-KEY-TEST")
+        assert b"X-Api-Key" not in resp.data
+
+
+class TestUnattendSpecializePxe:
+    """Test per /api/unattend-specialize/<pc_name> — flusso DISM (B2)."""
+
+    def test_unknown_pc_returns_404(self, client):
+        resp = client.get("/api/unattend-specialize/NONEXISTENT-PC")
+        assert resp.status_code == 404
+
+    def test_known_pc_returns_xml(self, client):
+        client.post("/api/cr",
+                    json={"pc_name": "PXE-SPEC-TEST", "domain": "test.local",
+                          "admin_pass": "Pass123"},
+                    headers=AUTH)
+        resp = client.get("/api/unattend-specialize/PXE-SPEC-TEST")
+        assert resp.status_code == 200
+        assert b"<?xml" in resp.data
+        assert b"PXE-SPEC-TEST" in resp.data
+
+    def test_xml_has_no_image_install(self, client):
+        """A differenza di /api/autounattend, non deve contenere ImageInstall/DiskConfiguration
+        — il partizionamento e l'apply immagine li fa startnet_dism.cmd via DISM, non Windows Setup."""
+        client.post("/api/cr",
+                    json={"pc_name": "PXE-SPEC-NOIMG", "domain": "test.local",
+                          "admin_pass": "Pass123"},
+                    headers=AUTH)
+        resp = client.get("/api/unattend-specialize/PXE-SPEC-NOIMG")
+        assert b"ImageInstall" not in resp.data
+        assert b"DiskConfiguration" not in resp.data
+
+    def test_xml_no_product_key(self, client):
+        client.post("/api/cr",
+                    json={"pc_name": "PXE-SPEC-NOKEY", "domain": "test.local",
+                          "admin_pass": "Pass123"},
+                    headers=AUTH)
+        resp = client.get("/api/unattend-specialize/PXE-SPEC-NOKEY")
+        assert b"ProductKey" not in resp.data
+
+    def test_xml_no_api_key_exposed(self, client):
+        client.post("/api/cr",
+                    json={"pc_name": "PXE-SPEC-NOAPIKEY", "domain": "test.local",
+                          "admin_pass": "Pass123"},
+                    headers=AUTH)
+        resp = client.get("/api/unattend-specialize/PXE-SPEC-NOAPIKEY")
         assert b"X-Api-Key" not in resp.data
 
 

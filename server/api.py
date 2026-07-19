@@ -2754,6 +2754,139 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
 </unattend>"""
 
 
+@app.route("/api/unattend-specialize/<pc_name>", methods=["GET"])
+def serve_unattend_specialize(pc_name: str):
+    """
+    Genera e serve unattend.xml minimo (solo pass specialize/oobeSystem) per il
+    flusso DISM Apply-Image — NESSUNA autenticazione, protetto da subnet
+    allow-list come /api/autounattend/<pc_name>.
+
+    A differenza di _build_autounattend_xml_pxe, non contiene windowsPE/
+    DiskConfiguration/ImageInstall: partizionamento e apply immagine li fa
+    startnet_dism.cmd via DISM, prima che Windows veda questo file (copiato
+    in W:\\Windows\\Panther\\unattend.xml dallo stesso script).
+    """
+    client_ip = _get_client_ip()
+    if not _is_pxe_allowed(client_ip):
+        return "Accesso negato", 403
+    with get_db_ctx() as conn:
+        cr = conn.execute("SELECT * FROM cr WHERE pc_name=?", (pc_name,)).fetchone()
+    if not cr:
+        log.warning("unattend-specialize: CR non trovato per pc_name=%s", pc_name)
+        return "CR non trovato", 404
+    cr_dict = dict(cr)
+    with get_db_ctx() as conn:
+        pw = conn.execute(
+            "SELECT id FROM pc_workflows WHERE pc_name=? ORDER BY id DESC LIMIT 1", (pc_name,)
+        ).fetchone()
+        pw_id = pw["id"] if pw else None
+        deploy_token = _generate_deploy_token(conn, pc_name, pw_id)
+    cr_dict["_deploy_token"] = deploy_token
+    xml = _build_unattend_specialize_xml(cr_dict)
+    log.info("unattend-specialize: servito XML per %s a %s (deploy token)", pc_name, client_ip)
+    return xml, 200, {"Content-Type": "application/xml"}
+
+
+def _build_unattend_specialize_xml(d: dict) -> str:
+    """
+    Genera unattend.xml minimo: solo pass specialize (nome PC, dominio) e
+    oobeSystem (AutoLogon + FirstLogonCommands che scrivono il token di
+    enrollment nel registro ed eseguono postinstall.ps1, gia' copiato su
+    disco da startnet_dism.cmd). Nessuna ProductKey (rifiutata su ISO Retail).
+    """
+    import xml.sax.saxutils as _sax
+    _x = _sax.escape
+
+    server_url   = _get_public_url()
+    deploy_token = d.get("_deploy_token", "")
+    xpc  = _x(d.get("pc_name", ""))
+    xdom = _x(d.get("domain", ""))
+    xou  = _x(d.get("ou", ""))
+    xju  = _x(d.get("join_user", ""))
+    xjp  = _x(d.get("join_pass", ""))
+    xap  = _x(d.get("admin_pass") or _get_setting("pxe_default_admin_pass", "Polaris2026!"))
+    xkey = _x(deploy_token)
+    xurl = _x(server_url)
+
+    join_section = ""
+    if d.get("domain"):
+        join_section = f"""    <component name="Microsoft-Windows-UnattendedJoin"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <Identification>
+        <JoinDomain>{xdom}</JoinDomain>
+        <MachineObjectOU>{xou}</MachineObjectOU>
+        <Credentials>
+          <Domain>{xdom}</Domain>
+          <Username>{xju}</Username>
+          <Password>{xjp}</Password>
+        </Credentials>
+      </Identification>
+    </component>"""
+
+    return f"""<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+
+  <!-- Pass 4: specialize — nome PC, dominio, fuso orario -->
+  <settings pass="specialize">
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <ComputerName>{xpc}</ComputerName>
+      <TimeZone>W. Europe Standard Time</TimeZone>
+    </component>
+{join_section}  </settings>
+
+  <!-- Pass 7: oobeSystem — AutoLogon + scrittura token enrollment + postinstall -->
+  <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-Shell-Setup"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS"
+               xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+      <OOBE>
+        <HideEULAPage>true</HideEULAPage>
+        <HideLocalAccountScreen>true</HideLocalAccountScreen>
+        <HideOEMRegistrationScreen>true</HideOEMRegistrationScreen>
+        <HideOnlineAccountScreens>true</HideOnlineAccountScreens>
+        <HideWirelessSetupInOOBE>true</HideWirelessSetupInOOBE>
+        <ProtectYourPC>3</ProtectYourPC>
+      </OOBE>
+      <UserAccounts>
+        <AdministratorPassword>
+          <Value>{xap}</Value>
+          <PlainText>true</PlainText>
+        </AdministratorPassword>
+      </UserAccounts>
+      <AutoLogon>
+        <Enabled>true</Enabled>
+        <Username>Administrator</Username>
+        <Password><Value>{xap}</Value><PlainText>true</PlainText></Password>
+        <LogonCount>3</LogonCount>
+      </AutoLogon>
+      <FirstLogonCommands>
+        <SynchronousCommand wcm:action="add">
+          <Order>1</Order>
+          <CommandLine>reg add HKLM\\SOFTWARE\\NovaSCM /v EnrollToken /t REG_SZ /d {xkey} /f</CommandLine>
+          <Description>NovaSCM: salva token di enrollment</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>2</Order>
+          <CommandLine>reg add HKLM\\SOFTWARE\\NovaSCM /v EnrollServer /t REG_SZ /d {xurl} /f</CommandLine>
+          <Description>NovaSCM: salva URL server</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>3</Order>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -File C:\\Windows\\Temp\\postinstall.ps1</CommandLine>
+          <Description>NovaSCM: esegue postinstall (Wait-NetworkReady + enroll + agent)</Description>
+        </SynchronousCommand>
+      </FirstLogonCommands>
+    </component>
+  </settings>
+</unattend>"""
+
+
 # ── PXE SETTINGS ──────────────────────────────────────────────────────────────
 
 _PXE_SETTINGS_DEFAULTS = {
