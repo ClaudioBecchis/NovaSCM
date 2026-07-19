@@ -1,0 +1,18 @@
+rem Schema partizioni GPT usato da startnet_dism.cmd — riferimento statico,
+rem non eseguito direttamente (lo script lo genera inline per evitare
+rem dipendenze da file esterni durante il boot PXE).
+rem
+rem EFI 260MB (FAT32, lettera S) + MSR 16MB (nessuna lettera, riservata dal
+rem sistema) + Windows NTFS resto del disco (lettera W).
+
+select disk 0
+clean
+convert gpt
+create partition efi size=260
+format quick fs=fat32 label="System"
+assign letter=S
+create partition msr size=16
+create partition primary
+format quick fs=ntfs label="Windows"
+assign letter=W
+list volume

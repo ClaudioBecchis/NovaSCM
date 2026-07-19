@@ -1,0 +1,11 @@
+rem Esempio di configurazione per startnet_dism.cmd.
+rem Copiare come X:\novascm-pe.ini nel media di boot (o farlo scrivere dal
+rem tool di injection, vedi README.md in questa cartella) — MAI committare
+rem una versione con valori reali di un ambiente specifico.
+
+SERVER_IP=192.168.1.50
+SMB_SHARE=\\192.168.1.50\wininstall
+SMB_USER=novascm
+SMB_PASS=CambiaQuestaPassword
+IMAGE_INDEX=5
+LABCONFIG_BYPASS=0
