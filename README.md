@@ -102,13 +102,38 @@ I workflow sono sequenze di step configurabili via GUI, assegnabili a singoli PC
 
 ## Server API
 
-Il server è un'API Flask + SQLite che gira come servizio **systemd** su LXC Proxmox (porta 9091).
+Il server è un'API Flask + SQLite (porta 9091 di default). È un componente **separato** dal client: il client (NovaSCM.exe) gira solo su Windows, il server invece gira ovunque ci sia Python o Docker — Linux, Windows, macOS.
+
+**Requisiti:**
+- Docker (qualsiasi OS) — **opzione consigliata**, oppure
+- Python 3.12 nativo
+
+### Opzione 1 — Docker (consigliato, qualsiasi sistema operativo)
 
 ```bash
-# Installazione
-pip install flask gunicorn
-cp api.py /opt/novascm/
-systemctl enable --now novascm
+git clone https://github.com/ClaudioBecchis/NovaSCM.git
+cd NovaSCM/server
+docker compose up -d
+```
+
+L'API sarà disponibile su `http://localhost:9091`. Vedi `server/README.md` per le variabili d'ambiente (API key, abilitazione PXE, ecc.).
+
+### Opzione 2 — Python nativo (qualsiasi Linux/Windows/macOS con Python 3.12)
+
+```bash
+cd NovaSCM/server
+pip install -r requirements.txt
+python api.py
+```
+
+Per farlo girare come servizio persistente in background serve un supervisore di processo (systemd su Linux, NSSM/Task Scheduler su Windows, ecc.) configurato manualmente — non incluso in questo comando.
+
+### Opzione 3 — Proxmox LXC automatico
+
+Se il tuo ambiente è un container LXC Proxmox (Debian), lo script `server/deploy/install-flask-ct.sh` automatizza tutto (dipendenze, Samba, unit systemd incluso):
+
+```bash
+./server/deploy/install-flask-ct.sh <CTID> <API_KEY> <SERVER_IP>
 ```
 
 **Endpoint principali:**
