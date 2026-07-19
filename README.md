@@ -12,7 +12,7 @@
 
 ## Cos'è NovaSCM
 
-NovaSCM è un'alternativa open source a Microsoft SCCM per la gestione di reti e flotte di PC. Combina in un'unica interfaccia WPF:
+NovaSCM è un'alternativa open source a Microsoft SCCM per la gestione di reti e flotte di PC. È composto da due parti: un **client Windows** (console WPF) e un **server API** (Python, multipiattaforma) — vedi [Download](#download) e [Server API](#server-api). Il client offre:
 
 - **Scansione rete** multi-VLAN con rilevamento vendor OUI
 - **Deploy Windows zero-touch** via PXE (autounattend.xml + postinstall.ps1)
@@ -30,6 +30,8 @@ NovaSCM è un'alternativa open source a Microsoft SCCM per la gestione di reti e
 **[↓ Scarica NovaSCM.exe](https://github.com/ClaudioBecchis/NovaSCM/releases/latest)**
 
 Requisiti: Windows 10/11 (64-bit) · [.NET 9.0 Runtime](https://dotnet.microsoft.com/download/dotnet/9.0)
+
+> ⚠️ **Questo è solo il client** (la console di gestione, solo Windows). Scansione rete, ping e Wake-on-LAN funzionano subito da soli. Per il deploy PXE, i workflow e la gestione flotta completa serve anche il **server API** — un componente separato, multipiattaforma (Docker/Linux/Windows/macOS), vedi la sezione [Server API](#server-api) più sotto.
 
 ---
 
