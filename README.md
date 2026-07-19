@@ -242,6 +242,17 @@ iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex
 
 ---
 
+## Changelog
+
+**19/07/2026** — Audit e pulizia client WPF:
+- Status bar in fondo alla finestra mostrava numeri statici scritti a mano ("8/10 online", "4 cert", "3/4 PC"), mai collegati a dati reali — ora legge i valori veri dal server
+- Tab ribbon "Visualizza"/"Strumenti" non facevano nulla al click — ora navigano rispettivamente a Change Request e Rete
+- 11 pulsanti (certificati EAP-TLS, pacchetti OPSI, aggiornamento agent) mostravano messaggi che simulavano un'azione riuscita seguiti da "(demo)" — sostituiti con messaggi onesti "non ancora implementato": queste funzioni richiedono integrazione con servizi esterni (CA/Certportal, sistema OPSI) non ancora collegati
+- Creazione Change Request: la validazione (campi obbligatori mancanti, o server non configurato) falliva silenziosamente con solo un piccolo testo colorato, facile da non notare — ora mostra un popup esplicito
+- Corretta configurazione DHCP Option 66 e riferimenti IP obsoleti nell'ambiente di test PXE, che impedivano al deploy di completarsi
+
+---
+
 ## Build
 
 ```bash
