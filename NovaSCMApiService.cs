@@ -106,6 +106,14 @@ public class NovaSCMApiService(string baseUrl, string apiKey = "", ApiCache? cac
     public async Task<string> PutWorkflowAsync(int wfId, object data)
         => await SendAsync(HttpMethod.Put, $"{ApiBase}/api/workflows/{wfId}", Json(data));
 
+    // ── PXE Settings ──────────────────────────────────────────────────────────
+
+    public async Task<string> GetPxeSettingsJsonAsync()
+        => await SendAsync(HttpMethod.Get, $"{ApiBase}/api/pxe/settings");
+
+    public async Task<string> PutPxeSettingsAsync(object data)
+        => await SendAsync(HttpMethod.Put, $"{ApiBase}/api/pxe/settings", Json(data));
+
     public async Task DeleteWorkflowAsync(int wfId)
         => await SendAsync(HttpMethod.Delete, $"{ApiBase}/api/workflows/{wfId}");
 

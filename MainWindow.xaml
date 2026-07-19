@@ -563,7 +563,8 @@
                 <TreeViewItem x:Name="TvGroupAdmin" IsExpanded="True" Padding="4,4"
                               Header="⚙️  Amministrazione" Visibility="Collapsed">
                     <TreeViewItem Header="🖥️  Proxmox"        Tag="11" Padding="4,3" Selected="NavTree_ItemSelected"/>
-                    <TreeViewItem Header="⚙️  Impostazioni"   Tag="14" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="🌐  PXE / Boot"      Tag="14" Padding="4,3" Selected="NavTree_ItemSelected"/>
+                    <TreeViewItem Header="⚙️  Impostazioni"   Tag="15" Padding="4,3" Selected="NavTree_ItemSelected"/>
                     <TreeViewItem Header="ℹ️  About"           Tag="12" Padding="4,3" Selected="NavTree_ItemSelected"/>
                 </TreeViewItem>
             </TreeView>
@@ -2616,6 +2617,83 @@ Puoi usare, modificare e distribuire liberamente mantenendo il credito all'autor
                         </StackPanel>
                     </Grid>
                 </Grid>
+            </TabItem>
+
+            <!-- ─── TAB PXE / BOOT ─── -->
+            <TabItem Header="🌐  PXE / Boot">
+                <ScrollViewer Margin="20,12,20,12" VerticalScrollBarVisibility="Auto"
+                              PreviewMouseWheel="SvPanel_PreviewMouseWheel">
+                    <StackPanel MaxWidth="560" HorizontalAlignment="Left">
+
+                        <TextBlock Text="🌐  Configurazione PXE / Boot" Style="{StaticResource SectionLabel}"/>
+                        <TextBlock Text="Queste impostazioni vivono sul server (non nel file di configurazione locale) — vengono lette e scritte via API e valgono per tutti i client collegati a questo server."
+                                   Foreground="#64748b" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,14"/>
+
+                        <!-- Provisioning automatico -->
+                        <TextBlock Text="🖥️ Provisioning automatico" Style="{StaticResource GroupTitle}"/>
+
+                        <CheckBox x:Name="ChkPxeEnabled" Content="PXE abilitato" Margin="0,0,0,8"/>
+                        <CheckBox x:Name="ChkPxeAutoProvision" Content="Auto-provisioning per MAC sconosciuti" Margin="0,0,0,10"
+                                  ToolTip="Se disattivo, un PC nuovo non registrato viene ignorato invece di ricevere un host automatico"/>
+
+                        <TextBlock Text="Prefisso nome PC" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxePcPrefix" Style="{StaticResource SettingsBox}" ToolTip="Es: PC → genera PC-A53555"/>
+
+                        <TextBlock Text="Dominio default" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeDefaultDomain" Style="{StaticResource SettingsBox}"/>
+
+                        <TextBlock Text="OU default" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeDefaultOu" Style="{StaticResource SettingsBox}"/>
+
+                        <TextBlock Text="IP Domain Controller default" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeDefaultDcIp" Style="{StaticResource SettingsBox}"/>
+
+                        <TextBlock Text="Utente join AD default" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeDefaultJoinUser" Style="{StaticResource SettingsBox}"/>
+
+                        <TextBlock Text="Password join AD default" Style="{StaticResource SettingsLabel}"/>
+                        <PasswordBox x:Name="TxtPxeDefaultJoinPass" Style="{StaticResource SettingsPass}"/>
+
+                        <TextBlock Text="Password admin locale default" Style="{StaticResource SettingsLabel}"/>
+                        <PasswordBox x:Name="TxtPxeDefaultAdminPass" Style="{StaticResource SettingsPass}"/>
+
+                        <TextBlock Text="ID Workflow default" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeDefaultWorkflowId" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Senza un workflow assegnato (qui o sulla singola CR), il PXE registra il PC ma non avvia mai il deploy — vedi tab Workflow per l'elenco ID"/>
+
+                        <!-- Apply immagine -->
+                        <TextBlock Text="💿 Apply immagine (deploy Windows)" Style="{StaticResource GroupTitle}"/>
+
+                        <TextBlock Text="Modalità" Style="{StaticResource SettingsLabel}"/>
+                        <ComboBox x:Name="CmbPxeApplyMode" Style="{StaticResource SettingsBox}" HorizontalAlignment="Left" Width="200">
+                            <ComboBoxItem Content="dism (Apply-Image + bcdboot)" Tag="dism"/>
+                            <ComboBoxItem Content="setup (legacy setup.exe)" Tag="setup"/>
+                        </ComboBox>
+
+                        <TextBlock Text="Indice immagine WIM" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeImageIndex" Style="{StaticResource SettingsBox}"
+                                 ToolTip="Verificare con: Dism /Get-WimInfo /WimFile:install.wim"/>
+
+                        <TextBlock Text="Origine install.wim" Style="{StaticResource SettingsLabel}"/>
+                        <ComboBox x:Name="CmbPxeWimMode" Style="{StaticResource SettingsBox}" HorizontalAlignment="Left" Width="200">
+                            <ComboBoxItem Content="Condivisione SMB" Tag="smb"/>
+                            <ComboBoxItem Content="HTTP" Tag="http"/>
+                        </ComboBox>
+
+                        <TextBlock Text="Percorso install.wim" Style="{StaticResource SettingsLabel}"/>
+                        <TextBox x:Name="TxtPxeWimPath" Style="{StaticResource SettingsBox}"
+                                 ToolTip="UNC (\\server\share\install.wim) o URL http, a seconda dell'origine scelta sopra"/>
+
+                        <!-- Pulsanti -->
+                        <StackPanel Orientation="Horizontal" Margin="0,20,0,0">
+                            <Button Content="🔄  Ricarica dal server" Style="{StaticResource BtnBlue}" Click="BtnPxeSettingsReload_Click"/>
+                            <Button Content="💾  Salva sul server" Style="{StaticResource BtnGreen}" Click="BtnPxeSettingsSave_Click"/>
+                        </StackPanel>
+
+                        <TextBlock x:Name="TxtPxeSettingsStatus" Foreground="#10b981" FontSize="12" Margin="0,10,0,0"/>
+
+                    </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!-- ─── TAB IMPOSTAZIONI ─── -->

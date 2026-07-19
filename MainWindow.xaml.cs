@@ -2635,7 +2635,8 @@ public partial class MainWindow : Window
         "Proxmox",        // 11
         "About",          // 12
         "Dashboard",      // 13
-        "Impostazioni",   // 14
+        "PXE / Boot",     // 14
+        "Impostazioni",   // 15
     ];
 
     private readonly Button[] _navBtns = [];
@@ -2644,6 +2645,94 @@ public partial class MainWindow : Window
     {
         if (s is Button btn && int.TryParse(btn.Tag?.ToString(), out int idx))
             MainTabs.SelectedIndex = idx;
+    }
+
+    // ── PXE Settings (server-side, non nel config.json locale) ─────────────────
+    private async void BtnPxeSettingsReload_Click(object s, RoutedEventArgs e)
+    {
+        if (!EnsureApiConfigured())
+        {
+            MessageBox.Show("Configura l'URL API NovaSCM nelle Impostazioni prima di gestire il PXE.",
+                "API non configurata", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        try
+        {
+            var json = await _apiSvc!.GetPxeSettingsJsonAsync();
+            var d = System.Text.Json.JsonDocument.Parse(json).RootElement;
+
+            ChkPxeEnabled.IsChecked        = d.GetProperty("pxe_enabled").GetString() == "1";
+            ChkPxeAutoProvision.IsChecked  = d.GetProperty("pxe_auto_provision").GetString() == "1";
+            TxtPxePcPrefix.Text            = d.GetProperty("pxe_pc_prefix").GetString();
+            TxtPxeDefaultDomain.Text       = d.GetProperty("pxe_default_domain").GetString();
+            TxtPxeDefaultOu.Text           = d.GetProperty("pxe_default_ou").GetString();
+            TxtPxeDefaultDcIp.Text         = d.GetProperty("pxe_default_dc_ip").GetString();
+            TxtPxeDefaultJoinUser.Text     = d.GetProperty("pxe_default_join_user").GetString();
+            TxtPxeDefaultWorkflowId.Text   = d.GetProperty("pxe_default_workflow_id").GetString();
+            TxtPxeImageIndex.Text          = d.GetProperty("pxe_image_index").GetString();
+            TxtPxeWimPath.Text             = d.GetProperty("pxe_install_wim_path").GetString();
+            // Le password (join/admin) sono mascherate dal server con "••••••••" se già impostate — non le ricarichiamo nel campo per non sovrascriverle involontariamente al salvataggio.
+
+            var applyMode = d.GetProperty("pxe_apply_mode").GetString();
+            foreach (ComboBoxItem it in CmbPxeApplyMode.Items)
+                if ((string)it.Tag == applyMode) { CmbPxeApplyMode.SelectedItem = it; break; }
+
+            var wimMode = d.GetProperty("pxe_install_wim_mode").GetString();
+            foreach (ComboBoxItem it in CmbPxeWimMode.Items)
+                if ((string)it.Tag == wimMode) { CmbPxeWimMode.SelectedItem = it; break; }
+
+            TxtPxeSettingsStatus.Text       = "✅  Impostazioni caricate dal server";
+            TxtPxeSettingsStatus.Foreground = System.Windows.Media.Brushes.Green;
+        }
+        catch (Exception ex)
+        {
+            TxtPxeSettingsStatus.Text       = $"❌  {ex.Message}";
+            TxtPxeSettingsStatus.Foreground = System.Windows.Media.Brushes.Red;
+        }
+    }
+
+    private async void BtnPxeSettingsSave_Click(object s, RoutedEventArgs e)
+    {
+        if (!EnsureApiConfigured())
+        {
+            MessageBox.Show("Configura l'URL API NovaSCM nelle Impostazioni prima di gestire il PXE.",
+                "API non configurata", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        try
+        {
+            var payload = new Dictionary<string, string>
+            {
+                ["pxe_enabled"]             = ChkPxeEnabled.IsChecked == true ? "1" : "0",
+                ["pxe_auto_provision"]      = ChkPxeAutoProvision.IsChecked == true ? "1" : "0",
+                ["pxe_pc_prefix"]           = TxtPxePcPrefix.Text.Trim(),
+                ["pxe_default_domain"]      = TxtPxeDefaultDomain.Text.Trim(),
+                ["pxe_default_ou"]          = TxtPxeDefaultOu.Text.Trim(),
+                ["pxe_default_dc_ip"]       = TxtPxeDefaultDcIp.Text.Trim(),
+                ["pxe_default_join_user"]   = TxtPxeDefaultJoinUser.Text.Trim(),
+                ["pxe_default_workflow_id"] = TxtPxeDefaultWorkflowId.Text.Trim(),
+                ["pxe_image_index"]         = TxtPxeImageIndex.Text.Trim(),
+                ["pxe_install_wim_path"]    = TxtPxeWimPath.Text.Trim(),
+                ["pxe_apply_mode"]          = (CmbPxeApplyMode.SelectedItem as ComboBoxItem)?.Tag as string ?? "dism",
+                ["pxe_install_wim_mode"]    = (CmbPxeWimMode.SelectedItem as ComboBoxItem)?.Tag as string ?? "",
+            };
+            // Password inviate solo se l'utente le ha digitate in questa sessione (non vuote)
+            if (!string.IsNullOrEmpty(TxtPxeDefaultJoinPass.Password))
+                payload["pxe_default_join_pass"] = TxtPxeDefaultJoinPass.Password;
+            if (!string.IsNullOrEmpty(TxtPxeDefaultAdminPass.Password))
+                payload["pxe_default_admin_pass"] = TxtPxeDefaultAdminPass.Password;
+
+            await _apiSvc!.PutPxeSettingsAsync(payload);
+            TxtPxeSettingsStatus.Text       = "✅  Impostazioni salvate sul server";
+            TxtPxeSettingsStatus.Foreground = System.Windows.Media.Brushes.Green;
+        }
+        catch (Exception ex)
+        {
+            TxtPxeSettingsStatus.Text       = $"❌  {ex.Message}";
+            TxtPxeSettingsStatus.Foreground = System.Windows.Media.Brushes.Red;
+            MessageBox.Show($"Salvataggio impostazioni PXE fallito:\n{ex.Message}",
+                "Errore", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     // ── Ribbon handlers ──────────────────────────────────────────────

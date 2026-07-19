@@ -2767,6 +2767,13 @@ _PXE_SETTINGS_DEFAULTS = {
     "pxe_default_join_pass":   "",
     "pxe_default_admin_pass":  "",
     "pxe_default_workflow_id": "",
+    # Parametri di apply immagine — nessun default hardcoded a un ambiente
+    # specifico: se mancanti, l'endpoint di config restituisce errore esplicito
+    # invece di un path "fantasma" di un lab.
+    "pxe_apply_mode":          "dism",  # "dism" (Apply-Image) o "setup" (legacy setup.exe)
+    "pxe_image_index":         "",
+    "pxe_install_wim_mode":    "",      # "smb" o "http"
+    "pxe_install_wim_path":    "",      # UNC (\\host\share\install.wim) o URL http
 }
 
 
