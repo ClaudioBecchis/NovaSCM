@@ -280,8 +280,8 @@
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <Button x:Name="RibbonTabHome" Content="Home"       Style="{StaticResource RibbonTabActive}" Tag="home"  Click="RibbonTab_Click"/>
-                    <Button                         Content="Visualizza" Style="{StaticResource RibbonTab}"       Tag="view"  Click="RibbonTab_Click"/>
-                    <Button                         Content="Strumenti"  Style="{StaticResource RibbonTab}"       Tag="tools" Click="RibbonTab_Click"/>
+                    <Button x:Name="RibbonTabView" Content="Visualizza" Style="{StaticResource RibbonTab}"       Tag="view"  Click="RibbonTab_Click"/>
+                    <Button x:Name="RibbonTabTools" Content="Strumenti"  Style="{StaticResource RibbonTab}"       Tag="tools" Click="RibbonTab_Click"/>
                 </StackPanel>
                 <StackPanel HorizontalAlignment="Right" Orientation="Horizontal"
                             VerticalAlignment="Center" Margin="0,0,14,0">
@@ -392,11 +392,11 @@
                 <TextBlock Text="  ·  " Foreground="#94a3b8" FontSize="11"/>
                 <TextBlock Text="© 2026 Claudio Becchis — PolarisCore.it" Foreground="#64748b" FontSize="11"/>
                 <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
-                <TextBlock Text="8/10 online" Foreground="#15803d" FontSize="11"/>
+                <TextBlock x:Name="TxtStatusBarOnline" Text="—" Foreground="#15803d" FontSize="11"/>
                 <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
-                <TextBlock Text="4 cert" Foreground="#1D4ED8" FontSize="11"/>
+                <TextBlock x:Name="TxtStatusBarCert" Text="—" Foreground="#1D4ED8" FontSize="11"/>
                 <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
-                <TextBlock Text="3/4 PC" Foreground="#7c3aed" FontSize="11"/>
+                <TextBlock x:Name="TxtStatusBarCrOpen" Text="—" Foreground="#7c3aed" FontSize="11"/>
                 <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>
                 <TextBlock x:Name="StatusBarMsg" Text="Pronto" Foreground="#64748b" FontSize="11"/>
                 <TextBlock Text="  │  " Foreground="#94a3b8" FontSize="11"/>

@@ -2031,7 +2031,7 @@ public partial class MainWindow : Window
     private void BtnGenerateCert_Click(object s, RoutedEventArgs e)
     {
         if (NetGrid.SelectedItem is DeviceRow d)
-            SetStatus($"🔐 Generazione cert per {d.Name} ({d.Ip})... (demo)");
+            SetStatus($"⚠️ Generazione certificato non ancora implementata (richiede CA/Certportal configurato)");
         else
             SetStatus("⚠️ Seleziona un device dalla lista");
     }
@@ -2165,7 +2165,7 @@ public partial class MainWindow : Window
         SetStatus("🔄 Clicca Scansiona per aggiornare i device in rete");
 
     private void BtnNewCert_Click(object s, RoutedEventArgs e) =>
-        SetStatus("✨ Seleziona device e genera certificato... (demo)");
+        SetStatus("⚠️ Generazione certificato non ancora implementata (richiede CA/Certportal configurato)");
 
     private void BtnRevoke_Click(object s, RoutedEventArgs e)
     {
@@ -2175,26 +2175,26 @@ public partial class MainWindow : Window
                 $"Revocare il certificato di {c.Name}?\n\nIl device non potrà più connettersi a {_config.Ssid}.",
                 "Conferma revoca", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (r == MessageBoxResult.Yes)
-                SetStatus($"⏸ Certificato {c.Name} revocato (demo)");
+                SetStatus($"⚠️ Revoca certificato non ancora implementata (richiede CA/Certportal configurato)");
         }
         else SetStatus("⚠️ Seleziona un certificato");
     }
 
     private void BtnInstallApp_Click(object s, RoutedEventArgs e) =>
-        SetStatus("📦 Seleziona app e PC target... (demo)");
+        SetStatus("⚠️ Distribuzione app non ancora implementata");
 
     private void BtnUploadApp_Click(object s, RoutedEventArgs e) =>
-        SetStatus("📤 Upload installer custom... (demo)");
+        SetStatus("⚠️ Upload installer custom non ancora implementato");
 
     private void BtnClearQueue_Click(object s, RoutedEventArgs e) =>
-        SetStatus("🗑 Coda svuotata (demo)");
+        SetStatus("⚠️ Gestione coda non ancora implementata");
 
     private void BtnOpsiCreate_Click(object s, RoutedEventArgs e) =>
-        SetStatus("🚀 Wizard creazione pacchetto OPSI... (demo)");
+        SetStatus("⚠️ Creazione pacchetto OPSI non ancora implementata");
 
     private void BtnOpsiUpdate_Click(object s, RoutedEventArgs e)
     {
-        if (OpsiGrid.SelectedItem is OpsiRow p) SetStatus($"⬆ Aggiornamento {p.Name}... (demo)");
+        if (OpsiGrid.SelectedItem is OpsiRow p) SetStatus($"⚠️ Aggiornamento pacchetto OPSI non ancora implementato");
         else SetStatus("⚠️ Seleziona un pacchetto");
     }
 
@@ -2204,7 +2204,7 @@ public partial class MainWindow : Window
         {
             if (MessageBox.Show($"Eliminare {p.Name}?", "Conferma",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
-                SetStatus($"🗑 {p.Name} eliminato (demo)");
+                SetStatus($"⚠️ Eliminazione pacchetto OPSI non ancora implementata");
         }
         else SetStatus("⚠️ Seleziona un pacchetto");
     }
@@ -2212,7 +2212,7 @@ public partial class MainWindow : Window
     private void BtnRunScript_Click(object s, RoutedEventArgs e)
     {
         if (PcGrid.SelectedItem is PcRow p && p.Status.Contains("Online"))
-            SetStatus($"📜 Script inviato a {p.Name}... (demo)");
+            SetStatus($"⚠️ Invio script non ancora implementato");
         else SetStatus("⚠️ Seleziona un PC online");
     }
 
@@ -2292,7 +2292,7 @@ public partial class MainWindow : Window
     }
 
     private void BtnUpdateAgent_Click(object s, RoutedEventArgs e) =>
-        SetStatus("🔄 Aggiornamento agent... (demo)");
+        SetStatus("⚠️ Aggiornamento agent da remoto non ancora implementato");
 
     // ═══════════════════════════════════════════════════════════════
     //  TAB SCCM
@@ -2647,7 +2647,23 @@ public partial class MainWindow : Window
     }
 
     // ── Ribbon handlers ──────────────────────────────────────────────
-    private void RibbonTab_Click(object s, RoutedEventArgs e) { }
+    private void RibbonTab_Click(object s, RoutedEventArgs e)
+    {
+        if (s is not Button btn) return;
+        var tag = btn.Tag?.ToString();
+
+        RibbonTabHome.Style  = (Style)FindResource("RibbonTab");
+        RibbonTabView.Style  = (Style)FindResource("RibbonTab");
+        RibbonTabTools.Style = (Style)FindResource("RibbonTab");
+        btn.Style = (Style)FindResource("RibbonTabActive");
+
+        switch (tag)
+        {
+            case "view":  MainTabs.SelectedIndex = 7; break;  // Richieste CR — stato deploy/PXE
+            case "tools": MainTabs.SelectedIndex = 0; break;  // Rete e Device — ping/WoL/scan
+            // "home": nessuna navigazione forzata, resta sulla sezione corrente
+        }
+    }
 
     private void RibbonBtnNuovo_Click(object s, RoutedEventArgs e)
     {
@@ -2815,6 +2831,11 @@ public partial class MainWindow : Window
             DashFeed.ItemsSource    = feedItems.Take(12).ToList();
             TxtDashLastRefresh.Text = $"Aggiornato: {DateTime.Now:HH:mm:ss}";
             UpdateNavBadges(wfRunning, crOpen);
+
+            // Status bar globale — dati reali, non più placeholder statici
+            TxtStatusBarOnline.Text = pcTotal > 0 ? $"{pcOnline}/{pcTotal} online" : "0/0 online";
+            TxtStatusBarCert.Text   = $"{Database.GetCerts().Count} cert";
+            TxtStatusBarCrOpen.Text = $"{crOpen} CR aperte";
         }
         catch (Exception ex) { App.Log($"[Dashboard] {ex.Message}"); }
     }
