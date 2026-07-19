@@ -106,11 +106,14 @@ I workflow sono sequenze di step configurabili via GUI, assegnabili a singoli PC
 
 Il server è un'API Flask + SQLite (porta 9091 di default). È un componente **separato** dal client: il client (NovaSCM.exe) gira solo su Windows, il server invece gira ovunque ci sia Python o Docker — Linux, Windows, macOS.
 
-**Requisiti:**
-- Docker (qualsiasi OS) — **opzione consigliata**, oppure
-- Python 3.12 nativo
+**Quale opzione scegliere:**
+- **Non hai esperienza con Linux o server** → Opzione 1 (Docker). È la via più semplice, funziona uguale su Windows/Mac/Linux.
+- **Hai già un server/VPS Linux e sai usare il terminale** → Opzione 2 (Python nativo), con l'esempio di servizio systemd incluso sotto.
+- **Usi già Proxmox** → Opzione 3, automatizza tutto in un comando. Se non sai cos'è Proxmox, ignora questa opzione.
 
-### Opzione 1 — Docker (consigliato, qualsiasi sistema operativo)
+### Opzione 1 — Docker (consigliato, qualsiasi sistema operativo, nessuna esperienza Linux richiesta)
+
+Prerequisiti: [Docker Desktop](https://www.docker.com/products/docker-desktop/) installato (Windows/Mac) o Docker Engine (Linux), e [Git](https://git-scm.com/downloads) per scaricare il codice. Apri un terminale (su Windows: PowerShell) ed esegui:
 
 ```bash
 git clone https://github.com/ClaudioBecchis/NovaSCM.git
@@ -120,7 +123,9 @@ docker compose up -d
 
 L'API sarà disponibile su `http://localhost:9091`. Vedi `server/README.md` per le variabili d'ambiente (API key, abilitazione PXE, ecc.).
 
-### Opzione 2 — Python nativo (qualsiasi Linux/Windows/macOS con Python 3.12)
+### Opzione 2 — Python nativo (richiede un minimo di dimestichezza con la riga di comando)
+
+Prerequisito: [Python 3.12](https://www.python.org/downloads/) installato (su Linux il comando è spesso `python3` invece di `python`).
 
 ```bash
 cd NovaSCM/server
@@ -128,9 +133,34 @@ pip install -r requirements.txt
 python api.py
 ```
 
-Per farlo girare come servizio persistente in background serve un supervisore di processo (systemd su Linux, NSSM/Task Scheduler su Windows, ecc.) configurato manualmente — non incluso in questo comando.
+Questo comando avvia il server solo finché il terminale resta aperto. Per farlo girare in background in modo persistente su **Linux con systemd**, esempio completo:
+
+```bash
+# 1. Crea il file di unit (sostituisci /percorso/NovaSCM con il path reale)
+sudo tee /etc/systemd/system/novascm.service << 'EOF'
+[Unit]
+Description=NovaSCM Server
+After=network.target
+
+[Service]
+WorkingDirectory=/percorso/NovaSCM/server
+ExecStart=/usr/bin/python3 api.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 2. Attiva e avvia il servizio
+sudo systemctl daemon-reload
+sudo systemctl enable --now novascm
+```
+
+Su **Windows**, per farlo persistere in background si può usare [NSSM](https://nssm.cc/) o il Task Scheduler configurato manualmente (nessun equivalente diretto di systemd).
 
 ### Opzione 3 — Proxmox LXC automatico
+
+> Salta questa opzione se non usi già Proxmox — non è necessaria per far funzionare NovaSCM.
 
 Se il tuo ambiente è un container LXC Proxmox (Debian), lo script `server/deploy/install-flask-ct.sh` automatizza tutto (dipendenze, Samba, unit systemd incluso):
 
