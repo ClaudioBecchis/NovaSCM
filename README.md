@@ -253,6 +253,24 @@ iwr http://<SERVER>:9091/api/download/agent-install.ps1 | iex
 
 ---
 
+## Cosa manca da integrare
+
+Funzionalità presenti nell'interfaccia ma non ancora collegate a una vera implementazione. Contributi benvenuti.
+
+**Certificati WiFi EAP-TLS** (tab Certificati — Genera/Revoca)
+- Serve una CA (Certificate Authority) reale che emetta certificati X.509 client, o l'integrazione con un servizio esterno tipo un "Certportal" (menzionato nel codice come dipendenza prevista ma non implementata)
+- Il pulsante Revoca dovrebbe invalidare il certificato lato CA/RADIUS, non solo aggiornare un flag locale
+
+**Gestione pacchetti OPSI** (tab OPSI — Wizard creazione, Upload, Aggiorna, Elimina, Invio script)
+- Serve uno storage reale per gli installer (upload file, versionamento)
+- L'esecuzione remota richiede un canale verso l'agent sul PC target (l'agent già fa polling ogni 30s — si potrebbe estendere il protocollo esistente invece di crearne uno nuovo)
+- Il tab ha CRUD parziale: lista/stato pacchetti funziona, le azioni di modifica no
+
+**Aggiornamento agent da remoto** (tab PC — pulsante Aggiorna agent)
+- L'agent espone già un endpoint `/api/version` per il self-update automatico (vedi sezione Server API) — questo pulsante dovrebbe forzare quel check invece di essere uno stub
+
+---
+
 ## Build
 
 ```bash
