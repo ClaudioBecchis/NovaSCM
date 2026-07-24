@@ -2718,26 +2718,34 @@ public partial class MainWindow : Window
             var json = await _apiSvc!.GetPxeSettingsJsonAsync();
             var d = System.Text.Json.JsonDocument.Parse(json).RootElement;
 
-            ChkPxeEnabled.IsChecked        = d.GetProperty("pxe_enabled").GetString() == "1";
-            ChkPxeAutoProvision.IsChecked  = d.GetProperty("pxe_auto_provision").GetString() == "1";
-            TxtPxePcPrefix.Text            = d.GetProperty("pxe_pc_prefix").GetString();
-            TxtPxeDefaultDomain.Text       = d.GetProperty("pxe_default_domain").GetString();
-            TxtPxeDefaultOu.Text           = d.GetProperty("pxe_default_ou").GetString();
-            TxtPxeDefaultDcIp.Text         = d.GetProperty("pxe_default_dc_ip").GetString();
-            TxtPxeDefaultJoinUser.Text     = d.GetProperty("pxe_default_join_user").GetString();
-            TxtPxeDefaultWorkflowId.Text   = d.GetProperty("pxe_default_workflow_id").GetString();
-            TxtPxeWimIndex.Text            = d.GetProperty("pxe_wim_index").GetString();
-            TxtPxeWimPath.Text             = d.GetProperty("pxe_install_wim_path").GetString();
-            TxtPxeSmbDomain.Text           = d.GetProperty("pxe_smb_domain").GetString();
-            TxtPxeSmbUser.Text             = d.GetProperty("pxe_smb_user").GetString();
-            TxtPxeStaticUrl.Text           = d.GetProperty("pxe_static_url").GetString();
+            // BUG: prima usava d.GetProperty(...).GetString() per 14+ campi —
+            // se un campo mancava (DB evoluto senza migrazione, client vecchio
+            // vs server nuovo) o non era stringa, lanciava e abortiva l'intero
+            // reload. Helper difensivo: campo mancante/non-stringa → "".
+            static string Str(System.Text.Json.JsonElement el, string key) =>
+                el.TryGetProperty(key, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
+                    ? v.GetString() ?? "" : "";
+
+            ChkPxeEnabled.IsChecked        = Str(d, "pxe_enabled") == "1";
+            ChkPxeAutoProvision.IsChecked  = Str(d, "pxe_auto_provision") == "1";
+            TxtPxePcPrefix.Text            = Str(d, "pxe_pc_prefix");
+            TxtPxeDefaultDomain.Text       = Str(d, "pxe_default_domain");
+            TxtPxeDefaultOu.Text           = Str(d, "pxe_default_ou");
+            TxtPxeDefaultDcIp.Text         = Str(d, "pxe_default_dc_ip");
+            TxtPxeDefaultJoinUser.Text     = Str(d, "pxe_default_join_user");
+            TxtPxeDefaultWorkflowId.Text   = Str(d, "pxe_default_workflow_id");
+            TxtPxeWimIndex.Text            = Str(d, "pxe_wim_index");
+            TxtPxeWimPath.Text             = Str(d, "pxe_install_wim_path");
+            TxtPxeSmbDomain.Text           = Str(d, "pxe_smb_domain");
+            TxtPxeSmbUser.Text             = Str(d, "pxe_smb_user");
+            TxtPxeStaticUrl.Text           = Str(d, "pxe_static_url");
             // Le password (join/admin/smb) sono mascherate dal server con "••••••••" se già impostate — non le ricarichiamo nel campo per non sovrascriverle involontariamente al salvataggio.
 
-            var applyMode = d.GetProperty("pxe_apply_mode").GetString();
+            var applyMode = Str(d, "pxe_apply_mode");
             foreach (ComboBoxItem it in CmbPxeApplyMode.Items)
                 if ((string)it.Tag == applyMode) { CmbPxeApplyMode.SelectedItem = it; break; }
 
-            var wimMode = d.GetProperty("pxe_install_wim_mode").GetString();
+            var wimMode = Str(d, "pxe_install_wim_mode");
             foreach (ComboBoxItem it in CmbPxeWimMode.Items)
                 if ((string)it.Tag == wimMode) { CmbPxeWimMode.SelectedItem = it; break; }
 
@@ -4102,7 +4110,14 @@ public partial class MainWindow : Window
                 AdminPassword   = crData.TryGetProperty("admin_pass", out var ap) ? ap.GetString() ?? "" : "",
                 WingetPackages  = software,
                 IncludeAgent    = false,
-                NovaSCMCrApiUrl = _config.NovaSCMApiUrl
+                NovaSCMCrApiUrl = _config.NovaSCMApiUrl,
+                // BUG: NovaSCMApiKey non veniva impostata (a differenza di
+                // BuildDeployConfigFromUi) — nel postinstall.ps1 generato,
+                // Report-Step/check-in e la schermata OSD ricevevano una
+                // apikey vuota, quindi ogni chiamata di telemetria falliva con
+                // 401/403 (silenziosamente ingoiata) e l'OSD non si
+                // autenticava. "File generati" ma tracking/OSD non funzionanti.
+                NovaSCMApiKey   = _config.NovaSCMApiKey,
             };
             var ps1 = BuildPostInstallScript(cfg);
             File.WriteAllText(Path.Combine(folder, "postinstall.ps1"), ps1, System.Text.Encoding.UTF8);
@@ -6131,7 +6146,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
     private void DrawSpeedArc(System.Windows.Controls.Canvas canvas, double ratio, string colorHex)
     {
         canvas.Children.Clear();
-        double w = 140, h = 140, cx = 70, cy = 80, r = 54;
+        double cx = 70, cy = 80, r = 54;
         var gray  = System.Windows.Media.Color.FromRgb(30, 42, 60);
         var color = (System.Windows.Media.Color)
             System.Windows.Media.ColorConverter.ConvertFromString(colorHex)!;
