@@ -116,7 +116,11 @@ set /a i=0
 set /a i+=1
 echo try %i% >> %LOG%
 net use * /delete /y >> %LOG% 2>&1
-net use Z: %SMB_SHARE% /user:%SMB_USER% %SMB_PASS% >> %LOG% 2>&1
+rem BUG: valori non quotati — una SMB_PASS con &,|,<,>,^ (plausibile in una
+rem password forte generata a caso) veniva interpretata da cmd.exe come
+rem operatore di shell (concatenazione comandi/redirezione) invece che come
+rem testo letterale della password, rompendo il parsing o iniettando comandi.
+net use Z: "%SMB_SHARE%" /user:"%SMB_USER%" "%SMB_PASS%" >> %LOG% 2>&1
 if %errorlevel%==0 goto mounted
 if %i% geq 25 goto fail
 if %i%==5 echo   ...tentativo %i%/25, continuo a provare...
