@@ -400,7 +400,13 @@ public partial class OsdWindow : Window
             if (_steps.Any() && _steps.All(x => x.Status is "done" or "skip"))
                 ShowCompleted();
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // Schermo kiosk, nessuno guarda i log live: senza questo un bug di
+            // parsing/logica fa "bloccare" lo schermo ogni poll senza traccia.
+            try { PolarisManager.App.Log($"OsdWindow.PollAsync: {ex.GetType().Name}: {ex.Message}"); }
+            catch { /* logging best-effort */ }
+        }
     }
 
     // ── Ring arc ─────────────────────────────────────────────────────────────
@@ -532,6 +538,17 @@ public partial class OsdWindow : Window
     {
         if (!_completed) e.Cancel = true;
         base.OnClosing(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        // SEC/leak: senza questo i tre timer continuano a girare (poll HTTP ogni
+        // 3s, tick UI ogni 1s) anche a finestra chiusa — es. dopo Ctrl+Shift+Esc
+        // prima del completamento del deploy.
+        _pollTimer.Stop();
+        _elapsedTimer.Stop();
+        _clockTimer.Stop();
+        base.OnClosed(e);
     }
 
     private void Window_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)

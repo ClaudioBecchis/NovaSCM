@@ -48,6 +48,20 @@ def start_tftp_server(dist_dir: str, host: str = "0.0.0.0", port: int = 69) -> N
         )
         return
 
+    # SEC: a differenza degli endpoint HTTP equivalenti (_is_pxe_allowed in
+    # api.py), tftpy non espone un hook per filtrare le richieste UDP/69 per
+    # IP sorgente prima di servire un file statico esistente (dyn_file_func
+    # scatta solo per file assenti). Chiunque raggiunga la porta 69/udp può
+    # scaricare tutto il contenuto di dist_dir. Mitigare a livello di
+    # firewall/VLAN (restringere UDP/69 alla subnet PXE), non solo con
+    # NOVASCM_PXE_ALLOWED_SUBNETS che qui non si applica.
+    log.warning(
+        "TFTP (UDP/%d) non applica l'allow-list di subnet PXE — a differenza "
+        "degli endpoint HTTP equivalenti, chiunque raggiunga questa porta può "
+        "scaricare i file in %s. Restringere l'accesso a livello di firewall/VLAN.",
+        port, dist_dir,
+    )
+
     _launch_tftp_thread()
 
 

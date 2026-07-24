@@ -197,7 +197,14 @@ public partial class CrDebugWindow : Window
             var crJson = await http.GetStringAsync($"{_crApiBase}/{_crId}");
             UpdateHeader(JsonDocument.Parse(crJson).RootElement);
         }
-        catch { /* Ignora errori di rete — riprova al prossimo tick */ }
+        catch (Exception ex)
+        {
+            // Riprova al prossimo tick, ma logga: un errore persistente (non solo
+            // di rete, es. _crId=0 per un CR senza "id" nel JSON) altrimenti resta
+            // invisibile e la finestra sembra "bloccata" senza motivo apparente.
+            try { App.Log($"CrDebugWindow.RefreshStepsAsync: {ex.GetType().Name}: {ex.Message}"); }
+            catch { /* logging best-effort */ }
+        }
     }
 
     // ── Header CR ─────────────────────────────────────────────────────────────

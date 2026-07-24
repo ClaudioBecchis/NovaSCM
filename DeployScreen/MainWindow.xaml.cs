@@ -367,7 +367,12 @@ namespace NovaSCMDeployScreen
                 if (data == null) return;
                 Dispatcher.Invoke(() => ApplyServerState(data));
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Schermo kiosk, nessuno guarda i log live: senza questo un bug di
+                // parsing/logica fa "bloccare" lo schermo ogni poll senza traccia.
+                System.Diagnostics.Debug.WriteLine($"DeployScreen.FetchAsync: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         private void ApplyServerState(PcWorkflowResponse data)

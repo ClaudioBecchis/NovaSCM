@@ -63,9 +63,13 @@ public class ConfigService
             var encrypted = ProtectedData.Protect(bytes, null, DataProtectionScope.CurrentUser);
             return Convert.ToBase64String(encrypted);
         }
-        catch
+        catch (Exception ex)
         {
-            // Fallback: plain base64 (es. Kaspersky blocca DPAPI)
+            // Fallback: plain base64 (es. Kaspersky blocca DPAPI). Loggato perché
+            // significa che un campo sensibile (password/API key) verrà salvato
+            // in una forma reversibile invece che cifrata — l'utente deve saperlo.
+            try { PolarisManager.App.Log($"ConfigService.Encrypt: DPAPI non disponibile, fallback plain base64 ({ex.GetType().Name}: {ex.Message})"); }
+            catch { /* logging best-effort */ }
             return "plain:" + Convert.ToBase64String(Encoding.UTF8.GetBytes(plainText));
         }
     }
@@ -83,8 +87,15 @@ public class ConfigService
             var decrypted = ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser);
             return Encoding.UTF8.GetString(decrypted);
         }
-        catch
+        catch (Exception ex)
         {
+            // Se il blob DPAPI è stato cifrato con un profilo Windows diverso
+            // (config.json copiato su un'altra macchina/reinstallo profilo), qui
+            // si restituirebbe il base64 cifrato grezzo come se fosse la password
+            // in chiaro — meglio loggare per far capire perché l'auth fallisce
+            // "senza motivo" invece di lasciare l'utente a indovinare.
+            try { PolarisManager.App.Log($"ConfigService.Decrypt: impossibile decifrare, valore restituito as-is ({ex.GetType().Name}: {ex.Message})"); }
+            catch { /* logging best-effort */ }
             return encrypted; // già in chiaro o corrotto — restituisci as-is
         }
     }
