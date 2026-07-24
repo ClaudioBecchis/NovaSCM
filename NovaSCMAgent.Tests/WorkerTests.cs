@@ -66,4 +66,39 @@ public class WorkerTests
     {
         Assert.True(EvalCondition("unknown_condition_xyz"));
     }
+
+    // ShouldStopOnError è private — testata tramite riflessione, stesso pattern
+    private static bool StopOnError(string suErr)
+    {
+        var method = typeof(Worker).GetMethod(
+            "ShouldStopOnError",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+        return (bool)method!.Invoke(null, [suErr])!;
+    }
+
+    [Theory]
+    [InlineData("continua")]
+    [InlineData("continue")]
+    [InlineData("CONTINUE")]
+    [InlineData(" continua ")]
+    public void ShouldStopOnError_ContinuaOrContinue_ReturnsFalse(string suErr)
+    {
+        // BUG regressione: case/spazi non normalizzati facevano fermare il
+        // workflow anche quando l'intento era proseguire.
+        Assert.False(StopOnError(suErr));
+    }
+
+    [Theory]
+    [InlineData("stop")]
+    [InlineData("retry")]
+    [InlineData("")]
+    [InlineData("typo_sconosciuto")]
+    public void ShouldStopOnError_AnythingElse_ReturnsTrue(string suErr)
+    {
+        // BUG regressione: prima qualunque valore diverso da "stop" veniva
+        // trattato come "continua" silenziosamente (fail-open). Whitelist
+        // esplicita: solo continua/continue fanno proseguire, tutto il resto
+        // ferma il workflow (fail-safe).
+        Assert.True(StopOnError(suErr));
+    }
 }

@@ -20,6 +20,13 @@ public class Worker : BackgroundService
         return true;  // condizione sconosciuta → esegui comunque
     }
 
+    // Estratto da RunWorkflowAsync per essere testabile in isolamento (stesso
+    // pattern di EvaluateCondition). Whitelist esplicita: continua SOLO per
+    // "continua"/"continue" — qualunque altro valore (typo, "stop", "retry"
+    // esaurito, sconosciuto) ferma il workflow (fail-safe).
+    private static bool ShouldStopOnError(string suErr) =>
+        suErr.Trim().ToLowerInvariant() is not ("continua" or "continue");
+
     private readonly ILogger<Worker> _log;
     private readonly ApiClient       _api;
     private readonly StepExecutor    _exec;
@@ -320,13 +327,7 @@ public class Worker : BackgroundService
             // fallito-e-proseguito), che potrebbe avere side-effect non idempotenti.
             completedStepIds.Add(stepId);
 
-            // SEC/BUG: whitelist esplicita dei valori che fanno proseguire il
-            // workflow dopo un errore — prima qualunque valore diverso da "stop"
-            // (typo, valore non previsto) veniva trattato come "continua"
-            // silenziosamente (fail-open). Ora solo "continua"/"continue" fanno
-            // proseguire; "stop", "retry" esaurito o valori sconosciuti fermano
-            // il workflow (fail-safe) — coerente col default "stop" più sopra.
-            if (!result.Ok.Value && suErr is not ("continua" or "continue"))
+            if (!result.Ok.Value && ShouldStopOnError(suErr))
             {
                 _log.LogError("Step fallito con su_errore='{SuErr}' — workflow interrotto", suErr);
                 AgentConfig.ClearState();
