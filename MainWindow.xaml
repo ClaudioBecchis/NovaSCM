@@ -592,8 +592,8 @@
                 <Button x:Name="NavRichieste"    Tag="7"  Click="Nav_Click"/>
                 <Button x:Name="NavSccm"         Tag="8"  Click="Nav_Click"/>
                 <Button x:Name="NavScript"       Tag="9"  Click="Nav_Click"/>
-                <Button x:Name="NavImpostazioni" Tag="12" Click="Nav_Click"/>
-                <Button x:Name="NavAbout"        Tag="11" Click="Nav_Click"/>
+                <Button x:Name="NavImpostazioni" Tag="15" Click="Nav_Click"/>
+                <Button x:Name="NavAbout"        Tag="12" Click="Nav_Click"/>
             </StackPanel>
         </Grid>
 

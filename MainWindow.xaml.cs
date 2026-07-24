@@ -2928,15 +2928,25 @@ public partial class MainWindow : Window
 
     private void UpdateNavState(int idx)
     {
+        // BUG: l'array precedente confrontava la POSIZIONE nell'array (i) con
+        // idx, ma la posizione non corrisponde al tab index reale — mancavano
+        // NavDashboard e NavScript, e NavImpostazioni/NavAbout stavano in
+        // posizioni (9,10) diverse dai loro tab reali (15,12): l'evidenziazione
+        // del pulsante attivo finiva sul pulsante sbagliato. Ora si confronta
+        // il Tag di ciascun pulsante (= tab index reale) con idx.
         var btns = new[]
         {
-            NavRete, NavCert, NavApp, NavOpsi, NavPc,
-            NavDeploy, NavWorkflow, NavRichieste, NavSccm, NavImpostazioni, NavAbout
+            NavDashboard, NavRete, NavCert, NavApp, NavOpsi, NavPc,
+            NavDeploy, NavWorkflow, NavRichieste, NavSccm, NavScript,
+            NavImpostazioni, NavAbout
         };
         var active   = FindResource("NavSideBtnActive") as System.Windows.Style;
         var inactive = FindResource("NavSideBtn")       as System.Windows.Style;
-        for (int i = 0; i < btns.Length; i++)
-            btns[i].Style = i == idx ? active : inactive;
+        foreach (var b in btns)
+        {
+            var btnTab = int.TryParse(b.Tag?.ToString(), out var t) ? t : -1;
+            b.Style = btnTab == idx ? active : inactive;
+        }
 
         TxtNavSection.Text = idx >= 0 && idx < _navSections.Length
             ? _navSections[idx] : "";
