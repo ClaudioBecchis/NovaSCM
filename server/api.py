@@ -657,7 +657,11 @@ def init_db():
                 if "duplicate column name" not in str(e).lower():
                     log.warning("Migrazione %s.%s: %s", table, col, e)
 
-_SENSITIVE = {"join_pass", "admin_pass"}
+# SEC: odj_blob (output di djoin.exe) è funzionalmente equivalente a una
+# credenziale di join dominio pre-autorizzata — chi lo possiede può unire una
+# macchina al dominio senza conoscere alcuna password. Va rimosso dalle
+# risposte non-sensitive come join_pass/admin_pass.
+_SENSITIVE = {"join_pass", "admin_pass", "odj_blob"}
 
 def row_to_dict(row, include_sensitive: bool = False):
     d = dict(row)
@@ -2293,6 +2297,34 @@ def _get_setting(key: str, default: str = "") -> str:
     return row["value"] if row else default
 
 
+def _resolve_admin_pass(d: dict) -> str:
+    """Ritorna la password Administrator locale per il deploy di questo PC.
+    Priorità: admin_pass della CR → pxe_default_admin_pass configurata →
+    password casuale generata e PERSISTITA nella CR (recuperabile dall'admin
+    via dashboard). SEC: mai un fallback hardcoded — 'Polaris2026!' era
+    committato nel sorgente del repo PUBBLICO, quindi ogni deploy non
+    configurato esplicitamente ereditava una password admin nota a chiunque
+    leggesse il codice."""
+    ap = d.get("admin_pass") or _get_setting("pxe_default_admin_pass", "")
+    if ap:
+        return ap
+    generated = secrets.token_urlsafe(12)
+    pc_name = (d.get("pc_name") or "").upper().strip()
+    if pc_name:
+        try:
+            with get_db_ctx() as conn:
+                conn.execute(
+                    "UPDATE cr SET admin_pass=? WHERE pc_name=? AND (admin_pass IS NULL OR admin_pass='')",
+                    (generated, pc_name))
+                conn.commit()
+            log.warning("admin_pass non configurata per %s — generata password casuale e "
+                        "salvata nella CR (recuperabile via dashboard)", pc_name)
+        except Exception as exc:
+            log.error("Impossibile persistere admin_pass generata per %s: %s", pc_name, exc)
+    d["admin_pass"] = generated  # per l'uso corrente nella generazione XML
+    return generated
+
+
 def _sizeof_fmt(num: int) -> str:
     """Formatta dimensione file in formato leggibile."""
     for unit in ("B", "KB", "MB", "GB"):
@@ -2596,10 +2628,12 @@ def create_pxe_host():
             conn.commit()
             row = conn.execute("SELECT * FROM pxe_hosts WHERE mac=?", (mac,)).fetchone()
             return jsonify(dict(row)), 201
-        except Exception as exc:
+        except sqlite3.IntegrityError as exc:
             if "UNIQUE" in str(exc):
                 return jsonify({"error": f"MAC {mac} già registrato"}), 409
-            raise
+            # FK constraint (cr_id/workflow_id inesistente) o altro vincolo —
+            # 400 controllato invece di un 500 grezzo non gestito.
+            return jsonify({"error": f"Riferimento non valido: {exc}"}), 400
 
 
 @app.route("/api/pxe/hosts/<mac>", methods=["PUT"])
@@ -2615,12 +2649,18 @@ def update_pxe_host(mac: str):
         return jsonify({"error": "Nessun campo aggiornabile fornito"}), 400
     if "boot_action" in updates and updates["boot_action"] not in _VALID_BOOT_ACTIONS:
         return jsonify({"error": f"boot_action non valido: {updates['boot_action']}. Valori ammessi: {', '.join(sorted(_VALID_BOOT_ACTIONS))}"}), 400
+    if "pc_name" in updates and updates["pc_name"]:
+        updates["pc_name"] = str(updates["pc_name"]).upper().strip()
     set_clause = ", ".join(f"{k}=?" for k in updates)
     values     = list(updates.values()) + [norm]
     with get_db_ctx() as conn:
-        rowcount = conn.execute(
-            f"UPDATE pxe_hosts SET {set_clause} WHERE mac=?", values
-        ).rowcount
+        try:
+            rowcount = conn.execute(
+                f"UPDATE pxe_hosts SET {set_clause} WHERE mac=?", values
+            ).rowcount
+        except sqlite3.IntegrityError as exc:
+            # FK constraint (cr_id/workflow_id inesistente) — 400 invece di 500.
+            return jsonify({"error": f"Riferimento non valido: {exc}"}), 400
         if rowcount == 0:
             return jsonify({"error": "Host non trovato"}), 404
         conn.commit()
@@ -2714,6 +2754,7 @@ def serve_pxe_file(name: str):
 # ── ENDPOINT AUTOUNATTEND DINAMICO (no auth, subnet allow-list) ──────────────
 
 @app.route("/api/autounattend/<pc_name>", methods=["GET"])
+@limiter.limit("30 per minute; 200 per hour")
 def serve_autounattend_pxe(pc_name: str):
     """
     Genera e serve autounattend.xml dinamico per il PC specificato (endpoint PXE).
@@ -2766,7 +2807,7 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
     xou   = _x(d.get("ou", ""))
     xju   = _x(d.get("join_user", ""))
     xjp   = _x(d.get("join_pass", ""))
-    xap   = _x(d.get("admin_pass") or _get_setting("pxe_default_admin_pass", "Polaris2026!"))
+    xap   = _x(_resolve_admin_pass(d))
     xkey  = _x(deploy_token)
     xurl  = _x(server_url)
 
@@ -3032,6 +3073,7 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
 
 
 @app.route("/api/unattend-specialize/<pc_name>", methods=["GET"])
+@limiter.limit("30 per minute; 200 per hour")
 def serve_unattend_specialize(pc_name: str):
     """
     Genera e serve unattend.xml minimo (solo pass specialize/oobeSystem) per il
@@ -3081,7 +3123,7 @@ def _build_unattend_specialize_xml(d: dict) -> str:
     xou  = _x(d.get("ou", ""))
     xju  = _x(d.get("join_user", ""))
     xjp  = _x(d.get("join_pass", ""))
-    xap  = _x(d.get("admin_pass") or _get_setting("pxe_default_admin_pass", "Polaris2026!"))
+    xap  = _x(_resolve_admin_pass(d))
     xkey = _x(deploy_token)
     xurl = _x(server_url)
 

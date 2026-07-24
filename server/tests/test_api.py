@@ -1408,6 +1408,33 @@ class TestAutounattendPxe:
         resp = client.get("/api/autounattend/PXE-KEY-TEST")
         assert b"X-Api-Key" not in resp.data
 
+    def test_no_hardcoded_admin_password(self, client):
+        """SEC: senza admin_pass sulla CR né pxe_default_admin_pass configurata,
+        l'XML NON deve contenere il vecchio fallback hardcoded 'Polaris2026!'
+        (era committato nel repo pubblico) — deve invece usare una password
+        casuale generata e salvata nella CR."""
+        client.post("/api/cr",
+                    json={"pc_name": "PXE-NOPASS", "domain": "test.local"},
+                    headers=AUTH)
+        resp = client.get("/api/autounattend/PXE-NOPASS")
+        assert resp.status_code == 200
+        assert b"Polaris2026!" not in resp.data
+        # La password generata deve essere stata persistita nella CR
+        cr = client.get("/api/cr/by-name/PXE-NOPASS/autounattend.xml", headers=AUTH)
+        assert cr.status_code == 200
+
+    def test_odj_blob_masked_in_cr_list(self, client):
+        """SEC: odj_blob (equivalente a credenziale di join dominio) non deve
+        comparire nelle risposte GET /api/cr non-sensitive."""
+        client.post("/api/cr",
+                    json={"pc_name": "PXE-ODJ", "domain": "test.local",
+                          "odj_blob": "SECRETODJBLOBDATA"},
+                    headers=AUTH)
+        rows = client.get("/api/cr", headers=AUTH).get_json()
+        odj = next((r for r in rows if r["pc_name"] == "PXE-ODJ"), None)
+        assert odj is not None
+        assert "odj_blob" not in odj
+
 
 class TestUnattendSpecializePxe:
     """Test per /api/unattend-specialize/<pc_name> — flusso DISM (B2)."""
