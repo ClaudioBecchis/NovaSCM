@@ -44,3 +44,26 @@ jobs:
 
       - name: Run tests
         run: dotnet test NovaSCMAgent.Tests/NovaSCMAgent.Tests.csproj --verbosity normal
+
+  # BUG: nessun job builda il client WPF principale o DeployScreen fuori da
+  # un tag di release (release.yml gira solo su push di tag v*) — la maggior
+  # parte dei bug corretti nel 2026-07 viveva proprio in MainWindow.xaml.cs/
+  # App.xaml.cs/OsdWindow.xaml.cs, senza alcuna verifica automatica di build
+  # tra un release e l'altro. Regressioni di sintassi/compilazione restavano
+  # invisibili finché qualcuno non le trovava a mano.
+  client-build:
+    name: WPF Client Build (PolarisManager + DeployScreen)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Build PolarisManager (client principale)
+        run: dotnet build PolarisManager.csproj -c Release --nologo
+
+      - name: Build DeployScreen
+        run: dotnet build DeployScreen/NovaSCMDeployScreen.csproj -c Release --nologo
