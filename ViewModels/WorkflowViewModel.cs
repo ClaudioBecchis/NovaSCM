@@ -60,12 +60,17 @@ public class WorkflowViewModel : ViewModelBase
             Workflows.Clear();
             foreach (var el in doc.RootElement.EnumerateArray())
             {
+                // BUG: leggeva chiavi inglesi (name/description/version/step_count)
+                // ma il server (SELECT * FROM workflows) restituisce le colonne DB
+                // in italiano (nome/descrizione/versione); step_count non esiste
+                // affatto come colonna — ogni riga risultava sempre con nome/
+                // descrizione vuoti, versione sempre 1, step_count sempre 0.
                 Workflows.Add(new WfRow(
                     el.TryGetProperty("id",          out var id)  ? id.GetInt32()         : 0,
-                    el.TryGetProperty("name",        out var nm)  ? nm.GetString()  ?? "" : "",
-                    el.TryGetProperty("description", out var ds)  ? ds.GetString()  ?? "" : "",
-                    el.TryGetProperty("version",     out var ve)  ? ve.GetInt32()         : 1,
-                    el.TryGetProperty("step_count",  out var sc)  ? sc.GetInt32()         : 0
+                    el.TryGetProperty("nome",        out var nm)  ? nm.GetString()  ?? "" : "",
+                    el.TryGetProperty("descrizione", out var ds)  ? ds.GetString()  ?? "" : "",
+                    el.TryGetProperty("versione",    out var ve)  ? ve.GetInt32()         : 1,
+                    0 // step_count: non restituito da GET /api/workflows, richiederebbe una query separata per riga
                 ));
             }
             await LoadAssignmentsAsync();
@@ -86,14 +91,18 @@ public class WorkflowViewModel : ViewModelBase
             Steps.Clear();
             foreach (var el in stepsEl.EnumerateArray())
             {
+                // BUG: leggeva chiavi inglesi (order/name/type/parameters/on_error)
+                // ma il server (SELECT * FROM workflow_steps) restituisce le colonne
+                // DB in italiano (ordine/nome/tipo/parametri/su_errore) — ogni step
+                // risultava con nome/tipo/parametri vuoti e su_errore sempre "stop".
                 Steps.Add(new WfStepRow(
                     el.TryGetProperty("id",          out var id)  ? id.GetInt32()         : 0,
                     workflowId,
-                    el.TryGetProperty("order",       out var or)  ? or.GetInt32()         : 0,
-                    el.TryGetProperty("name",        out var nm)  ? nm.GetString()  ?? "" : "",
-                    el.TryGetProperty("type",        out var tp)  ? tp.GetString()  ?? "" : "",
-                    el.TryGetProperty("parameters",  out var pr)  ? pr.GetString()  ?? "" : "",
-                    el.TryGetProperty("on_error",    out var oe)  ? oe.GetString()  ?? "stop" : "stop",
+                    el.TryGetProperty("ordine",      out var or)  ? or.GetInt32()         : 0,
+                    el.TryGetProperty("nome",        out var nm)  ? nm.GetString()  ?? "" : "",
+                    el.TryGetProperty("tipo",        out var tp)  ? tp.GetString()  ?? "" : "",
+                    el.TryGetProperty("parametri",   out var pr)  ? pr.GetString()  ?? "" : "",
+                    el.TryGetProperty("su_errore",   out var oe)  ? oe.GetString()  ?? "stop" : "stop",
                     el.TryGetProperty("platform",    out var pl)  ? pl.GetString()  ?? "" : ""
                 ));
             }
@@ -111,13 +120,19 @@ public class WorkflowViewModel : ViewModelBase
             Assignments.Clear();
             foreach (var el in doc.RootElement.EnumerateArray())
             {
+                // BUG: leggeva "workflow_name" ma il server restituisce
+                // "workflow_nome" (alias SQL w.nome AS workflow_nome) — nome
+                // workflow sempre vuoto. "progress" non esiste come colonna in
+                // pc_workflows, non è mai stato restituito dal server: resta 0
+                // come placeholder finché non verrà eventualmente implementato
+                // lato server (es. done/total step).
                 Assignments.Add(new WfAssignRow(
                     el.TryGetProperty("id",             out var id) ? id.GetInt32()         : 0,
                     el.TryGetProperty("pc_name",        out var pc) ? pc.GetString()  ?? "" : "",
-                    el.TryGetProperty("workflow_name",  out var wn) ? wn.GetString()  ?? "" : "",
+                    el.TryGetProperty("workflow_nome",  out var wn) ? wn.GetString()  ?? "" : "",
                     el.TryGetProperty("workflow_id",    out var wi) ? wi.GetInt32()         : 0,
                     el.TryGetProperty("status",         out var st) ? st.GetString()  ?? "" : "",
-                    el.TryGetProperty("progress",       out var pg) ? pg.GetInt32()         : 0,
+                    0, // progress: non presente nello schema pc_workflows
                     el.TryGetProperty("assigned_at",    out var aa) ? aa.GetString()  ?? "" : "",
                     el.TryGetProperty("last_seen",      out var ls) ? ls.GetString()  ?? "" : ""
                 ));

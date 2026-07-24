@@ -59,14 +59,16 @@ public class ProxmoxViewModel : ViewModelBase
         var handler = new HttpClientHandler
         {
             ServerCertificateCustomValidationCallback = (_, _, _, _) => true,
-            // BUG: UseCookies di default è true, ma RefreshAsync/GuestActionAsync
-            // impostano l'header "Cookie" a mano su ogni HttpRequestMessage
-            // (PVEAuthCookie) — con UseCookies=true, .NET lancia
-            // InvalidOperationException al momento dell'invio perché l'header
-            // Cookie va gestito solo tramite CookieContainer. Rompeva
-            // sistematicamente ogni azione dopo la connessione (Refresh/Start/
-            // Stop/Reboot), ingoiata dal try/catch e mostrata solo come
-            // "Errore: ..." generico.
+            // NOTA (corretta 2026-07-24): un commit precedente affermava che
+            // l'header "Cookie" impostato a mano su HttpRequestMessage.Headers
+            // con UseCookies=true lancia InvalidOperationException — verificato
+            // empiricamente FALSO (né su DefaultRequestHeaders né su un singolo
+            // HttpRequestMessage .NET solleva alcuna eccezione in questo caso).
+            // UseCookies=false resta comunque corretto: qui l'auth cookie
+            // (PVEAuthCookie) è gestita esplicitamente ad ogni richiesta, quindi
+            // disattivare il CookieContainer automatico evita che eventuali
+            // Set-Cookie di risposta si sovrappongano/duplichino con quella
+            // gestita manualmente — buona pratica, non un fix di un crash reale.
             UseCookies = false,
         };
         _http = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(10) };
