@@ -240,6 +240,7 @@ _AGENT_SCOPED_ENDPOINTS = {
     "download_deploy_screen",       # GET  /api/download/deploy-screen — usato dal flusso wimboot
     "download_agent_sha256",        # GET  /api/download/agent.sha256
     "ui_deploy_client",              # GET  /deploy-client — pagina kiosk OSD (browser, usa ?key=)
+    "get_pc_workflow",               # GET  /api/pc-workflows/<pw_id> — polling di DeployScreen.exe (FetchAsync)
 }
 
 # ── SSE live event broadcaster (dashboard real-time) ────────────────────────

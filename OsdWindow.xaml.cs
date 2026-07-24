@@ -144,6 +144,7 @@ public partial class OsdWindow : Window
 {
     private readonly string  _pcName;
     private readonly string  _apiUrl;
+    private readonly string  _apiKey;
     private readonly DispatcherTimer _pollTimer    = new() { Interval = TimeSpan.FromSeconds(3) };
     private readonly DispatcherTimer _elapsedTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _clockTimer   = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -188,11 +189,14 @@ public partial class OsdWindow : Window
         ("final_reboot",       "Riavvio finale",                 "reboot",           4),
     };
 
-    public OsdWindow(string pcName, string apiUrl)
+    public OsdWindow(string pcName, string apiUrl, string apiKey = "")
     {
         InitializeComponent();
         _pcName = pcName;
         _apiUrl = apiUrl.TrimEnd('/');
+        // BUG: prima non c'era alcun modo di passare una API key a OsdWindow —
+        // il polling verso un endpoint @require_auth falliva sempre con 401.
+        _apiKey = apiKey;
 
         TxtOsdPcName.Text = pcName;
         TxtOsdWfName.Text = "POST-INSTALL";
@@ -334,6 +338,8 @@ public partial class OsdWindow : Window
         try
         {
             using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(5) };
+            if (!string.IsNullOrEmpty(_apiKey))
+                http.DefaultRequestHeaders.Add("X-Api-Key", _apiKey);
             var json = await http.GetStringAsync($"{_apiUrl}/by-name/{_pcName}/steps");
             var doc  = System.Text.Json.JsonDocument.Parse(json);
 

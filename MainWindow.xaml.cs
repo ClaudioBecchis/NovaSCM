@@ -4684,9 +4684,16 @@ if ($usbDrive) {{
     $osdExe = 'C:\Windows\Temp\NovaSCM-OSD.exe'
     Copy-Item ""$usbDrive\NovaSCM.exe"" $osdExe -Force -ErrorAction SilentlyContinue
     if (Test-Path $osdExe) {{
-        $serverBase = if ($_crApi) {{ ($_crApi -replace '/api/cr.*','').TrimEnd('/') }} else {{ '' }}
-        $apiArg = if ($serverBase) {{ ""hostname=$env:COMPUTERNAME domain=WORKGROUP server=$serverBase demo=0"" }} else {{ ""hostname=$env:COMPUTERNAME demo=1"" }}
-        Start-Process $osdExe -ArgumentList $apiArg -WindowStyle Normal -ErrorAction SilentlyContinue
+        # BUG: il formato precedente (hostname=... domain=... server=... demo=...)
+        # non corrispondeva affatto al contratto argv di App.xaml.cs
+        # (App.xaml.cs si aspetta: --osd pcname apiurl apikey oppure
+        # --osd-preview). args[0] non era mai --osd, quindi NovaSCM-OSD.exe
+        # apriva sempre la console admin completa invece della sola schermata
+        # OSD durante l'installazione via USB. apiurl deve essere la base
+        # .../api/cr (stesso valore di $_crApi, non l'host nudo) perche
+        # OsdWindow.PollAsync fa GET {{apiUrl}}/by-name/{{pcName}}/steps.
+        $osdArgs = if ($_crApi) {{ @('--osd', $env:COMPUTERNAME, $_crApi, $_apiKey) }} else {{ @('--osd-preview') }}
+        Start-Process $osdExe -ArgumentList $osdArgs -WindowStyle Normal -ErrorAction SilentlyContinue
         Start-Sleep 2
     }}
 }}

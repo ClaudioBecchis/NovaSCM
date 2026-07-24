@@ -48,7 +48,7 @@ public partial class App : Application
             ex.SetObserved();
         };
 
-        // Modalità OSD: NovaSCM.exe --osd <pcname> <apiurl>
+        // Modalità OSD: NovaSCM.exe --osd <pcname> <apiurl> [apikey]
         //              NovaSCM.exe --osd-preview
         var args = e.Args;
         if (args.Length >= 1 && (args[0] == "--osd" || args[0] == "--osd-preview"))
@@ -59,8 +59,14 @@ public partial class App : Application
             var apiUrl = args[0] == "--osd-preview"
                 ? ""
                 : (args.Length >= 3 ? args[2] : "");
+            // BUG: mancava del tutto un modo per passare l'API key — il
+            // polling di OsdWindow verso un endpoint @require_auth falliva
+            // sempre con 401 quando lanciato con un server reale configurato.
+            var apiKey = args[0] == "--osd-preview"
+                ? ""
+                : (args.Length >= 4 ? args[3] : "");
             Log($"[OSD] Avvio modalità OSD — PC={pcName} API={(string.IsNullOrEmpty(apiUrl) ? "(demo)" : apiUrl)}");
-            var osd = new OsdWindow(pcName, apiUrl);
+            var osd = new OsdWindow(pcName, apiUrl, apiKey);
             MainWindow = osd;
             osd.Show();
         }
