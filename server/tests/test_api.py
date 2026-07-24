@@ -1602,6 +1602,16 @@ class TestTokenScoping:
         r = client.get("/api/pc/PC-WIMBOOT-01/workflow", headers={"X-Api-Key": tok})
         assert r.status_code == 404  # nessun workflow assegnato — non 401/403
 
+    def test_deploy_token_can_poll_cr_steps_by_name(self, client):
+        """OsdWindow.PollAsync (kiosk WPF) e deploy-client.html (kiosk browser)
+        chiamano GET /api/cr/by-name/<pc_name>/steps con la API key/token del
+        deploy in corso — deve essere raggiungibile con un token scoped, non
+        solo con la master key."""
+        _create_cr(client, pc_name="PC-OSD-01")
+        tok = self._make_deploy_token(client, pc_name="PC-OSD-01")
+        r = client.get("/api/cr/by-name/PC-OSD-01/steps", headers={"X-Api-Key": tok})
+        assert r.status_code == 200
+
     def test_deploy_token_cannot_list_cr(self, client):
         tok = self._make_deploy_token(client)
         r = client.get("/api/cr", headers={"X-Api-Key": tok})
