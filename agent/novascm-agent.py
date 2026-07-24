@@ -383,16 +383,23 @@ def run_workflow(cfg, workflow):
 
     state = load_state()
     saved_pw_id = state.get("pw_id", 0)
-    resume_from = state.get("resume_step", 0)
+    # BUG: prima si salvava un singolo "resume_step" (lo step_id del reboot) e
+    # si saltava con "step_id <= resume_from" — step_id è la PK autoincrement
+    # globale della tabella, NON garantita coerente con l'ordine di esecuzione
+    # (ordine). Se un admin riordina gli step o ne inserisce uno nuovo con id
+    # più basso dopo il checkpoint, il confronto numerico salta step mai
+    # eseguiti o rie-esegue step già completati. Ora si traccia l'INSIEME
+    # degli step_id effettivamente completati (non un threshold), corretto
+    # indipendentemente da riordini/inserimenti successivi al checkpoint.
+    completed_step_ids = set(state.get("completed_step_ids", []))
 
-    # BUG-8 (Python agent): verifica che lo stato salvato appartenga a questo workflow
-    if resume_from and saved_pw_id and saved_pw_id != pw_id:
+    if completed_step_ids and saved_pw_id and saved_pw_id != pw_id:
         log.warning(
             f"Stato resume pw_id={saved_pw_id} != workflow corrente pw_id={pw_id} — reset")
         clear_state()
-        resume_from = 0
-    elif resume_from:
-        log.info(f"Riprendo workflow dopo riavvio — da step_id={resume_from}")
+        completed_step_ids = set()
+    elif completed_step_ids:
+        log.info(f"Riprendo workflow dopo riavvio — {len(completed_step_ids)} step già completati")
 
     needs_reboot = False
 
@@ -411,7 +418,7 @@ def run_workflow(cfg, workflow):
             }, api_key)
             return False
 
-        if resume_from and step_id <= resume_from:
+        if step_id in completed_step_ids:
             log.info(f"[{step_num}] {nome} — già completato, salto")
             continue
 
@@ -424,6 +431,7 @@ def run_workflow(cfg, workflow):
                 "output": f"Condizione non soddisfatta: {condizione}",
                 "ts": datetime.now().isoformat()
             }, api_key)
+            completed_step_ids.add(step_id)
             continue
 
         log.info(f"[{step_num}/{len(steps)}] {nome}")
@@ -442,6 +450,7 @@ def run_workflow(cfg, workflow):
                 "step_id": step_id, "status": "skipped",
                 "output": output, "ts": datetime.now().isoformat()
             }, api_key)
+            completed_step_ids.add(step_id)
             continue
 
         status = "done" if ok else "error"
@@ -451,6 +460,10 @@ def run_workflow(cfg, workflow):
             "step_id": step_id, "status": status,
             "output": output, "ts": datetime.now().isoformat()
         }, api_key)
+        # Marca come "processato" a prescindere dall'esito — un resume
+        # successivo non deve ri-eseguire uno step già girato (anche se
+        # fallito-e-proseguito), che potrebbe avere side-effect non idempotenti.
+        completed_step_ids.add(step_id)
 
         if not ok:
             su_errore = step.get("su_errore", "stop")
@@ -463,7 +476,7 @@ def run_workflow(cfg, workflow):
                 return False
 
         if step.get("tipo") == "reboot" and ok:
-            save_state({"pw_id": pw_id, "resume_step": step_id})
+            save_state({"pw_id": pw_id, "completed_step_ids": list(completed_step_ids)})
             log.info("Stato salvato per resume dopo reboot")
             needs_reboot = True
             break

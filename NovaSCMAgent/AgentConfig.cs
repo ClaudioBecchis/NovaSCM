@@ -62,7 +62,12 @@ public class AgentConfig
 
     // ── Stato persistente (per resume dopo reboot) ────────────────────────────
     // Phase: "rebooting" = reboot schedulato, "resumed" = reboot completato e step reboot confermato
-    public record AgentState(int PwId, int ResumeStep, bool HwSent = false, string Phase = "rebooting");
+    // BUG: ResumeStep (soglia numerica su step_id, PK globale non garantita
+    // coerente con l'ordine di esecuzione) è mantenuto solo per log/diagnostica
+    // — la logica di skip-on-resume usa CompletedStepIds (l'insieme reale
+    // degli step processati), corretto anche se il workflow viene riordinato
+    // o modificato tra il checkpoint e il resume.
+    public record AgentState(int PwId, int ResumeStep, bool HwSent = false, string Phase = "rebooting", int[]? CompletedStepIds = null);
 
     public static AgentState? LoadState()
     {
@@ -88,8 +93,8 @@ public class AgentConfig
         File.Move(tmpPath, StatePath, overwrite: true);
     }
 
-    public static void MarkHwSent(int pwId, int resumeStep)
-        => SaveState(new AgentState(pwId, resumeStep, HwSent: true, Phase: "resumed"));
+    public static void MarkHwSent(int pwId, int resumeStep, int[]? completedStepIds = null)
+        => SaveState(new AgentState(pwId, resumeStep, HwSent: true, Phase: "resumed", CompletedStepIds: completedStepIds));
 
     public static void MarkResumed(AgentState state)
         => SaveState(state with { Phase = "resumed" });

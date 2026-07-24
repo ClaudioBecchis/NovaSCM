@@ -202,8 +202,14 @@ public class Worker : BackgroundService
             state = AgentConfig.LoadState();
         }
         var resumeFrom = state?.ResumeStep ?? 0;
+        // BUG: skip-on-resume usava "stepId <= resumeFrom" — resumeFrom è lo
+        // step_id (PK globale) del reboot, non garantito coerente con l'ordine
+        // di esecuzione. Ora si traccia l'insieme reale degli step_id già
+        // processati, corretto anche se il workflow viene riordinato/modificato
+        // tra il checkpoint pre-reboot e la ripresa.
+        var completedStepIds = new HashSet<int>(state?.CompletedStepIds ?? []);
         if (resumeFrom > 0)
-            _log.LogInformation("Resume dopo reboot — da step_id={StepId} (fase: {Phase})", resumeFrom, state?.Phase ?? "none");
+            _log.LogInformation("Resume dopo reboot — {N} step già completati (fase: {Phase})", completedStepIds.Count, state?.Phase ?? "none");
 
         // Lancia DeployScreen sul PC in deploy (solo primo avvio, non su resume)
         if (resumeFrom == 0)
@@ -216,7 +222,7 @@ public class Worker : BackgroundService
             {
                 var hw = HardwareCollector.Collect();
                 await _api.SendHardwareAsync(cfg.ApiUrl, pwId, hw, ct, cfg.ApiKey);
-                AgentConfig.MarkHwSent(pwId, resumeFrom);
+                AgentConfig.MarkHwSent(pwId, resumeFrom, [.. completedStepIds]);
                 _log.LogInformation("Hardware inviato: CPU={Cpu} RAM={Ram}", hw.Cpu, hw.Ram);
             }
             catch (Exception ex) { _log.LogWarning("HW collect: {Err}", ex.Message); }
@@ -238,7 +244,7 @@ public class Worker : BackgroundService
             var suErr   = (step["su_errore"]?.GetValue<string>() ?? "stop").Trim().ToLowerInvariant();
 
             // Salta step già eseguiti (resume)
-            if (resumeFrom > 0 && stepId <= resumeFrom)
+            if (completedStepIds.Contains(stepId))
             {
                 _log.LogInformation("[{N}] {Nome} — già completato, salto", ordine, nome);
                 continue;
@@ -251,6 +257,7 @@ public class Worker : BackgroundService
                 _log.LogInformation("[{N}] {Nome} — SKIP condizione: {Cond}", ordine, nome, condizione);
                 await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, "skipped",
                     $"Condizione non soddisfatta: {condizione}", ct, cfg.ApiKey);
+                completedStepIds.Add(stepId);
                 continue;
             }
 
@@ -296,6 +303,7 @@ public class Worker : BackgroundService
                 // Skipped
                 _log.LogInformation("  → SKIPPED");
                 await _api.ReportStepAsync(cfg.ApiUrl, cfg.PcName, stepId, "skipped", result.Output, ct, cfg.ApiKey);
+                completedStepIds.Add(stepId);
                 continue;
             }
 
@@ -307,6 +315,10 @@ public class Worker : BackgroundService
                                        elapsedSec: sw.Elapsed.TotalSeconds);
             if (!string.IsNullOrWhiteSpace(result.Output))
                 await _api.SendLogAsync(cfg.ApiUrl, pwId, result.Output, ct, cfg.ApiKey);
+            // Marca come "processato" a prescindere dall'esito — un resume
+            // successivo non deve ri-eseguire uno step già girato (anche se
+            // fallito-e-proseguito), che potrebbe avere side-effect non idempotenti.
+            completedStepIds.Add(stepId);
 
             // SEC/BUG: whitelist esplicita dei valori che fanno proseguire il
             // workflow dopo un errore — prima qualunque valore diverso da "stop"
@@ -324,7 +336,8 @@ public class Worker : BackgroundService
             // Reboot: salva stato con fase "rebooting" e lascia che il sistema si riavvii
             if (step["tipo"]?.GetValue<string>() == "reboot" && result.Ok.Value)
             {
-                AgentConfig.SaveState(new AgentConfig.AgentState(pwId, stepId, HwSent: true, Phase: "rebooting"));
+                AgentConfig.SaveState(new AgentConfig.AgentState(pwId, stepId, HwSent: true, Phase: "rebooting",
+                    CompletedStepIds: [.. completedStepIds]));
                 _log.LogInformation("Stato salvato (fase=rebooting) per resume dopo reboot");
                 return;
             }
