@@ -102,6 +102,18 @@ class TestHealth:
         data = client.get("/health").get_json()
         assert "db" not in data
 
+    def test_api_health_alias_returns_200(self, client):
+        """BUG (Grok P2): /api/health matchava il catch-all OPTIONS /api/<path:_>
+        e tornava 405 invece di 200 — monitoraggi che assumono questa
+        convenzione ottenevano un falso negativo."""
+        r = client.get("/api/health")
+        assert r.status_code == 200
+        assert r.get_json()["status"] == "ok"
+
+    def test_api_health_no_auth_required(self, client):
+        r = client.get("/api/health")
+        assert r.status_code == 200
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. Authentication
@@ -709,6 +721,16 @@ class TestVersion:
     def test_get_version_has_version_field(self, client):
         data = client.get("/api/version", headers=AUTH).get_json()
         assert "version" in data
+
+    def test_get_version_falls_back_to_repo_version_json(self, client):
+        """BUG (Grok P1): VERSION_FILE cercava SOLO accanto al DB (tmp_path nei
+        test, /data in Docker) — mai trovato, /api/version tornava sempre il
+        fallback hardcoded "1.0.0" anche con server/version.json presente nel
+        repo. Il fixture 'client' usa un DB in tmp_path (niente version.json
+        lì), quindi questo test passa SOLO se scatta il fallback a
+        _VERSION_FILE_FALLBACK (server/version.json, quello vero nel repo)."""
+        data = client.get("/api/version", headers=AUTH).get_json()
+        assert data["version"] != "1.0.0"
 
     def test_download_exe_not_found(self, client):
         """No actual exe in test env — expect 404."""

@@ -1804,7 +1804,16 @@ def checkin_wf(pc_name):
 
 # ── Auto-update ───────────────────────────────────────────────────────────────
 
+# BUG (Grok P1): VERSION_FILE cercava SOLO accanto al DB (es. /data/version.json
+# in Docker) — ma version.json è distribuito nel repo/immagine accanto ad
+# api.py (server/version.json), non nella directory dati. Se l'admin non ne
+# piazza una copia manualmente in /data, /api/version tornava sempre il
+# fallback hardcoded "1.0.0" invece della versione reale — auto-update client
+# vedeva sempre una versione falsa. Ora: prima /data/version.json (permette
+# all'admin di "annunciare" un nuovo rilascio staging il binario lì), poi
+# fallback al version.json distribuito col codice.
 VERSION_FILE = os.path.join(os.path.dirname(DB), "version.json")
+_VERSION_FILE_FALLBACK = os.path.join(os.path.dirname(os.path.abspath(__file__)), "version.json")
 EXE_FILE     = os.path.join(os.path.dirname(DB), "NovaSCM.exe")
 
 @app.route("/api/events", methods=["GET"])
@@ -1837,12 +1846,13 @@ def sse_events():
 @require_auth
 def get_version():
     """Restituisce la versione corrente disponibile per il download."""
-    if os.path.exists(VERSION_FILE):
-        try:
-            with open(VERSION_FILE) as _vf:
-                return jsonify(json.loads(_vf.read()))
-        except Exception:
-            pass
+    for _path in (VERSION_FILE, _VERSION_FILE_FALLBACK):
+        if os.path.exists(_path):
+            try:
+                with open(_path) as _vf:
+                    return jsonify(json.loads(_vf.read()))
+            except Exception:
+                continue
     return jsonify({"version": "1.0.0", "url": "", "notes": ""}), 200
 
 @app.route("/api/download/NovaSCM.exe", methods=["GET"])
@@ -3148,6 +3158,14 @@ def ui_static(path):
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+# BUG (Grok P2): GET /api/health non aveva una route dedicata — matchava il
+# catch-all CORS "/api/<path:_>" (registrato solo per OPTIONS), tornando 405
+# invece di 200. Monitoraggi/tool esterni che assumono per convenzione
+# /api/health (invece di /health) ottenevano un falso negativo.
+@app.route("/api/health", methods=["GET"])
+def api_health():
+    return health()
 
 # ── Avvio ─────────────────────────────────────────────────────────────────────
 init_db()
