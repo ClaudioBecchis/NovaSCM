@@ -115,7 +115,14 @@ public class ChangeRequestViewModel : ViewModelBase
                 packages      = Packages.ToList()
             });
             Status = $"CR creata per {PcName}";
-            PcName = ""; Notes = "";
+            // BUG: resettava solo PcName/Notes — Domain/Ou/AssignedUser/DcIp/
+            // JoinUser/JoinPass/AdminPass/Packages restavano valorizzati nel
+            // form, quindi la CR successiva ereditava silenziosamente dominio,
+            // OU, e (peggio) credenziali di join/admin della CR precedente se
+            // l'operatore non le svuotava manualmente.
+            PcName = ""; Notes = ""; Domain = ""; Ou = ""; AssignedUser = "";
+            DcIp = ""; JoinUser = ""; JoinPass = ""; AdminPass = "";
+            Packages.Clear();
             await LoadListAsync();
         }
         catch (Exception ex) { Status = $"Errore: {ex.Message}"; }

@@ -315,6 +315,37 @@ public partial class MainWindow : Window
         catch { return ""; }
     }
 
+    // BUG: i profili Deploy (AdminPassword, UserPassword, DomainPassword,
+    // NovaSCMApiKey) venivano scritti in JSON.NON cifrato su disco in
+    // %APPDATA%\PolarisManager\profiles\ — un backup/condivisione accidentale
+    // di quella cartella esponeva credenziali admin/dominio e la API key.
+    // Cifra con lo stesso DPAPI già usato per AppConfig prima di persistere.
+    private static string DecryptOrPlain(string v)
+    {
+        // Profili salvati PRIMA di questo fix (o importati da fonte esterna)
+        // hanno i campi in chiaro: DpapiDecrypt su un valore non-DPAPI fallisce
+        // e ritorna "" — in quel caso il valore originale È già la password.
+        if (string.IsNullOrEmpty(v)) return "";
+        var dec = DpapiDecrypt(v);
+        return string.IsNullOrEmpty(dec) ? v : dec;
+    }
+
+    private static void EncryptDeployConfigSecrets(DeployConfig cfg)
+    {
+        cfg.AdminPassword  = DpapiEncrypt(cfg.AdminPassword);
+        cfg.UserPassword   = DpapiEncrypt(cfg.UserPassword);
+        cfg.DomainPassword = DpapiEncrypt(cfg.DomainPassword);
+        cfg.NovaSCMApiKey  = DpapiEncrypt(cfg.NovaSCMApiKey);
+    }
+
+    private static void DecryptDeployConfigSecrets(DeployConfig cfg)
+    {
+        cfg.AdminPassword  = DecryptOrPlain(cfg.AdminPassword);
+        cfg.UserPassword   = DecryptOrPlain(cfg.UserPassword);
+        cfg.DomainPassword = DecryptOrPlain(cfg.DomainPassword);
+        cfg.NovaSCMApiKey  = DecryptOrPlain(cfg.NovaSCMApiKey);
+    }
+
     // NEW-E: null-guard per handler che richiedono l'API configurata
     private bool EnsureApiConfigured(string? statusControl = null)
     {
@@ -3403,6 +3434,7 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(name)) return;
         name = string.Concat(name.Split(Path.GetInvalidFileNameChars()));
         var cfg  = BuildDeployConfigFromUi();
+        EncryptDeployConfigSecrets(cfg);
         var json = JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true });
         Directory.CreateDirectory(ProfilesDir);
         File.WriteAllText(Path.Combine(ProfilesDir, $"{name}.json"), json);
@@ -3419,6 +3451,7 @@ public partial class MainWindow : Window
         if (!File.Exists(path)) return;
         var cfg = JsonSerializer.Deserialize<DeployConfig>(File.ReadAllText(path));
         if (cfg == null) return;
+        DecryptDeployConfigSecrets(cfg);
         ApplyProfileToUi(cfg);
         TxtDeployStatus.Text       = $"📂  Profilo '{name}' caricato";
         TxtDeployStatus.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(21, 128, 61));
@@ -3439,10 +3472,16 @@ public partial class MainWindow : Window
                 ? ParseAutounattendXml(File.ReadAllText(dlg.FileName))
                 : JsonSerializer.Deserialize<DeployConfig>(File.ReadAllText(dlg.FileName));
             if (cfg == null) return;
+            // Il JSON importato può arrivare in chiaro (fonte esterna) o già
+            // cifrato (esportato da questa stessa app) — normalizza a chiaro
+            // per l'uso in memoria/UI, poi ri-cifra prima di scrivere su disco.
+            DecryptDeployConfigSecrets(cfg);
             var name = Path.GetFileNameWithoutExtension(dlg.FileName);
             Directory.CreateDirectory(ProfilesDir);
+            var toSave = JsonSerializer.Deserialize<DeployConfig>(JsonSerializer.Serialize(cfg))!;
+            EncryptDeployConfigSecrets(toSave);
             File.WriteAllText(Path.Combine(ProfilesDir, $"{name}.json"),
-                JsonSerializer.Serialize(cfg, new JsonSerializerOptions { WriteIndented = true }));
+                JsonSerializer.Serialize(toSave, new JsonSerializerOptions { WriteIndented = true }));
             RefreshProfiles();
             CboProfiles.SelectedItem   = name;
             ApplyProfileToUi(cfg);
