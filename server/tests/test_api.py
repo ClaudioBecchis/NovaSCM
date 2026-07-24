@@ -1476,7 +1476,7 @@ class TestDeployClientAuth:
         # Crea un token valido nel dizionario _ui_tokens
         tok = "test-session-token-abc123"
         with api._ui_tokens_lock:
-            api._ui_tokens[tok] = (time.time() + 3600, "deploy")
+            api._ui_tokens[tok] = (time.time() + 3600, "deploy", None)
         resp = client.get(f"/deploy-client?key={tok}")
         assert resp.status_code == 200
 
@@ -1484,7 +1484,7 @@ class TestDeployClientAuth:
         import time
         tok = "expired-token-xyz"
         with api._ui_tokens_lock:
-            api._ui_tokens[tok] = (time.time() - 1, "deploy")  # già scaduto
+            api._ui_tokens[tok] = (time.time() - 1, "deploy", None)  # già scaduto
         resp = client.get(f"/deploy-client?key={tok}")
         assert resp.status_code == 401
 
@@ -1497,7 +1497,7 @@ class TestDeployClientAuth:
         import time
         tok = "priority-test-token"
         with api._ui_tokens_lock:
-            api._ui_tokens[tok] = (time.time() + 3600, "deploy")
+            api._ui_tokens[tok] = (time.time() + 3600, "deploy", None)
         resp = client.get(f"/deploy-client?key={tok}")
         assert resp.status_code == 200
 
@@ -1548,7 +1548,7 @@ class TestTokenScoping:
         import time
         tok = "deploy-scope-cr-test"
         with api._ui_tokens_lock:
-            api._ui_tokens[tok] = (time.time() + 3600, "deploy")
+            api._ui_tokens[tok] = (time.time() + 3600, "deploy", None)
         r = client.get("/api/cr", headers={"X-Api-Key": tok})
         assert r.status_code == 403
 
@@ -1639,3 +1639,108 @@ class TestTokenScoping:
             conn.commit()
         r = client.get("/api/pc/PC-EXPIRED/workflow", headers={"X-Api-Key": token})
         assert r.status_code == 401
+
+
+class TestScopedTokenPcBinding:
+    """SEC (IDOR cross-PC): un token scoped (deploy_token, enrollment_token,
+    o session key scope='deploy') valido per UN pc_name/pw_id non deve poter
+    operare su un pc_name/pw_id diverso, anche restando dentro
+    _AGENT_SCOPED_ENDPOINTS. Prima di questo fix, la whitelist controllava
+    solo QUALE endpoint (report_step, deploy_step, ecc.) ma non SU QUALE PC —
+    un token del PC-A poteva falsificare lo stato/hardware/log/screenshot
+    del deploy di un PC-B arbitrario."""
+
+    def _deploy_token(self, client, pc_name, pw_id=None):
+        import datetime as _dt
+        token = f"deploy-token-bind-{pc_name}-{api.secrets.token_hex(8)}"
+        now = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
+        exp = (now + _dt.timedelta(hours=24)).isoformat()
+        with api.get_db_ctx() as conn:
+            conn.execute(
+                "INSERT INTO deploy_tokens (token, pc_name, pw_id, created_at, expires_at, used) "
+                "VALUES (?,?,?,?,?,0)",
+                (token, pc_name, pw_id, now.isoformat(), exp)
+            )
+            conn.commit()
+        return token
+
+    def test_deploy_token_cross_pc_workflow_denied(self, client):
+        tok_a = self._deploy_token(client, "PC-A")
+        r = client.get("/api/pc/PC-B/workflow", headers={"X-Api-Key": tok_a})
+        assert r.status_code == 403
+
+    def test_deploy_token_same_pc_workflow_allowed(self, client):
+        tok_a = self._deploy_token(client, "PC-A")
+        r = client.get("/api/pc/PC-A/workflow", headers={"X-Api-Key": tok_a})
+        assert r.status_code == 404  # nessun workflow assegnato, ma auth passata
+
+    def test_deploy_token_cross_pc_report_step_denied(self, client):
+        """report_wf_step: un token del PC-A non deve poter riportare lo
+        stato di uno step per il PC-B."""
+        tok_a = self._deploy_token(client, "PC-A")
+        r = client.post("/api/pc/PC-B/workflow/step", headers={"X-Api-Key": tok_a},
+                        data=json.dumps({"step_id": 1, "status": "done"}),
+                        content_type="application/json")
+        assert r.status_code == 403
+
+    def test_deploy_token_cross_pw_id_hardware_denied(self, client):
+        """post_pc_workflow_hardware è bound via pw_id -> pc_name: un token
+        del PC-A non deve poter iniettare hardware nel pw_id di un PC-B."""
+        wf_id = _create_workflow(client, nome="Bind Test Flow").get_json()["id"]
+        pw_b = client.post("/api/pc-workflows", headers=AUTH,
+                           data=json.dumps({"pc_name": "PC-B", "workflow_id": wf_id}),
+                           content_type="application/json").get_json()["id"]
+        tok_a = self._deploy_token(client, "PC-A")
+        r = client.post(f"/api/pc-workflows/{pw_b}/hardware", headers={"X-Api-Key": tok_a},
+                        data=json.dumps({"cpu": "fake"}), content_type="application/json")
+        assert r.status_code == 403
+
+    def test_deploy_token_same_pw_id_hardware_allowed(self, client):
+        wf_id = _create_workflow(client, nome="Bind Test Flow 2").get_json()["id"]
+        pw_a = client.post("/api/pc-workflows", headers=AUTH,
+                           data=json.dumps({"pc_name": "PC-A", "workflow_id": wf_id}),
+                           content_type="application/json").get_json()["id"]
+        tok_a = self._deploy_token(client, "PC-A")
+        r = client.post(f"/api/pc-workflows/{pw_a}/hardware", headers={"X-Api-Key": tok_a},
+                        data=json.dumps({"cpu": "fake"}), content_type="application/json")
+        assert r.status_code == 200
+
+    def test_deploy_scope_session_key_cross_pc_denied(self, client):
+        """Session key da /api/deploy/enroll (scope=deploy) ereditata dal
+        pc_name del deploy_token scambiato — stesso binding cross-PC."""
+        import time
+        with api._ui_tokens_lock:
+            api._ui_tokens["session-bind-test"] = (time.time() + 3600, "deploy", "PC-A")
+        r = client.get("/api/pc/PC-B/workflow", headers={"X-Api-Key": "session-bind-test"})
+        assert r.status_code == 403
+
+    def test_deploy_scope_session_key_same_pc_allowed(self, client):
+        import time
+        with api._ui_tokens_lock:
+            api._ui_tokens["session-bind-test-2"] = (time.time() + 3600, "deploy", "PC-A")
+        r = client.get("/api/pc/PC-A/workflow", headers={"X-Api-Key": "session-bind-test-2"})
+        assert r.status_code == 404
+
+    def test_enrollment_token_binds_to_first_pc_then_denies_others(self, client):
+        """Trust-on-first-use: un enrollment token (generico, senza pc_name
+        alla creazione) si lega al PRIMO pc_name su cui viene usato con
+        successo, poi rifiuta ogni pc_name diverso."""
+        r = client.post("/api/enrollment-token", headers=AUTH)
+        tok = r.get_json()["token"]
+        # Primo uso: si lega a PC-FIRST
+        r1 = client.get("/api/pc/PC-FIRST/workflow", headers={"X-Api-Key": tok})
+        assert r1.status_code == 404  # auth ok, nessun workflow
+        # Uso successivo sullo stesso pc_name: ancora ok
+        r2 = client.get("/api/pc/PC-FIRST/workflow", headers={"X-Api-Key": tok})
+        assert r2.status_code == 404
+        # Uso su un pc_name diverso: negato
+        r3 = client.get("/api/pc/PC-SECOND/workflow", headers={"X-Api-Key": tok})
+        assert r3.status_code == 403
+
+    def test_download_agent_not_bound_to_any_pc(self, client):
+        """download_agent non è nella mappa di binding — deve restare
+        raggiungibile con un token di qualunque pc_name (nessun contenuto
+        pc-specifico da proteggere)."""
+        tok = self._deploy_token(client, "PC-ANY")
+        r = client.get("/api/download/agent", headers={"X-Api-Key": tok})
+        assert r.status_code == 404  # file non presente in test env, non 401/403

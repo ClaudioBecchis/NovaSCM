@@ -208,13 +208,14 @@ if not API_KEY:
         log.warning("API Key generata (prime 8 cifre): %s...", API_KEY[:8])
 
 # ── Session token store (ui-token) ──────────────────────────────────────────
-# SEC: value = (expiry_timestamp, scope). scope="admin" = emesso da /api/ui-token
-# dopo verifica dell'API key master, pieno accesso come la master key.
-# scope="deploy" = emesso da /api/deploy/enroll a partire da un deploy_token
-# monouso consegnato a UN SOLO PC in provisioning — deve avere accesso SOLO
-# agli endpoint di provisioning/telemetria (_AGENT_SCOPED_ENDPOINTS), non a
-# tutta l'API come un token admin.
-_ui_tokens: dict[str, tuple[float, str]] = {}  # {token_hex: (expiry_timestamp, scope)}
+# SEC: value = (expiry_timestamp, scope, pc_name). scope="admin" = emesso da
+# /api/ui-token dopo verifica dell'API key master, pieno accesso come la
+# master key (pc_name=None, nessun binding). scope="deploy" = emesso da
+# /api/deploy/enroll a partire da un deploy_token monouso consegnato a UN
+# SOLO PC in provisioning — deve avere accesso SOLO agli endpoint di
+# provisioning/telemetria (_AGENT_SCOPED_ENDPOINTS) E SOLO per quel pc_name
+# (vedi _check_scoped_pc_binding) — non a tutta l'API né ad altri PC.
+_ui_tokens: dict[str, tuple[float, str, str | None]] = {}  # {token_hex: (expiry_timestamp, scope, pc_name)}
 _ui_tokens_lock = threading.Lock()
 _UI_TOKENS_MAX = 10000  # C-3: limite massimo token in memoria
 
@@ -244,6 +245,73 @@ _AGENT_SCOPED_ENDPOINTS = {
     "get_steps_by_name",             # GET  /api/cr/by-name/<pc_name>/steps — polling di OsdWindow/deploy-client.html
 }
 
+# SEC: quali endpoint scoped operano su un pc_name specifico, e come ricavarlo
+# dalla richiesta. Senza questo, un deploy_token/enrollment_token valido per
+# UN pc_name autenticava (grazie a _AGENT_SCOPED_ENDPOINTS) anche chiamate su
+# QUALSIASI altro pc_name/pw_id — IDOR cross-PC su tutta la superficie
+# scoped (falsificare lo stato di un altro deploy, iniettare hardware/log/
+# screenshot falsi in un'altra dashboard, ecc). "view:pc_name"/"view:pw_id"
+# leggono da request.view_args (il segmento URL catturato dalla route);
+# "json:pc_name" dal body JSON. Endpoint assenti da questa mappa (i
+# download_* e ui_deploy_client) servono contenuto identico a chiunque hostda
+# un token scoped valido — nessun binding necessario.
+_SCOPED_PC_BINDING = {
+    "get_pc_assigned_workflow":    ("view", "pc_name"),
+    "report_wf_step":              ("view", "pc_name"),
+    "checkin_wf":                  ("view", "pc_name"),
+    "checkin_cr":                  ("view", "pc_name"),
+    "report_step":                 ("view", "pc_name"),
+    "get_steps_by_name":           ("view", "pc_name"),
+    "post_pc_workflow_hardware":   ("view", "pw_id"),
+    "post_pc_workflow_log":        ("view", "pw_id"),
+    "post_pc_workflow_screenshot": ("view", "pw_id"),
+    "deploy_step":                 ("view", "pw_id"),
+    "get_pc_workflow":             ("view", "pw_id"),
+    "deploy_start":                ("json", "pc_name"),
+}
+
+def _pw_id_to_pc_name(pw_id) -> str | None:
+    try:
+        with get_db_ctx() as conn:
+            row = conn.execute("SELECT pc_name FROM pc_workflows WHERE id=?", (pw_id,)).fetchone()
+            return row["pc_name"] if row else None
+    except Exception:
+        return None
+
+def _resolve_request_pc_name(fn_name: str) -> str | None:
+    """Ricava il pc_name su cui opera la richiesta corrente, secondo
+    _SCOPED_PC_BINDING. None se non risolvibile (fail closed nel chiamante:
+    nessun binding valido → accesso negato, non "salta il controllo")."""
+    binding = _SCOPED_PC_BINDING.get(fn_name)
+    if not binding:
+        return ""  # endpoint non legato a un pc_name specifico — nessun controllo
+    src, key = binding
+    if src == "view":
+        val = request.view_args.get(key) if request.view_args else None
+        if val is None:
+            return None
+        if key == "pw_id":
+            return (_pw_id_to_pc_name(val) or "").upper().strip() or None
+        return str(val).upper().strip()
+    if src == "json":
+        try:
+            data = request.get_json(silent=True) or {}
+        except Exception:
+            return None
+        val = data.get(key)
+        return str(val).upper().strip() if val else None
+    return None
+
+def _check_scoped_pc_binding(fn_name: str, bound_pc_name: str) -> bool:
+    """True se la richiesta corrente opera sul pc_name a cui il token scoped
+    è legato (o se l'endpoint non richiede alcun binding)."""
+    resolved = _resolve_request_pc_name(fn_name)
+    if resolved == "":
+        return True  # endpoint senza binding pc-specifico
+    if resolved is None:
+        return False  # impossibile risolvere il pc_name della richiesta — nega
+    return resolved == (bound_pc_name or "").upper().strip()
+
 # ── SSE live event broadcaster (dashboard real-time) ────────────────────────
 _sse_clients: list = []
 _sse_clients_lock = threading.Lock()
@@ -263,7 +331,7 @@ def _broadcast_event(kind: str, data: dict | None = None):
 
 def _purge_expired_tokens() -> None:
     now = time.time()
-    expired = [t for t, (exp, _scope) in list(_ui_tokens.items()) if exp < now]
+    expired = [t for t, (exp, _scope, _pc) in list(_ui_tokens.items()) if exp < now]
     for t in expired:
         del _ui_tokens[t]
     # C-3: se ancora troppi token, rimuovi i più vecchi
@@ -292,27 +360,50 @@ def require_auth(fn):
                 _purge_expired_tokens()
             entry = _ui_tokens.get(token) if token else None
         if entry:
-            exp, scope = entry
+            exp, scope, bound_pc = entry
             if exp > time.time():
-                if scope == "admin" or fn.__name__ in _AGENT_SCOPED_ENDPOINTS:
+                if scope == "admin":
                     return fn(*args, **kwargs)
+                if scope == "deploy" and fn.__name__ in _AGENT_SCOPED_ENDPOINTS:
+                    if _check_scoped_pc_binding(fn.__name__, bound_pc or ""):
+                        return fn(*args, **kwargs)
+                    log.warning("Token scope=deploy (pc=%s) usato su pc_name diverso — endpoint '%s' da %s",
+                                bound_pc, fn.__name__, request.remote_addr)
+                    return jsonify({"error": "Non autorizzato per questa operazione"}), 403
                 log.warning("Token scope=%s non autorizzato per endpoint '%s' da %s",
                             scope, fn.__name__, request.remote_addr)
                 return jsonify({"error": "Non autorizzato per questa operazione"}), 403
-        # Controlla enrollment token monouso (agent enrollment) — scopo ristretto
-        if token and _validate_enrollment_token_peek(token):
-            if fn.__name__ in _AGENT_SCOPED_ENDPOINTS:
-                return fn(*args, **kwargs)
-            log.warning("Enrollment token non autorizzato per endpoint '%s' da %s",
-                        fn.__name__, request.remote_addr)
-            return jsonify({"error": "Non autorizzato per questa operazione"}), 403
-        # Controlla deploy_token grezzo (flusso wimboot, agent.json api_key) — scopo ristretto
-        if token and _validate_deploy_token_peek(token):
-            if fn.__name__ in _AGENT_SCOPED_ENDPOINTS:
-                return fn(*args, **kwargs)
-            log.warning("Deploy token non autorizzato per endpoint '%s' da %s",
-                        fn.__name__, request.remote_addr)
-            return jsonify({"error": "Non autorizzato per questa operazione"}), 403
+        # Controlla enrollment token monouso (agent enrollment) — scopo ristretto,
+        # legato al pc_name della richiesta corrente (trust-on-first-use)
+        if token:
+            # Risolve il pc_name usando il binding specifico dell'endpoint corrente
+            # (serve PRIMA della validazione per poter legare il token al primo uso)
+            candidate_pc = _resolve_request_pc_name(fn.__name__)
+            bound = _validate_enrollment_token_peek(token, candidate_pc or None)
+            if bound is not None:
+                if fn.__name__ in _AGENT_SCOPED_ENDPOINTS:
+                    if _check_scoped_pc_binding(fn.__name__, bound):
+                        return fn(*args, **kwargs)
+                    log.warning("Enrollment token (pc=%s) usato su pc_name diverso — endpoint '%s' da %s",
+                                bound, fn.__name__, request.remote_addr)
+                    return jsonify({"error": "Non autorizzato per questa operazione"}), 403
+                log.warning("Enrollment token non autorizzato per endpoint '%s' da %s",
+                            fn.__name__, request.remote_addr)
+                return jsonify({"error": "Non autorizzato per questa operazione"}), 403
+        # Controlla deploy_token grezzo (flusso wimboot, agent.json api_key) —
+        # scopo ristretto, legato al pc_name con cui è stato generato
+        if token:
+            bound = _validate_deploy_token_peek(token)
+            if bound is not None:
+                if fn.__name__ in _AGENT_SCOPED_ENDPOINTS:
+                    if _check_scoped_pc_binding(fn.__name__, bound):
+                        return fn(*args, **kwargs)
+                    log.warning("Deploy token (pc=%s) usato su pc_name diverso — endpoint '%s' da %s",
+                                bound, fn.__name__, request.remote_addr)
+                    return jsonify({"error": "Non autorizzato per questa operazione"}), 403
+                log.warning("Deploy token non autorizzato per endpoint '%s' da %s",
+                            fn.__name__, request.remote_addr)
+                return jsonify({"error": "Non autorizzato per questa operazione"}), 403
         log.warning("Accesso non autorizzato da %s", request.remote_addr)
         return jsonify({"error": "Non autorizzato"}), 401
     return wrapper
@@ -354,27 +445,29 @@ def _close_db(exc):
             pass
         _db_local.conn = None
 
-def _validate_deploy_token_peek(token: str) -> bool:
+def _validate_deploy_token_peek(token: str) -> str | None:
     """Verifica un deploy_token SENZA consumarlo (a differenza di /api/deploy/enroll,
     che marca used=1 per lo scambio one-shot con una session key admin-facing per
     la pagina /deploy-client). Qui il token grezzo viene usato direttamente come
-    X-Api-Key dall'agent (BUG: il flusso wimboot lo scriveva in agent.json e lo
-    passava agli endpoint di download SENZA che require_auth lo riconoscesse
-    affatto — 401 su ogni chiamata). Controlla solo la scadenza, non 'used':
-    quel flag traccia lo scambio via /api/deploy/enroll, un uso diverso dello
-    stesso segreto, non deve invalidare l'uso come API key dell'agent.
+    X-Api-Key dall'agent. Controlla solo la scadenza, non 'used': quel flag
+    traccia lo scambio via /api/deploy/enroll, un uso diverso dello stesso
+    segreto, non deve invalidare l'uso come API key dell'agent.
+    Ritorna il pc_name a cui il token è legato (mai None se il token è valido:
+    pc_name è obbligatorio alla creazione), o None se il token non è valido/scaduto.
     """
     try:
         with get_db_ctx() as conn:
             row = conn.execute(
-                "SELECT expires_at FROM deploy_tokens WHERE token=?", (token,)
+                "SELECT expires_at, pc_name FROM deploy_tokens WHERE token=?", (token,)
             ).fetchone()
             if not row:
-                return False
+                return None
             now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
-            return row["expires_at"] >= now
+            if row["expires_at"] < now:
+                return None
+            return row["pc_name"]
     except Exception:
-        return False
+        return None
 
 def _generate_deploy_token(conn, pc_name: str, pw_id) -> str:
     """Genera un enrollment token monouso per il deploy di pc_name (validità 24h)."""
@@ -538,6 +631,14 @@ def init_db():
             ("pc_workflow_steps", "elapsed_sec",  "REAL DEFAULT 0"),
         ("pc_workflows",      "archived",     "INTEGER DEFAULT 0"),
         ("workflows",         "timeout_min",  "INTEGER DEFAULT 120"),
+        # SEC: enrollment_tokens non aveva alcun binding a un pc_name — a
+        # differenza di deploy_tokens (che ha pc_name/pw_id fin dalla
+        # creazione), un enrollment token è generico per design (l'agent
+        # installato scopre il proprio hostname a runtime). Senza binding,
+        # lo stesso token autenticava scoped-endpoint per QUALSIASI pc_name
+        # nell'URL — IDOR cross-PC. bound_pc_name si valorizza al primo uso
+        # riuscito e vincola tutti gli usi successivi allo stesso pc_name.
+        ("enrollment_tokens", "bound_pc_name", "TEXT"),
         ]
         # M-7: tabella enrollment token monouso
         conn.execute("""
@@ -1962,18 +2063,43 @@ def _validate_enrollment_token(token: str) -> bool:
         conn.commit()
     return True
 
-def _validate_enrollment_token_peek(token: str) -> bool:
-    """Verifica token enrollment SENZA consumarlo — per auth ripetibile (agent polling)."""
+def _validate_enrollment_token_peek(token: str, request_pc_name: str | None = None) -> str | None:
+    """Verifica token enrollment SENZA consumarlo — per auth ripetibile (agent polling).
+
+    SEC: a differenza di deploy_tokens (che ha pc_name fin dalla creazione),
+    un enrollment token è generico per design — l'agent scopre il proprio
+    hostname a runtime, il token non lo conosce ancora al momento della
+    generazione. Senza un binding, lo stesso token autenticava scoped-endpoint
+    per QUALSIASI pc_name nell'URL (IDOR cross-PC). Qui si implementa un
+    binding "trust on first use": la prima richiesta che risolve un pc_name
+    (via request_pc_name, passato dal chiamante in require_auth) lo scrive in
+    bound_pc_name; le richieste successive con lo stesso token sono valide
+    SOLO per quello stesso pc_name. Ritorna il pc_name legato (bound o appena
+    assegnato), o None se il token non è valido/scaduto.
+    """
     try:
         with get_db_ctx() as conn:
             row = conn.execute(
-                "SELECT expires_at, used FROM enrollment_tokens WHERE token=?", (token,)
+                "SELECT expires_at, used, bound_pc_name FROM enrollment_tokens WHERE token=?", (token,)
             ).fetchone()
             if not row or row["used"] or time.time() > row["expires_at"]:
-                return False
-        return True
+                return None
+            bound = row["bound_pc_name"]
+            if bound:
+                return bound
+            if request_pc_name:
+                conn.execute(
+                    "UPDATE enrollment_tokens SET bound_pc_name=? WHERE token=?",
+                    (request_pc_name, token)
+                )
+                conn.commit()
+                return request_pc_name
+            # Nessun pc_name risolvibile dalla richiesta corrente (endpoint
+            # senza binding, es. download_agent) e nessun binding precedente:
+            # valido, senza vincolo di pc_name applicabile in questo momento.
+            return ""
     except Exception:
-        return False
+        return None
 
 @app.route("/api/download/agent-install.ps1", methods=["GET"])
 @require_auth
@@ -2401,7 +2527,7 @@ def deploy_enroll():
     exp = time.time() + 86400
     with _ui_tokens_lock:
         _purge_expired_tokens()
-        _ui_tokens[session_key] = (exp, "deploy")
+        _ui_tokens[session_key] = (exp, "deploy", row["pc_name"])
     log.info("Enroll OK: pc=%s pw_id=%s ip=%s", row["pc_name"], row["pw_id"], request.remote_addr)
     return jsonify({
         "session_key": session_key,
@@ -3163,7 +3289,7 @@ def ui_token():
     exp   = time.time() + 28800
     with _ui_tokens_lock:
         _purge_expired_tokens()
-        _ui_tokens[token] = (exp, "admin")
+        _ui_tokens[token] = (exp, "admin", None)
     return jsonify({"token": token, "expires_at": exp})
 
 @app.route("/deploy-client")
