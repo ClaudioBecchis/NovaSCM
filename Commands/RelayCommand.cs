@@ -65,6 +65,15 @@ public class AsyncRelayCommand : ICommand
         {
             await _execute(parameter);
         }
+        catch (Exception ex)
+        {
+            // Backstop: essendo async void, un'eccezione non catturata QUI non
+            // può risalire al chiamante e crasha l'intera app WPF. Ogni comando
+            // wired oggi ha il proprio try/catch interno, ma questo evita che un
+            // futuro handler dimentichi il proprio e porti giù l'applicazione.
+            try { PolarisManager.App.Log($"AsyncRelayCommand.Execute: eccezione non gestita: {ex}"); }
+            catch { /* logging best-effort */ }
+        }
         finally
         {
             _isExecuting = false;

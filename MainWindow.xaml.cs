@@ -28,6 +28,10 @@ public class DeviceRow : INotifyPropertyChanged
     public string Ip         { get; set; } = "";
     public string CertStatus { get; set; } = "⬜ No";
     public bool   WasOnline  { get; set; } = false;
+    // La colonna DB "notes" (scritta da SaveDeviceNote) non aveva alcuna
+    // proprietà su DeviceRow che la esponesse — la nota veniva persistita ma
+    // mai riletta all'avvio. GetDevices() ora la carica qui.
+    public string Notes      { get; set; } = "";
 
     public string Mac            { get => _mac;            set { _mac            = value; OnPC(); } }
     public string Vendor         { get => _vendor;          set { _vendor         = value; OnPC(); } }
@@ -1981,6 +1985,13 @@ public partial class MainWindow : Window
         {
             d.WasOnline = d.Status.Contains("Online");
             _netRows.Add(d);
+            // Sincronizza il dizionario in-memory usato per pre-riempire il
+            // dialogo "Aggiungi nota" — senza questo, MenuAddNote_Click mostrava
+            // sempre un campo vuoto al primo click dopo un riavvio, anche se
+            // DeviceRow.Notes (ora correttamente caricata da GetDevices) aveva
+            // già un valore.
+            if (!string.IsNullOrEmpty(d.Notes))
+                _deviceNotes[d.Ip] = d.Notes;
         }
     }
 

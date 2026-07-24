@@ -124,8 +124,21 @@ public class SettingsViewModel : ViewModelBase
         _config["AdminUser"] = AdminUser;
         _config["AdminPass"] = ConfigService.Encrypt(AdminPass);
 
-        ConfigService.Save(_config);
-        StatusMessage = "Impostazioni salvate";
+        // BUG: ConfigService.Save() rilancia (throw) se la scrittura su disco
+        // fallisce (AV che blocca il file, disco pieno, permessi) — e questo
+        // metodo è agganciato a un RelayCommand SINCRONO senza alcun try/catch
+        // proprio, che a sua volta non ha catch: un'eccezione qui crashava
+        // l'intera app invece di mostrare "Errore: ..." come fanno tutti gli
+        // altri comandi (Proxmox/Workflow/ChangeRequest/Dashboard).
+        try
+        {
+            ConfigService.Save(_config);
+            StatusMessage = "Impostazioni salvate";
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Errore salvataggio: {ex.Message}";
+        }
     }
 
     public async Task TestConnectionAsync()

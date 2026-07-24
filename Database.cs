@@ -178,7 +178,11 @@ public static class Database
     {
         using var db = Open();
         using var cmd = db.CreateCommand();
-        cmd.CommandText = "SELECT ip,mac,vendor,name,icon,device_type,connection_type,status,cert_status FROM devices ORDER BY ip;";
+        // BUG: mancava "notes" — SaveDeviceNote scrive correttamente sul DB,
+        // ma senza selezionarla qui DeviceRow.Notes restava sempre vuota ad
+        // ogni riavvio/refresh: le note sembravano sparire (in realtà erano
+        // ancora su disco, solo mai ricaricate in UI).
+        cmd.CommandText = "SELECT ip,mac,vendor,name,icon,device_type,connection_type,status,cert_status,notes FROM devices ORDER BY ip;";
         var list = new List<DeviceRow>();
         using var r = cmd.ExecuteReader();
         while (r.Read())
@@ -193,6 +197,7 @@ public static class Database
                 ConnectionType = r.GetString(6),
                 Status         = r.GetString(7),
                 CertStatus     = r.GetString(8),
+                Notes          = r.IsDBNull(9) ? "" : r.GetString(9),
             });
         return list;
     }
