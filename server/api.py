@@ -842,14 +842,9 @@ def get_autounattend(pc_name):
     if not row:
         return "CR non trovato", 404
     d = row_to_dict(row, include_sensitive=True)
-    pkgs = d.get("software", [])
-    def _safe_pkg(pkg_id):
-        """Sanifica package ID winget: solo caratteri alfanumerici, punto, trattino, underscore."""
-        return re.sub(r"[^a-zA-Z0-9.\-_]", "", str(pkg_id))
-    winget_block = "\n".join(
-        f"winget install --id {_safe_pkg(p)} --silent --accept-package-agreements --accept-source-agreements"
-        for p in pkgs if p and _safe_pkg(p)
-    ) if pkgs else "# Nessun software configurato"
+    # Residuo di refactor: l'installazione software è stata spostata lato
+    # client (postinstall.ps1) — qui non viene più generato alcun blocco
+    # winget, "software" nella CR non è usato da questo endpoint.
 
     # SEC-1: escape di tutti i valori interpolati nel XML
     xpc_name   = _xe(d.get("pc_name") or "")
