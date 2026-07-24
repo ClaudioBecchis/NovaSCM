@@ -447,11 +447,13 @@ def run_workflow(cfg, workflow):
 
         if not ok:
             su_errore = step.get("su_errore", "stop")
-            if su_errore == "stop":
-                log.error(f"Step fallito con su_errore=stop — workflow interrotto")
-                return False
+            # BUG: whitelist esplicita — prima qualunque valore diverso da "stop"
+            # (typo, valore non previsto) faceva proseguire il workflow (fail-open).
+            if su_errore in ("continua", "continue"):
+                log.warning(f"Step fallito con su_errore={su_errore} — proseguo")
             else:
-                log.warning(f"Step fallito con su_errore=continua — proseguo")
+                log.error(f"Step fallito con su_errore='{su_errore}' — workflow interrotto")
+                return False
 
         if step["tipo"] == "reboot" and ok:
             save_state({"pw_id": pw_id, "resume_step": step_id})

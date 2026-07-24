@@ -303,9 +303,15 @@ public class Worker : BackgroundService
             if (!string.IsNullOrWhiteSpace(result.Output))
                 await _api.SendLogAsync(cfg.ApiUrl, pwId, result.Output, ct, cfg.ApiKey);
 
-            if (!result.Ok.Value && suErr == "stop")
+            // SEC/BUG: whitelist esplicita dei valori che fanno proseguire il
+            // workflow dopo un errore — prima qualunque valore diverso da "stop"
+            // (typo, valore non previsto) veniva trattato come "continua"
+            // silenziosamente (fail-open). Ora solo "continua"/"continue" fanno
+            // proseguire; "stop", "retry" esaurito o valori sconosciuti fermano
+            // il workflow (fail-safe) — coerente col default "stop" più sopra.
+            if (!result.Ok.Value && suErr is not ("continua" or "continue"))
             {
-                _log.LogError("Step fallito con su_errore=stop — workflow interrotto");
+                _log.LogError("Step fallito con su_errore='{SuErr}' — workflow interrotto", suErr);
                 AgentConfig.ClearState();
                 return;
             }

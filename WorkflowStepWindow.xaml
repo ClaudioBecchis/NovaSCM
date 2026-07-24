@@ -128,7 +128,7 @@
                 <TextBlock Text="In caso di errore"/>
                 <ComboBox x:Name="CmbSuErrore">
                     <ComboBoxItem Content="stop — blocca il workflow"  Tag="stop"     IsSelected="True"/>
-                    <ComboBoxItem Content="continua — prossimo step"   Tag="continua"/>
+                    <ComboBoxItem Content="continua — prossimo step"   Tag="continue"/>
                 </ComboBox>
 
             </StackPanel>
