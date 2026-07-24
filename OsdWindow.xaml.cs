@@ -347,11 +347,22 @@ public partial class OsdWindow : Window
             string? currentLabel = null, currentTipo = null;
             double  curElapsed   = 0;
 
-            foreach (var el in doc.RootElement.EnumerateArray())
+            // BUG CRITICO: GET /api/cr/by-name/<pc>/steps restituisce un
+            // OGGETTO {"cr_id":..,"pc_name":..,"status":..,"steps":[...]},
+            // non un array nudo — EnumerateArray() sul root lanciava sempre
+            // InvalidOperationException, quindi contro un server reale nessuno
+            // step veniva mai aggiornato (funzionava solo in InitDemoData, che
+            // non passa da qui). "elapsed_sec" inoltre non esiste in questa
+            // risposta (cr_steps non ha quella colonna) — sempre letto come 0.
+            if (!doc.RootElement.TryGetProperty("steps", out var stepsEl) ||
+                stepsEl.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return;
+
+            foreach (var el in stepsEl.EnumerateArray())
             {
                 var key     = el.TryGetProperty("step_name",   out var sk) ? sk.GetString() ?? "" : "";
                 var status  = el.TryGetProperty("status",      out var ss) ? ss.GetString() ?? "" : "done";
-                var elapsed = el.TryGetProperty("elapsed_sec", out var es) ? es.GetDouble()      : 0;
+                double elapsed = 0;
 
                 var existing = _steps.FirstOrDefault(x => x.StepKey == key);
                 if (existing == null)

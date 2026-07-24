@@ -160,16 +160,25 @@ public partial class CrDebugWindow : Window
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
 
             // Recupera step dal DB
-            var stepsJson = await http.GetStringAsync($"{_crApiBase}/{_crId}/steps");
+            // BUG CRITICO: GET /api/cr/<id>/steps è paginato, restituisce
+            // {"page":..,"per_page":..,"total":..,"items":[...]}, non un
+            // array nudo — EnumerateArray() sul root lanciava sempre
+            // InvalidOperationException, quindi contro un server reale il
+            // pannello step di questa finestra non si aggiornava mai.
+            var stepsJson = await http.GetStringAsync($"{_crApiBase}/{_crId}/steps?per_page=500");
             var stepsDoc  = JsonDocument.Parse(stepsJson);
 
             // Mappa step_name → status
             var dbSteps = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var el in stepsDoc.RootElement.EnumerateArray())
+            if (stepsDoc.RootElement.TryGetProperty("items", out var itemsEl) &&
+                itemsEl.ValueKind == JsonValueKind.Array)
             {
-                var key = el.TryGetProperty("step_name", out var k) ? k.GetString() ?? "" : "";
-                var sta = el.TryGetProperty("status",    out var s) ? s.GetString() ?? "" : "";
-                if (!string.IsNullOrEmpty(key)) dbSteps[key] = sta;
+                foreach (var el in itemsEl.EnumerateArray())
+                {
+                    var key = el.TryGetProperty("step_name", out var k) ? k.GetString() ?? "" : "";
+                    var sta = el.TryGetProperty("status",    out var s) ? s.GetString() ?? "" : "";
+                    if (!string.IsNullOrEmpty(key)) dbSteps[key] = sta;
+                }
             }
 
             // Aggiorna TsStep (UI thread già garantito da DispatcherTimer)

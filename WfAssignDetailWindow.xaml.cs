@@ -83,7 +83,11 @@ public partial class WfAssignDetailWindow : Window
                 foreach (var el in stepsEl.EnumerateArray())
                 {
                     var stepStatus = el.TryGetProperty("status", out var ss) ? ss.GetString() ?? "pending" : "pending";
-                    var output     = el.TryGetProperty("output", out var ou) ? ou.GetString() ?? ""        : "";
+                    // BUG: GET /api/pc-workflows/<pw_id> alias la colonna come
+                    // "log" (COALESCE(pws.output,'') AS log), non "output" —
+                    // TryGetProperty falliva sempre, l'output/log di ogni step
+                    // non veniva mai mostrato in questa finestra.
+                    var output     = el.TryGetProperty("log", out var ou) ? ou.GetString() ?? ""        : "";
                     // Tronca output lungo
                     if (output.Length > 120) output = output[..120] + "…";
 
