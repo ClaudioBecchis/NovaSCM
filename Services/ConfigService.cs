@@ -39,18 +39,42 @@ public class ConfigService
             var json = File.ReadAllText(ConfigPath);
             return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? new();
         }
-        catch
+        catch (Exception ex)
         {
+            // BUG: prima ingoiata senza traccia — un config.json corrotto (es.
+            // scrittura interrotta a metà) resettava silenziosamente TUTTE le
+            // impostazioni (URL/API key, credenziali) senza alcun indizio nei log.
+            try { PolarisManager.App.Log($"ConfigService.Load: {ConfigPath} illeggibile/corrotto, reset a default ({ex.GetType().Name}: {ex.Message})"); }
+            catch { /* logging best-effort */ }
             return new Dictionary<string, string>();
         }
     }
 
-    /// <summary>Salva config su disco con indentazione.</summary>
+    /// <summary>Salva config su disco con indentazione, in modo atomico (temp file + replace).</summary>
     public static void Save(Dictionary<string, string> config)
     {
         EnsureDirectories();
         var json = JsonSerializer.Serialize(config, _jsonOpts);
-        File.WriteAllText(ConfigPath, json);
+        // BUG: scrittura diretta non atomica — un crash/kill a metà write
+        // lasciava config.json troncato/corrotto, causa più probabile dei
+        // "reset silenziosi" intercettati in Load(). Scrivi su file temp e
+        // sostituisci solo a scrittura riuscita.
+        var tmpPath = ConfigPath + ".tmp";
+        try
+        {
+            File.WriteAllText(tmpPath, json);
+            if (File.Exists(ConfigPath))
+                File.Replace(tmpPath, ConfigPath, null);
+            else
+                File.Move(tmpPath, ConfigPath);
+        }
+        catch (Exception ex)
+        {
+            try { PolarisManager.App.Log($"ConfigService.Save: salvataggio config.json fallito ({ex.GetType().Name}: {ex.Message})"); }
+            catch { /* logging best-effort */ }
+            try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { /* cleanup best-effort */ }
+            throw;
+        }
     }
 
     /// <summary>Cifra stringa con DPAPI (CurrentUser). Fallback: plain base64 con prefisso "plain:".</summary>

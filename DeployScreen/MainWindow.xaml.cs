@@ -213,6 +213,19 @@ namespace NovaSCMDeployScreen
             else           StartPolling();
         }
 
+        protected override void OnClosed(EventArgs e)
+        {
+            // BUG: nessun timer veniva fermato alla chiusura della finestra —
+            // stesso bug già corretto in OsdWindow.xaml.cs. _pollTimer/_elaTimer
+            // sono già fermati sui path di successo/errore più sotto, ma non se
+            // la finestra viene chiusa prima (es. Alt+F4) — qui coprono tutti i casi.
+            _clockTimer.Stop();
+            _pollTimer.Stop();
+            _elaTimer.Stop();
+            _demoTimer?.Stop();
+            base.OnClosed(e);
+        }
+
         private void InitUI()
         {
             TxtHostname.Text      = _cfg.Hostname;

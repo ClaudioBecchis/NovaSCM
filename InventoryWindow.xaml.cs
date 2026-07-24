@@ -207,12 +207,18 @@ $swArr = $sw | Sort-Object DisplayName | ForEach-Object {
         // Remoto: wrappa in Invoke-Command con credenziali
         var safePass = pass.Replace("'", "''");
         var safeUser = user.Replace("'", "''");
+        // BUG: $gather termina già con "| ConvertTo-Json -Compress" — è già
+        // una stringa JSON quando esce dallo scriptblock remoto. Ripassarla
+        // per un SECONDO ConvertTo-Json (come faceva prima) la trasforma in
+        // una stringa-JSON con virgolette escapate, che ParseResult non
+        // riesce più a interpretare: ogni raccolta inventario remota falliva
+        // sempre, mascherata da un generico errore di parsing.
         return $@"
 $secPass = ConvertTo-SecureString '{safePass}' -AsPlainText -Force
 $cred    = New-Object System.Management.Automation.PSCredential('{safeUser}', $secPass)
 Invoke-Command -ComputerName {ip} -Credential $cred -ScriptBlock {{
 {gather}
-}} | ConvertTo-Json -Depth 3 -Compress
+}}
 ";
     }
 

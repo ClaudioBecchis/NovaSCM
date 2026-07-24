@@ -230,7 +230,12 @@ public class Worker : BackgroundService
             var stepId  = step["step_id"]?.GetValue<int>() ?? 0;
             var ordine  = step["ordine"]?.GetValue<int>()  ?? 0;
             var nome    = step["nome"]?.GetValue<string>()  ?? "?";
-            var suErr   = step["su_errore"]?.GetValue<string>() ?? "stop";
+            // BUG: nessuna normalizzazione — "Continue"/"continue " (case/spazi
+            // da UI o DB) non facevano match con la whitelist, fermando il
+            // workflow anche quando l'intento era proseguire; "Retry"
+            // maiuscolo non veniva riconosciuto più sotto, ricadendo
+            // silenziosamente su retryMax=1.
+            var suErr   = (step["su_errore"]?.GetValue<string>() ?? "stop").Trim().ToLowerInvariant();
 
             // Salta step già eseguiti (resume)
             if (resumeFrom > 0 && stepId <= resumeFrom)

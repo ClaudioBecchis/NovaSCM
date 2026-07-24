@@ -17,10 +17,25 @@ public class StepExecutor
     public async Task<StepResult> ExecuteAsync(JsonObject step, CancellationToken ct)
     {
         var tipo      = step["tipo"]?.GetValue<string>() ?? "";
-        var platform  = step["platform"]?.GetValue<string>() ?? "all";
+        // BUG: "platform" letto dal DB/UI non era normalizzato (es. "Windows"
+        // maiuscolo, dato utente) mentre myOs è sempre minuscolo — il
+        // confronto falliva sempre e lo step veniva skippato silenziosamente
+        // su ogni macchina, incoerente con EvaluateCondition che invece
+        // normalizza con ToLowerInvariant().
+        var platform  = (step["platform"]?.GetValue<string>() ?? "all").Trim().ToLowerInvariant();
         var myOs      = IsWindows ? "windows" : "linux";
         var parametri = step["parametri"]?.GetValue<string>() ?? "{}";
-        var p         = JsonNode.Parse(parametri)?.AsObject() ?? new JsonObject();
+        JsonObject p;
+        try { p = JsonNode.Parse(parametri)?.AsObject() ?? new JsonObject(); }
+        catch (Exception ex)
+        {
+            // BUG: senza questo, 'parametri' JSON malformato risaliva non
+            // gestito fino al catch generico del loop principale, abortendo
+            // TUTTO il workflow (non solo questo step) — lo step corrotto
+            // restava "running" per sempre lato server senza segnalazione.
+            _log.LogError(ex, "  Step malformato: 'parametri' non è JSON valido");
+            return new(false, $"Step malformato: 'parametri' non è JSON valido ({ex.Message})");
+        }
 
         // Skip se step non è per questa piattaforma
         if (platform != "all" && platform != myOs)
