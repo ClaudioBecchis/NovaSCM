@@ -96,26 +96,52 @@ public static class HardwareCollector
         return "N/A";
     }
 
-    private static string GetMac()
+    // BUG: prima GetMac() (primo adapter up) e GetIp() (Dns.GetHostEntry)
+    // usavano logiche diverse e non coordinate — su macchine multi-homed
+    // (VPN, Hyper-V/Docker vNIC, VPN) potevano riportare MAC e IP di due
+    // interfacce DIVERSE, corrompendo il matching del PC lato server. Ora
+    // entrambi derivano dalla STESSA interfaccia primaria (quella con un
+    // gateway = quella di routing verso la rete), scelta una sola volta.
+    private static NetworkInterface? PrimaryNic()
     {
         try
         {
-            var ni = NetworkInterface.GetAllNetworkInterfaces()
-                .FirstOrDefault(n =>
-                    n.OperationalStatus == OperationalStatus.Up &&
-                    n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
-                    n.NetworkInterfaceType != NetworkInterfaceType.Tunnel &&
-                    n.GetPhysicalAddress().GetAddressBytes().Length == 6);
-            if (ni != null)
-                return string.Join(":", ni.GetPhysicalAddress().GetAddressBytes()
-                    .Select(b => b.ToString("X2")));
+            var up = NetworkInterface.GetAllNetworkInterfaces()
+                .Where(n => n.OperationalStatus == OperationalStatus.Up &&
+                            n.NetworkInterfaceType != NetworkInterfaceType.Loopback &&
+                            n.NetworkInterfaceType != NetworkInterfaceType.Tunnel &&
+                            n.GetPhysicalAddress().GetAddressBytes().Length == 6)
+                .ToList();
+            // Preferisci l'interfaccia con un default gateway IPv4 configurato
+            var withGw = up.FirstOrDefault(n =>
+                n.GetIPProperties().GatewayAddresses
+                    .Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork &&
+                              !g.Address.Equals(System.Net.IPAddress.Any)));
+            return withGw ?? up.FirstOrDefault();
         }
-        catch { }
+        catch { return null; }
+    }
+
+    private static string GetMac()
+    {
+        var ni = PrimaryNic();
+        if (ni != null)
+            return string.Join(":", ni.GetPhysicalAddress().GetAddressBytes()
+                .Select(b => b.ToString("X2")));
         return "N/A";
     }
 
     private static string GetIp()
     {
+        var ni = PrimaryNic();
+        if (ni != null)
+        {
+            var ip = ni.GetIPProperties().UnicastAddresses
+                .FirstOrDefault(a => a.Address.AddressFamily == AddressFamily.InterNetwork &&
+                                     !System.Net.IPAddress.IsLoopback(a.Address));
+            if (ip != null) return ip.Address.ToString();
+        }
+        // Fallback: DNS (comportamento precedente) se la NIC primaria non ha IPv4
         try
         {
             var host = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName());

@@ -19,6 +19,22 @@ public class AgentConfig
         ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "NovaSCM", "logs")
         : "/var/log/novascm";
 
+    // BUG: i messaggi di errore erano scritti solo su Console.Error, ma l'agent
+    // gira come servizio Windows/systemd senza console attaccata — finivano nel
+    // vuoto, vanificando il valore diagnostico dei try/catch. Ora anche su un
+    // file di log persistente (bootstrap.log) accanto agli altri log.
+    private static void LogLine(string msg)
+    {
+        Console.Error.WriteLine(msg);
+        try
+        {
+            Directory.CreateDirectory(LogDir);
+            File.AppendAllText(Path.Combine(LogDir, "bootstrap.log"),
+                $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} {msg}{Environment.NewLine}");
+        }
+        catch { /* logging best-effort */ }
+    }
+
     // BUG CRITICO: PropertyNameCaseInsensitive confronta le stringhe ignorando
     // solo il case, NON converte snake_case↔PascalCase — "api_url" non fa
     // match con "ApiUrl". OGNI agent.json generato dagli script server-side
@@ -65,12 +81,12 @@ public class AgentConfig
             if (string.IsNullOrWhiteSpace(cfg.PcName))
                 cfg.PcName = Environment.MachineName.ToUpperInvariant();
             if (cfg.ApiUrl.Contains("YOUR-NOVASCM-SERVER"))
-                Console.Error.WriteLine($"[ATTENZIONE] agent.json non configurato! Modifica ApiUrl in: {ConfigPath}");
+                LogLine($"[ATTENZIONE] agent.json non configurato! Modifica ApiUrl in: {ConfigPath}");
             return cfg;
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[NovaSCM] Errore lettura config {ConfigPath}: {ex.Message}");
+            LogLine($"[NovaSCM] Errore lettura config {ConfigPath}: {ex.Message}");
             return new AgentConfig();
         }
     }
@@ -93,7 +109,7 @@ public class AgentConfig
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[NovaSCM] State file corrotto: {ex.Message} — reset");
+            LogLine($"[NovaSCM] State file corrotto: {ex.Message} — reset");
             try { File.Delete(StatePath); } catch { }
             return null;
         }

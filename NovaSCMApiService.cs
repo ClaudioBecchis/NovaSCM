@@ -11,6 +11,9 @@ namespace PolarisManager;
 public class NovaSCMApiService(string baseUrl, string apiKey = "", ApiCache? cache = null)
 {
     private static readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(12) };
+    // Client dedicato per i download di binari (self-update): timeout lungo,
+    // il client statico da 12s cancellerebbe a metà un binario di alcuni MB.
+    private static readonly HttpClient _dlHttp = new() { Timeout = TimeSpan.FromMinutes(5) };
     private readonly ApiCache _cache = cache ?? new ApiCache();
     private string CrBase  => baseUrl.TrimEnd('/');                          // include /api/cr
     // BUG-9: usa Uri per estrarre l'origine senza dipendere dalla stringa "/api/cr"
@@ -146,9 +149,14 @@ public class NovaSCMApiService(string baseUrl, string apiKey = "", ApiCache? cac
 
     public async Task<byte[]> DownloadExeAsync(string downloadUrl)
     {
+        // BUG: usava l'HttpClient statico con Timeout=12s — un binario di
+        // alcuni MB su rete lenta superava facilmente 12s e l'update falliva
+        // con TaskCanceledException. Il Timeout dell'HttpClient vince su un
+        // eventuale CancellationToken più lungo, quindi serve un client
+        // dedicato con timeout adeguato (_dlHttp, 5 min).
         var req = new HttpRequestMessage(HttpMethod.Get, downloadUrl);
         AddAuth(req);
-        using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
+        using var resp = await _dlHttp.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);
         if (!resp.IsSuccessStatusCode)
             throw new HttpRequestException(
                 $"{(int)resp.StatusCode} {resp.ReasonPhrase}: download fallito",
