@@ -1574,3 +1574,58 @@ class TestTokenScoping:
         assert r.status_code == 200
         r2 = client.get("/api/pc/PC-TEST-01/workflow", headers=AUTH)
         assert r2.status_code == 404  # non 401/403
+
+    def _make_deploy_token(self, client, pc_name="PC-WIMBOOT-01"):
+        """Inserisce un deploy_token direttamente nel DB (nessun endpoint
+        pubblico lo espone — viene generato internamente durante la build
+        dell'autounattend XML per il flusso wimboot)."""
+        import time, datetime as _dt
+        token = "deploy-token-test-" + pc_name
+        now = _dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None)
+        exp = (now + _dt.timedelta(hours=24)).isoformat()
+        with api.get_db_ctx() as conn:
+            conn.execute(
+                "INSERT INTO deploy_tokens (token, pc_name, pw_id, created_at, expires_at, used) "
+                "VALUES (?,?,?,?,?,0)",
+                (token, pc_name, None, now.isoformat(), exp)
+            )
+            conn.commit()
+        return token
+
+    def test_deploy_token_can_call_scoped_endpoint(self, client):
+        """BUG: il flusso wimboot scriveva il deploy_token grezzo come api_key
+        nell'agent.json, ma require_auth non lo riconosceva affatto — l'agent
+        avrebbe ricevuto 401 su ogni chiamata. Ora un deploy_token valido
+        autentica come i token scope=deploy/enrollment, solo per gli
+        endpoint di provisioning."""
+        tok = self._make_deploy_token(client)
+        r = client.get("/api/pc/PC-WIMBOOT-01/workflow", headers={"X-Api-Key": tok})
+        assert r.status_code == 404  # nessun workflow assegnato — non 401/403
+
+    def test_deploy_token_cannot_list_cr(self, client):
+        tok = self._make_deploy_token(client)
+        r = client.get("/api/cr", headers={"X-Api-Key": tok})
+        assert r.status_code == 403
+
+    def test_deploy_token_download_agent_endpoint_authorized(self, client):
+        """L'endpoint usato dal wimboot per scaricare NovaSCMAgent.exe deve
+        accettare il deploy_token (anche se il file non esiste in test env,
+        deve fallire con 404 'non disponibile', non 401/403)."""
+        tok = self._make_deploy_token(client)
+        r = client.get("/api/download/agent", headers={"X-Api-Key": tok})
+        assert r.status_code == 404
+        assert r.status_code != 401 and r.status_code != 403
+
+    def test_expired_deploy_token_rejected(self, client):
+        import datetime as _dt
+        token = "expired-deploy-token"
+        past = (_dt.datetime.now(_dt.timezone.utc).replace(tzinfo=None) - _dt.timedelta(hours=1)).isoformat()
+        with api.get_db_ctx() as conn:
+            conn.execute(
+                "INSERT INTO deploy_tokens (token, pc_name, pw_id, created_at, expires_at, used) "
+                "VALUES (?,?,?,?,?,0)",
+                (token, "PC-EXPIRED", None, past, past)
+            )
+            conn.commit()
+        r = client.get("/api/pc/PC-EXPIRED/workflow", headers={"X-Api-Key": token})
+        assert r.status_code == 401

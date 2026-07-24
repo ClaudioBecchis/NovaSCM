@@ -19,10 +19,25 @@ public class AgentConfig
         ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "NovaSCM", "logs")
         : "/var/log/novascm";
 
+    // BUG CRITICO: PropertyNameCaseInsensitive confronta le stringhe ignorando
+    // solo il case, NON converte snake_case↔PascalCase — "api_url" non fa
+    // match con "ApiUrl". OGNI agent.json generato dagli script server-side
+    // (server/api.py: download_agent_installer_ps1/.sh, il flusso wimboot)
+    // scrive chiavi snake_case (api_url, api_key, pc_name, poll_sec) perché
+    // è la convenzione dell'agent Python — ma venivano SEMPRE ignorate qui,
+    // lasciando ApiUrl/ApiKey sui valori di default. L'agent C# installato
+    // come servizio Windows non riusciva mai a configurarsi da solo,
+    // indipendentemente dal percorso di deploy (DISM, wimboot, o download
+    // manuale dell'installer). Verificato empiricamente prima del fix.
+    [JsonPropertyName("api_url")]
     public string ApiUrl  { get; set; } = "http://YOUR-NOVASCM-SERVER:9091";
+    [JsonPropertyName("api_key")]
     public string ApiKey  { get; set; } = "";
+    [JsonPropertyName("pc_name")]
     public string PcName  { get; set; } = Environment.MachineName.ToUpperInvariant();
+    [JsonPropertyName("domain")]
     public string Domain  { get; set; } = "WORKGROUP";
+    [JsonPropertyName("poll_sec")]
     public int    PollSec { get; set; } = 60;
 
     private static readonly JsonSerializerOptions _opts = new() { WriteIndented = true, PropertyNameCaseInsensitive = true };

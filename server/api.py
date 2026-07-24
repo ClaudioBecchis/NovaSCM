@@ -304,6 +304,13 @@ def require_auth(fn):
             log.warning("Enrollment token non autorizzato per endpoint '%s' da %s",
                         fn.__name__, request.remote_addr)
             return jsonify({"error": "Non autorizzato per questa operazione"}), 403
+        # Controlla deploy_token grezzo (flusso wimboot, agent.json api_key) — scopo ristretto
+        if token and _validate_deploy_token_peek(token):
+            if fn.__name__ in _AGENT_SCOPED_ENDPOINTS:
+                return fn(*args, **kwargs)
+            log.warning("Deploy token non autorizzato per endpoint '%s' da %s",
+                        fn.__name__, request.remote_addr)
+            return jsonify({"error": "Non autorizzato per questa operazione"}), 403
         log.warning("Accesso non autorizzato da %s", request.remote_addr)
         return jsonify({"error": "Non autorizzato"}), 401
     return wrapper
@@ -344,6 +351,28 @@ def _close_db(exc):
         except Exception:
             pass
         _db_local.conn = None
+
+def _validate_deploy_token_peek(token: str) -> bool:
+    """Verifica un deploy_token SENZA consumarlo (a differenza di /api/deploy/enroll,
+    che marca used=1 per lo scambio one-shot con una session key admin-facing per
+    la pagina /deploy-client). Qui il token grezzo viene usato direttamente come
+    X-Api-Key dall'agent (BUG: il flusso wimboot lo scriveva in agent.json e lo
+    passava agli endpoint di download SENZA che require_auth lo riconoscesse
+    affatto — 401 su ogni chiamata). Controlla solo la scadenza, non 'used':
+    quel flag traccia lo scambio via /api/deploy/enroll, un uso diverso dello
+    stesso segreto, non deve invalidare l'uso come API key dell'agent.
+    """
+    try:
+        with get_db_ctx() as conn:
+            row = conn.execute(
+                "SELECT expires_at FROM deploy_tokens WHERE token=?", (token,)
+            ).fetchone()
+            if not row:
+                return False
+            now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None).isoformat()
+            return row["expires_at"] >= now
+    except Exception:
+        return False
 
 def _generate_deploy_token(conn, pc_name: str, pw_id) -> str:
     """Genera un enrollment token monouso per il deploy di pc_name (validità 24h)."""
@@ -2860,7 +2889,7 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>4</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;@{{api_url=&apos;{xurl}&apos;;deploy_token=&apos;{xkey}&apos;;pc_name=&apos;{xpc}&apos;;poll_sec=30;domain=&apos;{xdom}&apos;}}|ConvertTo-Json|Set-Content &apos;C:\\ProgramData\\NovaSCM\\agent.json&apos; -Encoding UTF8&quot;</CommandLine>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;@{{api_url=&apos;{xurl}&apos;;api_key=&apos;{xkey}&apos;;pc_name=&apos;{xpc}&apos;;poll_sec=30;domain=&apos;{xdom}&apos;}}|ConvertTo-Json|Set-Content &apos;C:\\ProgramData\\NovaSCM\\agent.json&apos; -Encoding UTF8&quot;</CommandLine>
           <Description>NovaSCM: crea config agente</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
