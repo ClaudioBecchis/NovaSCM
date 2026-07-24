@@ -6417,13 +6417,17 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
 
         try
         {
+            // BUG: i campi venivano racchiusi in "..." ma un " letterale nel
+            // valore (hostname/vendor da mDNS/DNS) non veniva raddoppiato come
+            // vuole lo standard CSV (RFC 4180) — il file si disallineava in Excel.
+            static string Csv(string v) => "\"" + (v ?? "").Replace("\"", "\"\"") + "\"";
             var sb = new System.Text.StringBuilder();
             sb.AppendLine("IP,MAC,Hostname,Tipo,Connessione,Vendor,Certificato,Stato");
             foreach (var d in _netRows)
             {
-                sb.AppendLine(
-                    $"\"{d.Ip}\",\"{d.Mac}\",\"{d.Name}\",\"{d.DeviceType}\"," +
-                    $"\"{d.ConnectionType}\",\"{d.Vendor}\",\"{d.CertStatus}\",\"{d.Status}\"");
+                sb.AppendLine(string.Join(",",
+                    Csv(d.Ip), Csv(d.Mac), Csv(d.Name), Csv(d.DeviceType),
+                    Csv(d.ConnectionType), Csv(d.Vendor), Csv(d.CertStatus), Csv(d.Status)));
             }
             File.WriteAllText(dlg.FileName, sb.ToString(), System.Text.Encoding.UTF8);
             SetStatus($"✅ Esportati {_netRows.Count} device in {Path.GetFileName(dlg.FileName)}");
@@ -7081,9 +7085,12 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
             var isOnline    = d.Status?.Contains("Online") == true;
             var statusStyle = isOnline ? "color:#16a34a;font-weight:bold" : "color:#dc2626";
             var statusText  = isOnline ? "🟢 Online" : "⬛ Offline";
+            // BUG: Ip e Mac non erano HTML-encoded a differenza degli altri
+            // campi — trust boundary incoerente (stored-HTML-injection nel
+            // report esportato se il valore arrivasse da mDNS/input manuale).
             rows.AppendLine(
-                $"<tr><td>{d.Ip}</td><td>{System.Net.WebUtility.HtmlEncode(d.Name)}</td>" +
-                $"<td style='font-family:monospace'>{d.Mac}</td>" +
+                $"<tr><td>{System.Net.WebUtility.HtmlEncode(d.Ip)}</td><td>{System.Net.WebUtility.HtmlEncode(d.Name)}</td>" +
+                $"<td style='font-family:monospace'>{System.Net.WebUtility.HtmlEncode(d.Mac)}</td>" +
                 $"<td>{System.Net.WebUtility.HtmlEncode(d.Vendor)}</td>" +
                 $"<td>{System.Net.WebUtility.HtmlEncode(d.DeviceType)}</td>" +
                 $"<td style='{statusStyle}'>{statusText}</td>" +

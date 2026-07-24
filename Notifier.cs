@@ -39,6 +39,23 @@ public class AlertToast : Window
 {
     private readonly DispatcherTimer _timer = new();
 
+    // BUG: ogni toast si posizionava nello stesso angolo in basso a destra
+    // senza tener conto di altri toast aperti — due notifiche ravvicinate si
+    // sovrapponevano illeggibili. Lista dei toast vivi per lo stacking verticale.
+    private static readonly List<AlertToast> _open = [];
+
+    private static void Restack()
+    {
+        var wa = SystemParameters.WorkArea;
+        double y = wa.Bottom - 18;
+        foreach (var t in _open)
+        {
+            t.Left = wa.Right - t.ActualWidth - 18;
+            t.Top  = y - t.ActualHeight;
+            y -= t.ActualHeight + 8;
+        }
+    }
+
     public AlertToast(string title, string body, Notifier.Level level,
                       Action? onClick, int autoCloseSec)
     {
@@ -92,9 +109,14 @@ public class AlertToast : Window
 
         Loaded += (_, _) =>
         {
-            var wa = SystemParameters.WorkArea;
-            Left = wa.Right - ActualWidth - 18;
-            Top  = wa.Bottom - ActualHeight - 18;
+            _open.Add(this);
+            Restack();
+        };
+
+        Closed += (_, _) =>
+        {
+            _open.Remove(this);
+            Restack();
         };
 
         MouseDown += (_, _) => { _timer.Stop(); Close(); onClick?.Invoke(); };

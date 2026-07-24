@@ -582,6 +582,17 @@ namespace NovaSCMDeployScreen
                     if (ctext != null) { ctext.Text = "✕"; ctext.Foreground = new SolidColorBrush(Color.FromRgb(255, 71, 87)); }
                     if (sname != null) sname.Foreground = new SolidColorBrush(Color.FromRgb(255, 71, 87));
                     break;
+                // BUG: mancava il case Skip — uno step saltato (su_errore=continue,
+                // o condizione non soddisfatta) restava visivamente identico a
+                // uno step futuro mai raggiunto, l'operatore non poteva capire se
+                // era stato saltato intenzionalmente o se il deploy si era bloccato.
+                case StepStatus.Skip:
+                    circle.Background  = new SolidColorBrush(Color.FromArgb(30, 148, 163, 184));
+                    circle.BorderBrush = new SolidColorBrush(Color.FromRgb(148, 163, 184));
+                    if (ctext != null) { ctext.Text = "⤼"; ctext.Foreground = new SolidColorBrush(Color.FromRgb(148, 163, 184)); }
+                    if (sname != null) sname.Foreground = new SolidColorBrush(Color.FromRgb(120, 134, 156));
+                    if (conn  != null) conn.Fill = new SolidColorBrush(Color.FromArgb(48, 148, 163, 184));
+                    break;
             }
         }
 
