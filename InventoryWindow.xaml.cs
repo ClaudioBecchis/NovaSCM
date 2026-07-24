@@ -206,9 +206,10 @@ $swArr = $sw | Sort-Object DisplayName | ForEach-Object {
 
         // Remoto: wrappa in Invoke-Command con credenziali
         var safePass = pass.Replace("'", "''");
+        var safeUser = user.Replace("'", "''");
         return $@"
 $secPass = ConvertTo-SecureString '{safePass}' -AsPlainText -Force
-$cred    = New-Object System.Management.Automation.PSCredential('{user}', $secPass)
+$cred    = New-Object System.Management.Automation.PSCredential('{safeUser}', $secPass)
 Invoke-Command -ComputerName {ip} -Credential $cred -ScriptBlock {{
 {gather}
 }} | ConvertTo-Json -Depth 3 -Compress

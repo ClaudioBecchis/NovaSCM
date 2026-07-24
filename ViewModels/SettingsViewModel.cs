@@ -1,3 +1,4 @@
+using System;
 using System.Net.Http;
 using System.Windows.Input;
 using NovaSCM.Commands;
@@ -137,8 +138,16 @@ public class SettingsViewModel : ViewModelBase
         StatusMessage = "Test connessione...";
         try
         {
+            // BUG-9 (allineato a NovaSCMApiService.ApiBase): normalizza l'URL all'origine
+            // (scheme://host:port), scartando eventuali path tipo "/api" o "/api/cr" digitati
+            // per errore — altrimenti "Test connessione" fallisce (404/405) anche quando le
+            // vere chiamate API funzionerebbero, perché quelle passano da ApiBase già normalizzato.
+            string origin;
+            try { var u = new Uri(ApiUrl.TrimEnd('/')); origin = $"{u.Scheme}://{u.Authority}"; }
+            catch { origin = ApiUrl.TrimEnd('/'); }
+
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
-            var resp = await http.GetAsync($"{ApiUrl.TrimEnd('/')}/health");
+            var resp = await http.GetAsync($"{origin}/health");
             StatusMessage = resp.IsSuccessStatusCode
                 ? "Connessione OK"
                 : $"Errore: HTTP {(int)resp.StatusCode}";

@@ -4503,8 +4503,8 @@ public partial class MainWindow : Window
 
         // Funzione Report-Step (telemetria step-by-step verso NovaSCM API)
         var reportStepFn = !string.IsNullOrEmpty(cfg.NovaSCMCrApiUrl) ? $@"
-$_crApi    = '{cfg.NovaSCMCrApiUrl}'
-$_apiKey   = '{cfg.NovaSCMApiKey}'
+$_crApi    = '{PsEsc(cfg.NovaSCMCrApiUrl)}'
+$_apiKey   = '{PsEsc(cfg.NovaSCMApiKey)}'
 $_hostname = $env:COMPUTERNAME
 function Report-Step {{
     param([string]$Step, [string]$Status = 'done')
@@ -4527,7 +4527,7 @@ $adapter = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' -and $_.HardwareIn
            Sort-Object InterfaceIndex | Select-Object -First 1
 if ($adapter) {
     $mac6 = ($adapter.MacAddress -replace '[:\-]','').Substring(6).ToUpper()
-    $newName = '" + cfg.PcNameTemplate.Replace("{MAC6}", "' + $mac6 + '") + @"'
+    $newName = '" + PsEsc(cfg.PcNameTemplate).Replace("{MAC6}", "' + $mac6 + '") + @"'
     if ($env:COMPUTERNAME -ne $newName) {
         Rename-Computer -NewName $newName -Force -ErrorAction SilentlyContinue
         Write-Output ""PC rinominato: $newName""
@@ -4542,7 +4542,7 @@ if ($adapter) {
 Write-Output 'Unione ad Azure AD in corso...'
 try {{
     $dsreg = 'C:\Windows\System32\dsregcmd.exe'
-    {(string.IsNullOrEmpty(cfg.AzureTenantId) ? "" : $"$env:AAD_TENANT_ID = '{cfg.AzureTenantId}'")}
+    {(string.IsNullOrEmpty(cfg.AzureTenantId) ? "" : $"$env:AAD_TENANT_ID = '{PsEsc(cfg.AzureTenantId)}'")}
     & $dsreg /join 2>&1 | Write-Output
     Write-Output 'Azure AD join avviato — completare il login al primo avvio'
 }} catch {{

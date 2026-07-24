@@ -133,6 +133,16 @@ public static class Database
             migCmd.ExecuteNonQuery();
         }
         catch (SqliteException) { } // colonna già presente — ignorato
+
+        // Migration: colonna tag separata — prima condivideva "notes" con SaveDeviceNote,
+        // causando la sovrascrittura reciproca di nota e tag sullo stesso device.
+        try
+        {
+            using var migCmd2 = db.CreateCommand();
+            migCmd2.CommandText = "ALTER TABLE devices ADD COLUMN tag TEXT NOT NULL DEFAULT '';";
+            migCmd2.ExecuteNonQuery();
+        }
+        catch (SqliteException) { } // colonna già presente — ignorato
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -622,9 +632,18 @@ public static class Database
     public static void SaveDeviceTag(string ip, string tag)
     {
         using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO devices (ip, mac, vendor, name, icon, device_type, connection_type, status, cert_status, last_seen)
+            VALUES ($ip,'—','—','—','❔','—','❔','—','⬜ No','')
+            ON CONFLICT(ip) DO UPDATE SET last_seen=last_seen;
+            """;
+        cmd.Parameters.AddWithValue("$ip", ip);
+        cmd.ExecuteNonQuery();
+
         using var cmd2 = db.CreateCommand();
-        cmd2.CommandText = "UPDATE devices SET notes=$notes WHERE ip=$ip;";
-        cmd2.Parameters.AddWithValue("$notes", "[tag:" + tag + "]");
+        cmd2.CommandText = "UPDATE devices SET tag=$tag WHERE ip=$ip;";
+        cmd2.Parameters.AddWithValue("$tag", tag);
         cmd2.Parameters.AddWithValue("$ip", ip);
         cmd2.ExecuteNonQuery();
     }

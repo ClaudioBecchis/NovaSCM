@@ -41,7 +41,16 @@ except ImportError:
     log_startup.warning("flask-limiter non disponibile — rate limiting disabilitato (pip install flask-limiter)")
 
 app = Flask(__name__)
-app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+# SEC: ProxyFix fa fidare l'app dell'header X-Forwarded-For per determinare
+# request.remote_addr — usato come UNICO controllo di accesso per gli endpoint
+# PXE non autenticati (_is_pxe_allowed) e dal rate limiter. Se il server è
+# esposto direttamente (nessun reverse proxy davanti, es. docker-compose con
+# porta pubblicata sull'host) un client qualsiasi può falsificare il proprio
+# IP con quell'header e bypassare l'allow-list di subnet. Va abilitato SOLO
+# se il server sta realmente dietro un reverse proxy fidato (Caddy/nginx).
+_TRUST_PROXY = os.environ.get("NOVASCM_TRUST_PROXY", "0") == "1"
+if _TRUST_PROXY:
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 # ── Directory costanti (C-1 fix: dichiarate in alto, usate da PXE endpoints) ──
 DIST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dist")
@@ -2924,7 +2933,7 @@ def get_pxe_settings_api():
         ).fetchall()
     result = dict(_PXE_SETTINGS_DEFAULTS)
     result.update({r["key"]: r["value"] for r in rows})
-    for k in ("pxe_default_join_pass", "pxe_default_admin_pass"):
+    for k in ("pxe_default_join_pass", "pxe_default_admin_pass", "pxe_smb_pass"):
         if result.get(k):
             result[k] = "••••••••"
     return jsonify(result)

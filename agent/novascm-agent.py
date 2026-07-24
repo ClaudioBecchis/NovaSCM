@@ -1,4 +1,4 @@
-"""
+r"""
 NovaSCM Agent — Workflow Executor
 Gira come servizio (Windows Service / systemd).
 Fa polling dell'API, esegue workflow assegnati, riporta stato step per step.
@@ -210,8 +210,13 @@ def run_cmd(cmd, timeout=STEP_TIMEOUT, env=None):
 
 def execute_step(step):
     """Esegue uno step e restituisce (ok, output)."""
-    tipo      = step["tipo"]
-    parametri = json.loads(step.get("parametri") or "{}")
+    tipo = step.get("tipo")
+    if not tipo:
+        return False, "Step malformato: campo 'tipo' mancante"
+    try:
+        parametri = json.loads(step.get("parametri") or "{}")
+    except (TypeError, ValueError) as e:
+        return False, f"Step malformato: 'parametri' non è JSON valido ({e})"
     my_os     = get_os_platform()
     plat      = step.get("platform", "all")
 
@@ -322,9 +327,11 @@ def execute_step(step):
             delay = 5
         log.info(f"  Riavvio programmato tra {delay}s")
         if IS_WINDOWS:
-            run_cmd(["shutdown", "/r", "/t", str(delay)])
+            ok, out = run_cmd(["shutdown", "/r", "/t", str(delay)])
         else:
-            run_cmd(["shutdown", "-r", f"+{max(1, delay // 60)}"])
+            ok, out = run_cmd(["shutdown", "-r", f"+{max(1, delay // 60)}"])
+        if not ok:
+            return False, f"Comando shutdown fallito: {out}"
         return True, f"Riavvio programmato tra {delay}s"
 
     # ── message ──
@@ -383,9 +390,19 @@ def run_workflow(cfg, workflow):
     needs_reboot = False
 
     for step in steps:
-        step_id  = step["step_id"]
-        step_num = step["ordine"]
-        nome     = step["nome"]
+        try:
+            step_id  = step["step_id"]
+            step_num = step["ordine"]
+            nome     = step["nome"]
+        except (KeyError, TypeError) as e:
+            log.error(f"Step malformato dal server, campo mancante ({e}): {step!r}")
+            api_post(api_url, f"/api/pc/{pc_name}/workflow/step", {
+                "step_id": step.get("step_id") if isinstance(step, dict) else None,
+                "status": "error",
+                "output": f"Step malformato dal server: campo mancante {e}",
+                "ts": datetime.now().isoformat()
+            }, api_key)
+            return False
 
         if resume_from and step_id <= resume_from:
             log.info(f"[{step_num}] {nome} — già completato, salto")
