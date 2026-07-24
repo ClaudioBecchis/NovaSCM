@@ -120,11 +120,31 @@ def load_config():
         mtime = 0.0
     if _cfg_cache is not None and mtime == _cfg_mtime:
         return _cfg_cache
-    with open(CONFIG_FILE) as f:
-        cfg = json.load(f)
+    # BUG: open()/json.load() senza try/except, a differenza di load_state()
+    # che si autoripara. Un agent.json corrotto (scrittura non atomica, edit
+    # manuale con errore) faceva crashare l'intero processo al primo avvio.
+    # Se abbiamo una cache valida, la riusiamo; altrimenti fallback ai default.
+    try:
+        with open(CONFIG_FILE) as f:
+            cfg = json.load(f)
+        if not isinstance(cfg, dict):
+            raise ValueError("il contenuto non è un oggetto JSON")
+    except (json.JSONDecodeError, ValueError, OSError) as e:
+        if _cfg_cache is not None:
+            log.error("agent.json illeggibile/corrotto (%s) — riuso l'ultima config valida", e)
+            return _cfg_cache
+        log.error("agent.json illeggibile/corrotto (%s) e nessuna cache — uso i default", e)
+        cfg = dict(DEFAULT_CONFIG)
     cfg.setdefault("pc_name", socket.gethostname().upper())
-    cfg.setdefault("poll_sec", POLL_SEC)
     cfg.setdefault("api_key", "")
+    # poll_sec deve essere un intero positivo — un valore malformato (stringa,
+    # negativo) altrimenti fa crashare time.sleep() nel main loop.
+    try:
+        ps = int(cfg.get("poll_sec", POLL_SEC))
+        cfg["poll_sec"] = ps if ps > 0 else POLL_SEC
+    except (ValueError, TypeError):
+        log.warning("poll_sec non valido (%r) — uso il default %ds", cfg.get("poll_sec"), POLL_SEC)
+        cfg["poll_sec"] = POLL_SEC
     if "YOUR-SERVER-IP" in cfg.get("api_url", ""):
         log.error("[ERRORE CRITICO] agent.json non configurato! Modifica api_url in: %s", CONFIG_FILE)
         sys.exit(1)
@@ -358,7 +378,11 @@ def execute_step(step):
 # ── Condition Evaluator ───────────────────────────────────────────────────────
 def evaluate_condition(condizione):
     """Valuta una condizione semplice. Ritorna True se lo step va eseguito."""
-    if not condizione or not condizione.strip():
+    # BUG: se il server manda "condizione": 123 o un oggetto/lista invece di
+    # una stringa, `condizione.strip()` sollevava AttributeError non gestito,
+    # che risaliva fino al catch di main_loop abortendo l'intero workflow (e
+    # senza aver salvato completed_step_ids, causando un loop di re-esecuzione).
+    if not isinstance(condizione, str) or not condizione.strip():
         return True
     cond = condizione.strip().lower()
     if cond == "windows":
@@ -378,8 +402,17 @@ def run_workflow(cfg, workflow):
     pc_name    = cfg["pc_name"]
     api_url    = cfg["api_url"]
     api_key    = cfg.get("api_key", "")
-    pw_id      = workflow["id"]
+    # BUG: workflow["id"] con indicizzazione diretta — se l'API risponde con un
+    # JSON valido ma struttura inattesa (manca "id": versione API diversa, ack
+    # generico), KeyError non gestito risaliva a main_loop, nessuno stato
+    # aggiornato, e — senza backoff — il polling successivo ricadeva nello
+    # stesso crash: loop silenzioso a tempo indeterminato.
+    pw_id      = workflow.get("id")
     steps      = workflow.get("steps", [])
+    if pw_id is None or not isinstance(steps, list):
+        log.error("Workflow malformato dal server (id=%r, steps type=%s) — ignorato",
+                  pw_id, type(steps).__name__)
+        return False
 
     state = load_state()
     saved_pw_id = state.get("pw_id", 0)
@@ -519,7 +552,14 @@ def main_loop():
         except Exception:
             log.error(f"Errore nel loop principale:\n{traceback.format_exc()}")
 
-        time.sleep(cfg.get("poll_sec", POLL_SEC))
+        # cfg["poll_sec"] è garantito intero positivo da load_config(); il
+        # get con default protegge il caso in cui il primo load_config() sopra
+        # abbia sollevato prima di assegnare cfg.
+        try:
+            sleep_sec = int(cfg.get("poll_sec", POLL_SEC))
+        except (ValueError, TypeError, NameError):
+            sleep_sec = POLL_SEC
+        time.sleep(sleep_sec if sleep_sec > 0 else POLL_SEC)
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
