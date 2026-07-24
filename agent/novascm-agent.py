@@ -310,11 +310,16 @@ def execute_step(step):
         dst = parametri.get("dst", "")
         if not src or not dst:
             return False, "Parametri 'src' e 'dst' obbligatori"
-        # SEC: path traversal — normalizza e blocca '..' e null byte
+        # Trust model: i parametri dello step arrivano dal server tramite un
+        # workflow autenticato con API key/token admin — un admin può già
+        # eseguire shell_script/ps_script con qualunque path, quindi bloccare
+        # ".." qui non è una vera boundary di sicurezza: dopo normpath/abspath
+        # ogni ".." è già risolto, il controllo era dead code che non poteva
+        # mai scattare. L'unico controllo sensato resta il null-byte.
         src = os.path.normpath(os.path.abspath(src))
         dst = os.path.normpath(os.path.abspath(dst))
-        if ".." in src or ".." in dst or "\0" in src or "\0" in dst:
-            return False, "Path non consentito (path traversal)"
+        if "\0" in src or "\0" in dst:
+            return False, "Path non consentito (null byte)"
         try:
             shutil.copy2(src, dst)
             return True, f"Copiato: {src} → {dst}"

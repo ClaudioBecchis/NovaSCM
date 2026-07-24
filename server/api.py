@@ -540,10 +540,44 @@ def row_to_dict(row, include_sensitive: bool = False):
 
 # ── Webhook notifiche ─────────────────────────────────────────────────────────
 
-_WEBHOOK_BLOCKED_HOSTS = {"169.254.169.254", "metadata.google.internal", "localhost", "127.0.0.1", "::1", "0.0.0.0"}
-_WEBHOOK_BLOCKED_PREFIXES = ("10.", "169.254.", "192.168.", "172.16.", "172.17.", "172.18.", "172.19.",
-                              "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
-                              "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.")
+_WEBHOOK_BLOCKED_NAMES = {"metadata.google.internal", "metadata.internal"}
+
+def _is_blocked_webhook_ip(ip_str: str) -> bool:
+    """True se l'IP è loopback/privato/link-local/riservato/multicast (IPv4 o IPv6)."""
+    import ipaddress as _ipaddr
+    try:
+        addr = _ipaddr.ip_address(ip_str)
+    except ValueError:
+        return True  # non un IP valido — per sicurezza tratta come bloccato
+    return (addr.is_loopback or addr.is_private or addr.is_link_local or
+            addr.is_reserved or addr.is_multicast or addr.is_unspecified)
+
+def _is_blocked_webhook_host(hostname: str) -> bool:
+    """
+    H-2/SEC: validazione SSRF robusta — invece di confrontare solo la stringa
+    hostname contro prefissi fissi (aggirabile con notazione IP decimale/
+    ottale/esadecimale, es. http://2130706433/ = 127.0.0.1, o con IPv6), risolve
+    l'hostname (o lo interpreta come IP letterale) e controlla OGNI IP
+    risultante con ipaddress.is_private/is_loopback/ecc.
+    Non protegge da DNS rebinding vero e proprio (la risoluzione qui e quella
+    fatta da urlopen() nel thread di invio sono due lookup separati) — per
+    quello servirebbe pinnare l'IP risolto e connettersi direttamente ad esso,
+    fuori scope per un webhook amministrato solo da un token già autenticato.
+    """
+    import socket
+    if not hostname or hostname.lower() in _WEBHOOK_BLOCKED_NAMES:
+        return True
+    try:
+        import ipaddress as _ipaddr
+        _ipaddr.ip_address(hostname)
+        return _is_blocked_webhook_ip(hostname)
+    except ValueError:
+        pass  # non un IP letterale — risolvi via DNS
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return True  # non risolvibile — per sicurezza tratta come bloccato
+    return any(_is_blocked_webhook_ip(info[4][0]) for info in infos)
 
 def _fire_webhook(event: str, data: dict):
     """Chiama il webhook configurato in modo fire-and-forget (thread daemon)."""
@@ -554,12 +588,13 @@ def _fire_webhook(event: str, data: dict):
     enabled = (row_en["value"] if row_en else "0") == "1"
     if not url or not enabled:
         return
-    # H-2: validazione SSRF — blocca URL verso host interni/metadata
     try:
         from urllib.parse import urlparse
         parsed = urlparse(url)
-        hostname = (parsed.hostname or "").lower()
-        if hostname and (hostname in _WEBHOOK_BLOCKED_HOSTS or hostname.startswith(_WEBHOOK_BLOCKED_PREFIXES)):
+        if parsed.scheme not in ("http", "https"):
+            log.warning("Webhook URL bloccato (schema non valido): %s", url)
+            return
+        if _is_blocked_webhook_host((parsed.hostname or "").lower()):
             log.warning("Webhook URL bloccato (SSRF): %s", url)
             return
     except Exception:

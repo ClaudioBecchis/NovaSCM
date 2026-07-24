@@ -150,17 +150,19 @@ public class StepExecutor
         if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(dst))
             return Task.FromResult(new StepResult(false, "Parametri 'src' e 'dst' obbligatori"));
 
-        // SEC: path traversal — normalizza i path e blocca '..' e componenti pericolosi
+        // Trust model: i parametri dello step arrivano dal server tramite un
+        // workflow autenticato con API key/token admin (vedi scoping in
+        // server/api.py) — un admin può già eseguire ps_script/shell_script
+        // con qualunque path, quindi "bloccare .." qui non è una vera
+        // boundary di sicurezza: dopo GetFullPath() ogni ".." è già risolto,
+        // il controllo era dead code che non poteva mai scattare (falsa
+        // sensazione di protezione). L'unico controllo sensato resta il
+        // null-byte (percorso malformato/troncabile a livello OS).
         try { src = Path.GetFullPath(src); dst = Path.GetFullPath(dst); }
         catch { return Task.FromResult(new StepResult(false, "Path non valido")); }
 
-        // Blocca esplicitamente path che dopo normalizzazione salgono fuori dalle radici consentite
-        static bool IsSafe(string path) =>
-            !path.Contains("..", StringComparison.Ordinal) &&
-            !path.Contains('\0');
-
-        if (!IsSafe(src) || !IsSafe(dst))
-            return Task.FromResult(new StepResult(false, "Path non consentito (path traversal)"));
+        if (src.Contains('\0') || dst.Contains('\0'))
+            return Task.FromResult(new StepResult(false, "Path non consentito (null byte)"));
 
         if (!File.Exists(src))
             return Task.FromResult(new StepResult(false, $"Sorgente non trovata: {src}"));
