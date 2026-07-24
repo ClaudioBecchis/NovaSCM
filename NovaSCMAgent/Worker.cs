@@ -228,9 +228,19 @@ public class Worker : BackgroundService
             try
             {
                 var hw = HardwareCollector.Collect();
-                await _api.SendHardwareAsync(cfg.ApiUrl, pwId, hw, ct, cfg.ApiKey);
-                AgentConfig.MarkHwSent(pwId, resumeFrom, [.. completedStepIds]);
-                _log.LogInformation("Hardware inviato: CPU={Cpu} RAM={Ram}", hw.Cpu, hw.Ram);
+                // BUG: MarkHwSent veniva chiamato incondizionatamente — un
+                // 401/500 faceva perdere l'inventario per sempre. Ora si marca
+                // "inviato" solo se la POST ha davvero avuto successo; altrimenti
+                // si ritenta al prossimo ciclo di polling.
+                if (await _api.SendHardwareAsync(cfg.ApiUrl, pwId, hw, ct, cfg.ApiKey))
+                {
+                    AgentConfig.MarkHwSent(pwId, resumeFrom, [.. completedStepIds]);
+                    _log.LogInformation("Hardware inviato: CPU={Cpu} RAM={Ram}", hw.Cpu, hw.Ram);
+                }
+                else
+                {
+                    _log.LogWarning("Invio hardware non riuscito — ritento al prossimo ciclo");
+                }
             }
             catch (Exception ex) { _log.LogWarning("HW collect: {Err}", ex.Message); }
         }
@@ -282,8 +292,14 @@ public class Worker : BackgroundService
                 try { p = System.Text.Json.Nodes.JsonNode.Parse(
                         step["parametri"]?.GetValue<string>() ?? "{}")?.AsObject(); }
                 catch { /* parametri non JSON, ignora */ }
-                retryMax      = p?["retry_max"]?.GetValue<int>()       ?? 3;
-                retryDelaySec = p?["retry_delay_sec"]?.GetValue<int>() ?? 10;
+                // BUG: valori non validati — retry_delay_sec negativo faceva
+                // lanciare ArgumentOutOfRangeException a Task.Delay (crash del
+                // workflow, loop di re-fetch); retry_max senza tetto poteva
+                // bloccare il deploy per un tempo enorme. Clamp difensivo.
+                try { retryMax = p?["retry_max"]?.GetValue<int>() ?? 3; } catch { retryMax = 3; }
+                try { retryDelaySec = p?["retry_delay_sec"]?.GetValue<int>() ?? 10; } catch { retryDelaySec = 10; }
+                retryMax      = Math.Clamp(retryMax, 1, 10);
+                retryDelaySec = Math.Clamp(retryDelaySec, 0, 300);
             }
 
             // Esegui con eventuale retry, misurando la durata totale

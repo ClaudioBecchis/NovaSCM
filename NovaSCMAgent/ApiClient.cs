@@ -85,7 +85,12 @@ public class ApiClient
         _log.LogError("POST step {StepId}: fallito dopo {M} tentativi", stepId, maxRetries);
     }
 
-    public async Task SendHardwareAsync(string apiUrl, int pwId, HardwareData hw, CancellationToken ct, string apiKey = "")
+    // BUG: prima ritornava void e ignorava IsSuccessStatusCode — Worker
+    // chiamava comunque MarkHwSent incondizionatamente, quindi un 401/500
+    // faceva perdere l'inventario hardware per sempre (mai più ritentato,
+    // nessun errore da loggare perché non c'era eccezione). Ora ritorna bool
+    // così il chiamante marca "inviato" solo su successo reale.
+    public async Task<bool> SendHardwareAsync(string apiUrl, int pwId, HardwareData hw, CancellationToken ct, string apiKey = "")
     {
         try
         {
@@ -96,11 +101,18 @@ public class ApiClient
             });
             var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
             using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);
-            await _http.SendAsync(req, ct);
+            var resp = await _http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                _log.LogWarning("POST hardware pw_id={PwId}: HTTP {Code}", pwId, (int)resp.StatusCode);
+                return false;
+            }
+            return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _log.LogWarning("POST hardware pw_id={PwId}: {Err}", pwId, ex.Message);
+            return false;
         }
     }
 
@@ -112,7 +124,9 @@ public class ApiClient
             var body = JsonSerializer.Serialize(new { text });
             var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
             using var req = BuildRequest(HttpMethod.Post, url, apiKey, content);
-            await _http.SendAsync(req, ct);
+            var resp = await _http.SendAsync(req, ct);
+            if (!resp.IsSuccessStatusCode)
+                _log.LogWarning("POST log pw_id={PwId}: HTTP {Code}", pwId, (int)resp.StatusCode);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
