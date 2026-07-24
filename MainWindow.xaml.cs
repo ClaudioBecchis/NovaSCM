@@ -219,34 +219,45 @@ public class CrRow
 }
 
 // PERF-03: cache HTTP con TTL per evitare chiamate API ripetute
+// BUG: Dictionary senza lock, ma acceduta in concorrenza (timer dashboard ogni
+// 30s + chiamate on-demand da PXE/CR/Workflow) — TryGet/Set/Invalidate
+// concorrenti potevano lanciare InvalidOperationException (collection modified)
+// o corrompere lo stato. Tutti gli accessi ora sotto _lock.
 public class ApiCache
 {
     private readonly record struct Entry(string Json, DateTime Expires);
     private readonly Dictionary<string, Entry> _cache = [];
     private readonly int _maxEntries;
+    private readonly object _lock = new();
 
     public ApiCache(int maxEntries = 64) => _maxEntries = maxEntries;
 
     public bool TryGet(string url, out string json)
     {
-        if (_cache.TryGetValue(url, out var e) && DateTime.UtcNow < e.Expires)
-        { json = e.Json; return true; }
-        json = "";
-        return false;
+        lock (_lock)
+        {
+            if (_cache.TryGetValue(url, out var e) && DateTime.UtcNow < e.Expires)
+            { json = e.Json; return true; }
+            json = "";
+            return false;
+        }
     }
 
     public void Set(string url, string json, TimeSpan ttl)
     {
-        if (_cache.Count >= _maxEntries)
+        lock (_lock)
         {
-            var oldest = _cache.MinBy(kv => kv.Value.Expires).Key;
-            _cache.Remove(oldest);
+            if (_cache.Count >= _maxEntries)
+            {
+                var oldest = _cache.MinBy(kv => kv.Value.Expires).Key;
+                _cache.Remove(oldest);
+            }
+            _cache[url] = new Entry(json, DateTime.UtcNow + ttl);
         }
-        _cache[url] = new Entry(json, DateTime.UtcNow + ttl);
     }
 
-    public void Invalidate(string url) => _cache.Remove(url);
-    public void InvalidateAll() => _cache.Clear();
+    public void Invalidate(string url) { lock (_lock) _cache.Remove(url); }
+    public void InvalidateAll() { lock (_lock) _cache.Clear(); }
 }
 
 public partial class MainWindow : Window
@@ -263,6 +274,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<DeviceRow>   _netRows       = [];
     private CancellationTokenSource? _monitorCts;
     private bool _monitoring = false;
+    private bool _scanning = false;
 
     // Workflow tab
     private readonly ObservableCollection<WfRow>       _wfRows        = [];
@@ -558,6 +570,14 @@ public partial class MainWindow : Window
 
     private async Task RunScanAsync(List<IPAddress> ips)
     {
+        // BUG: BtnDashScan_Click chiama BtnScan_Click bypassando il guard
+        // IsEnabled dei bottoni — due RunScanAsync concorrenti si corrompevano
+        // _netRows (Clear a metà) e _scanCts (Dispose di un CTS ancora in uso).
+        // Guard esplicito: una sola scansione alla volta.
+        if (_scanning) { SetStatus("⚠️ Scansione già in corso"); return; }
+        _scanning = true;
+        try
+        {
         _netRows.Clear();
         BtnScan.IsEnabled    = false;
         BtnScanAll.IsEnabled = false;
@@ -713,6 +733,8 @@ public partial class MainWindow : Window
         // Arricchisce con tipo connessione da UniFi (anche MAC mancanti per altre VLAN)
         if (!token.IsCancellationRequested && !string.IsNullOrEmpty(_config.UnifiUrl))
             _ = EnrichConnectionTypeFromUnifiAsync();
+        }
+        finally { _scanning = false; }
     }
 
     private void BtnStop_Click(object s, RoutedEventArgs e)
@@ -5423,8 +5445,23 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         try { cpu = _cpuCounter?.NextValue() ?? 0; }
         catch { }
 
-        long usedBytes = Environment.WorkingSet;
-        float ramUsed  = (float)(usedBytes / (1024.0 * 1024.0));
+        // BUG: prima usava Environment.WorkingSet (memoria del PROCESSO NovaSCM,
+        // non del sistema) tarato su 40MB=100% — il gauge restava sempre rosso
+        // a prescindere dalla RAM reale. Ora usa la memoria fisica di sistema.
+        float ramPct = 0, ramUsedGb = 0, ramTotalGb = 0;
+        try
+        {
+            var ci = new Microsoft.VisualBasic.Devices.ComputerInfo();
+            double total = ci.TotalPhysicalMemory;
+            double avail = ci.AvailablePhysicalMemory;
+            if (total > 0)
+            {
+                ramPct     = (float)((total - avail) / total * 100.0);
+                ramUsedGb  = (float)((total - avail) / 1073741824.0);
+                ramTotalGb = (float)(total / 1073741824.0);
+            }
+        }
+        catch { }
 
         float disk = 0;
         try
@@ -5438,7 +5475,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         float net = Math.Min(100, (float)(_lastNetBytes / 1e9 % 100));
 
         DrawArcGauge(GaugeCpu,  cpu,  100, "CPU",  "#3b82f6", $"{cpu:F0}%");
-        DrawArcGauge(GaugeRam,  Math.Min(100, ramUsed / 40 * 100), 100, "RAM",  "#10b981", $"{ramUsed:F0} MB");
+        DrawArcGauge(GaugeRam,  ramPct, 100, "RAM",  "#10b981", $"{ramUsedGb:F1}/{ramTotalGb:F1} GB");
         DrawArcGauge(GaugeDisk, disk, 100, "Disco","#f59e0b", $"{disk:F0}%");
         DrawArcGauge(GaugeNet,  net,  100, "NET",  "#a78bfa", "● " + (net > 10 ? "Attivo" : "Idle"));
 
