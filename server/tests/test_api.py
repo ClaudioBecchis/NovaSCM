@@ -393,6 +393,32 @@ class TestWorkflowDelete:
         r = client.delete("/api/workflows/99999", headers=AUTH)
         assert r.status_code == 404
 
+    def test_delete_workflow_with_assigned_and_executed_steps(self, client):
+        """BUG: pc_workflow_steps.step_id referenzia workflow_steps(id) senza
+        ON DELETE CASCADE — cancellare workflow_steps prima di pc_workflows
+        (che invece ha CASCADE su pc_workflow_id) sollevava FOREIGN KEY
+        constraint failed non gestita per qualunque workflow già eseguito."""
+        wf = _create_workflow(client, nome="Del Assigned Flow").get_json()
+        wf_id = wf["id"]
+        step = client.post(f"/api/workflows/{wf_id}/steps", headers=AUTH,
+                            data=json.dumps({"ordine": 1, "nome": "S1", "tipo": "shell_script",
+                                              "parametri": {"cmd": "echo hi"}}),
+                            content_type="application/json").get_json()
+        pc_name = "PC-DELWF-01"
+        client.post("/api/pc-workflows", headers=AUTH,
+                     data=json.dumps({"pc_name": pc_name, "workflow_id": wf_id}),
+                     content_type="application/json")
+        # Fa "girare" il workflow sul PC e riporta lo stato di uno step —
+        # crea la riga pc_workflow_steps che referenzia lo step appena creato
+        client.get(f"/api/pc/{pc_name}/workflow", headers=AUTH)
+        client.post(f"/api/pc/{pc_name}/workflow/step", headers=AUTH,
+                    data=json.dumps({"step_id": step["id"], "status": "done"}),
+                    content_type="application/json")
+
+        r = client.delete(f"/api/workflows/{wf_id}", headers=AUTH)
+        assert r.status_code == 200
+        assert r.get_json()["ok"] is True
+
 
 class TestWorkflowSteps:
     def _step_payload(self, ordine=1, nome="Step 1", tipo="shell_script"):
@@ -567,6 +593,46 @@ class TestPcWorkflows:
     def test_delete_nonexistent_pc_workflow_returns_404(self, client):
         r = client.delete("/api/pc-workflows/99999", headers=AUTH)
         assert r.status_code == 404
+
+
+class TestDeployStart:
+    """BUG: UNIQUE(pc_name, workflow_id) su pc_workflows + DEPLOY_WF_NAME è lo
+    stesso workflow_id riusato per OGNI deploy dello stesso PC — il secondo
+    deploy (reimaging, operazione ordinaria) andava in IntegrityError non
+    gestita perché 'archivia il precedente' non libera comunque lo slot
+    UNIQUE. Ora la riga esistente viene riusata invece di una nuova insert."""
+
+    def test_deploy_start_creates_pc_workflow(self, client):
+        r = client.post("/api/deploy/start", headers=AUTH,
+                         data=json.dumps({"pc_name": "PC-DEPLOY-01"}),
+                         content_type="application/json")
+        assert r.status_code == 201
+        assert r.get_json()["pc_name"] == "PC-DEPLOY-01"
+
+    def test_deploy_start_same_pc_twice_does_not_500(self, client):
+        payload = json.dumps({"pc_name": "PC-DEPLOY-02"})
+        r1 = client.post("/api/deploy/start", headers=AUTH,
+                          data=payload, content_type="application/json")
+        assert r1.status_code == 201
+        r2 = client.post("/api/deploy/start", headers=AUTH,
+                          data=payload, content_type="application/json")
+        assert r2.status_code == 201
+        # Stesso pw_id riusato — non una nuova riga
+        assert r2.get_json()["pw_id"] == r1.get_json()["pw_id"]
+
+    def test_deploy_start_second_call_resets_status_to_running(self, client):
+        payload = {"pc_name": "PC-DEPLOY-03"}
+        r1 = client.post("/api/deploy/start", headers=AUTH,
+                          data=json.dumps(payload), content_type="application/json").get_json()
+        # Simula completamento del primo deploy
+        client.post(f"/api/deploy/{r1['pw_id']}/step", headers=AUTH,
+                    data=json.dumps({"ordine": 1, "status": "error"}),
+                    content_type="application/json")
+        r2 = client.post("/api/deploy/start", headers=AUTH,
+                          data=json.dumps(payload), content_type="application/json")
+        assert r2.status_code == 201
+        pw = client.get(f"/api/pc-workflows/{r2.get_json()['pw_id']}", headers=AUTH).get_json()
+        assert pw["status"] == "running"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

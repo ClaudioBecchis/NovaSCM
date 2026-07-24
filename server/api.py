@@ -229,12 +229,15 @@ _AGENT_SCOPED_ENDPOINTS = {
     "report_wf_step",               # POST /api/pc/<pc_name>/workflow/step
     "checkin_wf",                   # POST /api/pc/<pc_name>/workflow/checkin
     "checkin_cr",                   # POST /api/cr/by-name/<pc_name>/checkin
+    "report_step",                  # POST /api/cr/by-name/<pc_name>/step — Report-Step in postinstall.ps1
     "post_pc_workflow_hardware",    # POST /api/pc-workflows/<pw_id>/hardware
     "post_pc_workflow_log",         # POST /api/pc-workflows/<pw_id>/log
     "post_pc_workflow_screenshot",  # POST /api/pc-workflows/<pw_id>/screenshot
     "deploy_start",                 # POST /api/deploy/start
     "deploy_step",                  # POST /api/deploy/<pw_id>/step
     "download_agent",               # GET  /api/download/agent
+    "download_agent_installer_ps1", # GET  /api/download/agent-install.ps1 — installa NovaSCMAgent come servizio
+    "download_deploy_screen",       # GET  /api/download/deploy-screen — usato dal flusso wimboot
     "download_agent_sha256",        # GET  /api/download/agent.sha256
     "ui_deploy_client",              # GET  /deploy-client — pagina kiosk OSD (browser, usa ?key=)
 }
@@ -1131,8 +1134,16 @@ def delete_workflow(wf_id):
     with get_db_ctx() as conn:
         if not conn.execute("SELECT 1 FROM workflows WHERE id=?", (wf_id,)).fetchone():
             return jsonify({"error": "Non trovato"}), 404
-        conn.execute("DELETE FROM workflow_steps WHERE workflow_id=?", (wf_id,))
+        # BUG: pc_workflow_steps.step_id referenzia workflow_steps(id) SENZA
+        # ON DELETE CASCADE (a differenza di pc_workflow_id, che ce l'ha) — con
+        # PRAGMA foreign_keys=ON attivo, cancellare workflow_steps PRIMA di
+        # pc_workflows lasciava righe pc_workflow_steps orfane che puntavano a
+        # step_id ormai cancellati, sollevando FOREIGN KEY constraint failed
+        # non gestita (500) per qualunque workflow già assegnato/eseguito
+        # almeno una volta. Cancellando pc_workflows PRIMA, il cascade libera
+        # anche pc_workflow_steps prima di toccare workflow_steps.
         conn.execute("DELETE FROM pc_workflows   WHERE workflow_id=?", (wf_id,))
+        conn.execute("DELETE FROM workflow_steps WHERE workflow_id=?", (wf_id,))
         conn.execute("DELETE FROM workflows      WHERE id=?",          (wf_id,))
         conn.commit()
     return jsonify({"ok": True})
@@ -1470,19 +1481,34 @@ def deploy_start():
             conn.commit()
         else:
             wf_id = wf["id"]
-        # M-6: archivia il workflow precedente invece di cancellarlo
-        conn.execute(
-            "UPDATE pc_workflows SET archived=1 WHERE pc_name=? AND workflow_id=? AND archived=0",
+        # BUG: UNIQUE(pc_name, workflow_id) impedisce una seconda riga per la
+        # stessa coppia — dato che DEPLOY_WF_NAME è lo stesso workflow_id
+        # riusato per OGNI deploy dello stesso PC, "archivia il precedente e
+        # inserisci uno nuovo" (M-6) andava comunque in IntegrityError non
+        # gestita (500) al secondo deploy dello stesso PC, cioè al primo
+        # reimaging — operazione ordinaria, non un edge case. Con questo
+        # schema non è possibile tenere più righe storiche per la stessa
+        # coppia: riusiamo la riga esistente resettandola invece di inserirne
+        # una nuova, ripulendo lo storico step del deploy precedente.
+        existing = conn.execute(
+            "SELECT id FROM pc_workflows WHERE pc_name=? AND workflow_id=?",
             (pc_name, wf_id)
-        )
+        ).fetchone()
+        if existing:
+            pw_id = existing["id"]
+            conn.execute("""
+                UPDATE pc_workflows
+                SET status='running', assigned_at=?, started_at=?, completed_at=NULL, archived=0
+                WHERE id=?
+            """, (now, now, pw_id))
+            conn.execute("DELETE FROM pc_workflow_steps WHERE pc_workflow_id=?", (pw_id,))
+        else:
+            cursor = conn.execute(
+                "INSERT INTO pc_workflows (pc_name, workflow_id, status, assigned_at) VALUES (?,?,?,?)",
+                (pc_name, wf_id, "running", now)
+            )
+            pw_id = cursor.lastrowid
         conn.commit()
-        # Crea nuovo pc_workflow in stato running
-        cursor = conn.execute(
-            "INSERT INTO pc_workflows (pc_name, workflow_id, status, assigned_at) VALUES (?,?,?,?)",
-            (pc_name, wf_id, "running", now)
-        )
-        conn.commit()
-        pw_id = cursor.lastrowid
     return jsonify({"pw_id": pw_id, "workflow_id": wf_id, "pc_name": pc_name}), 201
 
 
@@ -1499,7 +1525,12 @@ def deploy_step(pw_id):
     if ordine is None:
         return jsonify({"error": "ordine obbligatorio"}), 400
     with get_db_ctx() as conn:
-        pw = conn.execute("SELECT workflow_id FROM pc_workflows WHERE id=?", (pw_id,)).fetchone()
+        # BUG: qui si selezionava solo workflow_id, ma più sotto si accede a
+        # pw["pc_name"] per _broadcast_event — sqlite3.Row solleva IndexError
+        # (colonna assente) non gestito su OGNI chiamata andata a buon fine,
+        # cioè ogni volta che 'ordine' corrisponde a uno step reale. 500 su
+        # tutto il flusso classico di step-reporting di /api/deploy/<id>/step.
+        pw = conn.execute("SELECT workflow_id, pc_name FROM pc_workflows WHERE id=?", (pw_id,)).fetchone()
         if not pw:
             return jsonify({"error": "pc_workflow non trovato"}), 404
         ws = conn.execute(
