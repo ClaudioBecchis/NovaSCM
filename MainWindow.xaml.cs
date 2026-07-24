@@ -566,7 +566,13 @@ public partial class MainWindow : Window
                                 {
                                     var host = await Dns.GetHostEntryAsync(ip.ToString()).ConfigureAwait(false);
                                     if (!string.IsNullOrEmpty(host.HostName))
-                                        row.Name = host.HostName.Split('.')[0];
+                                    {
+                                        var shortName = host.HostName.Split('.')[0];
+                                        // BUG: i setter di DeviceRow sollevano PropertyChanged sul thread
+                                        // chiamante — scrivendo da qui (thread pool) su una riga già bindata
+                                        // alla DataGrid si rischia InvalidOperationException intermittente.
+                                        await Dispatcher.InvokeAsync(() => row.Name = shortName);
+                                    }
                                 }
                                 catch { }
                             });
@@ -580,14 +586,12 @@ public partial class MainWindow : Window
                                     // MAC: ARP per device locali, NetworkInterface per se stesso
                                     var mac = GetMacFromArp(ipStr);
                                     if (mac == "—") mac = GetLocalMacForIp(ipStr);
-                                    row.Mac    = mac;
-                                    row.Vendor = LookupVendor(mac);
-                                    if (row.Vendor == "—" && mac != "—")
-                                        row.Vendor = await LookupVendorOnlineAsync(mac);
+                                    var vendor = LookupVendor(mac);
+                                    if (vendor == "—" && mac != "—")
+                                        vendor = await LookupVendorOnlineAsync(mac);
 
                                     // Tipo connessione per IP locali
                                     var localConn = GetLocalConnectionType(ipStr);
-                                    if (localConn != "❓") row.ConnectionType = localConn;
 
                                     // Quick port scan — rileva tipo device automaticamente
                                     var sigPorts = new[] { 22, 80, 443, 3389, 8006, 8123, 9000, 9090, 1883 };
@@ -597,7 +601,18 @@ public partial class MainWindow : Window
                                         if (await QuickPortOpenAsync(ipStr, port, 400))
                                             openSig.Add(port);
                                     }));
-                                    row.DetectType(openSig);
+
+                                    // BUG: tutte le scritture su `row` (bindata alla DataGrid) vanno fatte
+                                    // sul dispatcher thread — batchate qui in una sola InvokeAsync invece
+                                    // che sparse sul thread pool (era la causa dei crash intermittenti su
+                                    // scan di reti grandi).
+                                    await Dispatcher.InvokeAsync(() =>
+                                    {
+                                        row.Mac    = mac;
+                                        row.Vendor = vendor;
+                                        if (localConn != "❓") row.ConnectionType = localConn;
+                                        row.DetectType(openSig);
+                                    });
 
                                     // Deduplicazione per MAC — stessa NIC, due IP (cavo+WiFi)
                                     if (mac != "—")
@@ -4557,7 +4572,7 @@ try {{
 try {{
     $hostname = $env:COMPUTERNAME
     $body = ConvertTo-Json @{{ hostname=$hostname; event='postinstall_done'; timestamp=(Get-Date -Format 'o') }}
-    Invoke-RestMethod -Uri '{cfg.NovaSCMCrApiUrl}/by-name/$hostname/checkin' -Method POST `
+    Invoke-RestMethod -Uri '{PsEsc(cfg.NovaSCMCrApiUrl)}/by-name/$hostname/checkin' -Method POST `
         -Body $body -ContentType 'application/json' -UseBasicParsing -ErrorAction Stop
     Write-Output 'Check-in NovaSCM: OK'
 }} catch {{
@@ -4569,7 +4584,7 @@ try {{
 # Installa agente NovaSCM (enrollment WiFi EAP-TLS)
 $agentTmp = Join-Path $env:TEMP ""novascm-agent-$([System.IO.Path]::GetRandomFileName()).ps1""
 try {{
-    $agentUrl = '{cfg.ServerUrl.TrimEnd('/')}/api/download/agent-install.ps1'
+    $agentUrl = '{PsEsc(cfg.ServerUrl.TrimEnd('/'))}/api/download/agent-install.ps1'
     Write-Output ""Download agente da: $agentUrl""
     Invoke-WebRequest -Uri $agentUrl -OutFile $agentTmp -UseBasicParsing
     powershell.exe -NonInteractive -ExecutionPolicy Bypass -File $agentTmp
@@ -4584,6 +4599,7 @@ try {{
         var novaSCMBaseUrl = !string.IsNullOrEmpty(cfg.NovaSCMCrApiUrl)
             ? cfg.NovaSCMCrApiUrl.Replace("/api/cr", "").TrimEnd('/')
             : (!string.IsNullOrEmpty(cfg.ServerUrl) ? cfg.ServerUrl.TrimEnd('/') : "");
+        var novaSCMBaseUrlEsc = PsEsc(novaSCMBaseUrl);
         var domainParam = cfg.DomainJoin switch
         {
             "AD"      => !string.IsNullOrEmpty(cfg.DomainName) ? cfg.DomainName : "WORKGROUP",
@@ -4594,11 +4610,11 @@ try {{
 # Installa NovaSCM Workflow Agent (servizio di esecuzione workflow)
 Report-Step 'workflow_agent_install' 'running'
 try {{
-    $wfAgentInstaller = '{novaSCMBaseUrl}/api/download/agent-install.ps1'
+    $wfAgentInstaller = '{novaSCMBaseUrlEsc}/api/download/agent-install.ps1'
     $installerPath    = ""$env:TEMP\novascm-install.ps1""
     Write-Output ""Download NovaSCM Workflow Agent da: $wfAgentInstaller""
     Invoke-WebRequest -Uri $wfAgentInstaller -OutFile $installerPath -UseBasicParsing
-    & $installerPath -ApiUrl '{novaSCMBaseUrl}' -Domain '{domainParam}' -PcName $env:COMPUTERNAME
+    & $installerPath -ApiUrl '{novaSCMBaseUrlEsc}' -Domain '{PsEsc(domainParam)}' -PcName $env:COMPUTERNAME
     Write-Output 'NovaSCM Workflow Agent installato come servizio Windows'
     Report-Step 'workflow_agent_install' 'done'
 }} catch {{

@@ -215,6 +215,8 @@ def execute_step(step):
         return False, "Step malformato: campo 'tipo' mancante"
     try:
         parametri = json.loads(step.get("parametri") or "{}")
+        if not isinstance(parametri, dict):
+            return False, f"Step malformato: 'parametri' deve essere un oggetto JSON, non {type(parametri).__name__}"
     except (TypeError, ValueError) as e:
         return False, f"Step malformato: 'parametri' non è JSON valido ({e})"
     my_os     = get_os_platform()
@@ -455,7 +457,7 @@ def run_workflow(cfg, workflow):
                 log.error(f"Step fallito con su_errore='{su_errore}' — workflow interrotto")
                 return False
 
-        if step["tipo"] == "reboot" and ok:
+        if step.get("tipo") == "reboot" and ok:
             save_state({"pw_id": pw_id, "resume_step": step_id})
             log.info("Stato salvato per resume dopo reboot")
             needs_reboot = True
