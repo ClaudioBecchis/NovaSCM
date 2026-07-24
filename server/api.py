@@ -208,9 +208,36 @@ if not API_KEY:
         log.warning("API Key generata (prime 8 cifre): %s...", API_KEY[:8])
 
 # ── Session token store (ui-token) ──────────────────────────────────────────
-_ui_tokens: dict[str, float] = {}  # {token_hex: expiry_timestamp}
+# SEC: value = (expiry_timestamp, scope). scope="admin" = emesso da /api/ui-token
+# dopo verifica dell'API key master, pieno accesso come la master key.
+# scope="deploy" = emesso da /api/deploy/enroll a partire da un deploy_token
+# monouso consegnato a UN SOLO PC in provisioning — deve avere accesso SOLO
+# agli endpoint di provisioning/telemetria (_AGENT_SCOPED_ENDPOINTS), non a
+# tutta l'API come un token admin.
+_ui_tokens: dict[str, tuple[float, str]] = {}  # {token_hex: (expiry_timestamp, scope)}
 _ui_tokens_lock = threading.Lock()
 _UI_TOKENS_MAX = 10000  # C-3: limite massimo token in memoria
+
+# SEC: endpoint richiamabili con un token "a scopo ristretto" (enrollment token
+# monouso o session key di /api/deploy/enroll) — SOLO le operazioni che un PC
+# in fase di provisioning deve poter fare da solo. Tutto il resto dell'API
+# (CR, workflow CRUD, settings, pxe_hosts, autounattend con credenziali in
+# chiaro, download installer con token nuovi, ecc.) resta riservato alla API
+# key master o a un vero token admin (/api/ui-token).
+_AGENT_SCOPED_ENDPOINTS = {
+    "get_pc_assigned_workflow",     # GET  /api/pc/<pc_name>/workflow
+    "report_wf_step",               # POST /api/pc/<pc_name>/workflow/step
+    "checkin_wf",                   # POST /api/pc/<pc_name>/workflow/checkin
+    "checkin_cr",                   # POST /api/cr/by-name/<pc_name>/checkin
+    "post_pc_workflow_hardware",    # POST /api/pc-workflows/<pw_id>/hardware
+    "post_pc_workflow_log",         # POST /api/pc-workflows/<pw_id>/log
+    "post_pc_workflow_screenshot",  # POST /api/pc-workflows/<pw_id>/screenshot
+    "deploy_start",                 # POST /api/deploy/start
+    "deploy_step",                  # POST /api/deploy/<pw_id>/step
+    "download_agent",               # GET  /api/download/agent
+    "download_agent_sha256",        # GET  /api/download/agent.sha256
+    "ui_deploy_client",              # GET  /deploy-client — pagina kiosk OSD (browser, usa ?key=)
+}
 
 # ── SSE live event broadcaster (dashboard real-time) ────────────────────────
 _sse_clients: list = []
@@ -231,37 +258,49 @@ def _broadcast_event(kind: str, data: dict | None = None):
 
 def _purge_expired_tokens() -> None:
     now = time.time()
-    expired = [t for t, exp in list(_ui_tokens.items()) if exp < now]
+    expired = [t for t, (exp, _scope) in list(_ui_tokens.items()) if exp < now]
     for t in expired:
         del _ui_tokens[t]
     # C-3: se ancora troppi token, rimuovi i più vecchi
     if len(_ui_tokens) > _UI_TOKENS_MAX:
-        sorted_tokens = sorted(_ui_tokens.items(), key=lambda x: x[1])
+        sorted_tokens = sorted(_ui_tokens.items(), key=lambda x: x[1][0])
         for t, _ in sorted_tokens[:len(_ui_tokens) - _UI_TOKENS_MAX]:
             del _ui_tokens[t]
 
 def require_auth(fn):
-    """Decorator: richiede header X-Api-Key (API key o session token da /api/ui-token)."""
+    """Decorator: richiede header X-Api-Key (API key, session token admin, o
+    token a scopo ristretto — enrollment/deploy — limitato a _AGENT_SCOPED_ENDPOINTS).
+    """
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         if not API_KEY:
             log.error("NOVASCM_API_KEY non configurata — accesso bloccato")
             return jsonify({"error": "Server non configurato: NOVASCM_API_KEY mancante"}), 500
         token = request.headers.get("X-Api-Key", "") or request.args.get("key", "")
-        # Controlla API key diretta
+        # Controlla API key diretta — accesso pieno
         if token and hmac.compare_digest(token, API_KEY):
             return fn(*args, **kwargs)
-        # Controlla session token (emesso da /api/ui-token, oppure ?key= query param)
+        # Controlla session token (emesso da /api/ui-token o /api/deploy/enroll)
         with _ui_tokens_lock:
             # C-3: purge periodico anche su auth check
             if len(_ui_tokens) > _UI_TOKENS_MAX // 2:
                 _purge_expired_tokens()
-            exp = _ui_tokens.get(token) if token else None
-        if exp and exp > time.time():
-            return fn(*args, **kwargs)
-        # Controlla enrollment token monouso (agent enrollment)
+            entry = _ui_tokens.get(token) if token else None
+        if entry:
+            exp, scope = entry
+            if exp > time.time():
+                if scope == "admin" or fn.__name__ in _AGENT_SCOPED_ENDPOINTS:
+                    return fn(*args, **kwargs)
+                log.warning("Token scope=%s non autorizzato per endpoint '%s' da %s",
+                            scope, fn.__name__, request.remote_addr)
+                return jsonify({"error": "Non autorizzato per questa operazione"}), 403
+        # Controlla enrollment token monouso (agent enrollment) — scopo ristretto
         if token and _validate_enrollment_token_peek(token):
-            return fn(*args, **kwargs)
+            if fn.__name__ in _AGENT_SCOPED_ENDPOINTS:
+                return fn(*args, **kwargs)
+            log.warning("Enrollment token non autorizzato per endpoint '%s' da %s",
+                        fn.__name__, request.remote_addr)
+            return jsonify({"error": "Non autorizzato per questa operazione"}), 403
         log.warning("Accesso non autorizzato da %s", request.remote_addr)
         return jsonify({"error": "Non autorizzato"}), 401
     return wrapper
@@ -2254,12 +2293,13 @@ def deploy_enroll():
             return jsonify({"error": "Token scaduto"}), 401
         conn.execute("UPDATE deploy_tokens SET used=1 WHERE id=?", (row["id"],))
         conn.commit()
-    # Genera session token valido 24h per questo deploy
+    # Genera session token valido 24h per questo deploy — SEC: scope "deploy",
+    # non "admin": limitato a _AGENT_SCOPED_ENDPOINTS in require_auth.
     session_key = secrets.token_hex(32)
     exp = time.time() + 86400
     with _ui_tokens_lock:
         _purge_expired_tokens()
-        _ui_tokens[session_key] = exp
+        _ui_tokens[session_key] = (exp, "deploy")
     log.info("Enroll OK: pc=%s pw_id=%s ip=%s", row["pc_name"], row["pw_id"], request.remote_addr)
     return jsonify({
         "session_key": session_key,
@@ -3021,7 +3061,7 @@ def ui_token():
     exp   = time.time() + 28800
     with _ui_tokens_lock:
         _purge_expired_tokens()
-        _ui_tokens[token] = exp
+        _ui_tokens[token] = (exp, "admin")
     return jsonify({"token": token, "expires_at": exp})
 
 @app.route("/deploy-client")

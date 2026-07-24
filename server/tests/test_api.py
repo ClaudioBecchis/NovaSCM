@@ -1388,7 +1388,7 @@ class TestDeployClientAuth:
         # Crea un token valido nel dizionario _ui_tokens
         tok = "test-session-token-abc123"
         with api._ui_tokens_lock:
-            api._ui_tokens[tok] = time.time() + 3600
+            api._ui_tokens[tok] = (time.time() + 3600, "deploy")
         resp = client.get(f"/deploy-client?key={tok}")
         assert resp.status_code == 200
 
@@ -1396,7 +1396,7 @@ class TestDeployClientAuth:
         import time
         tok = "expired-token-xyz"
         with api._ui_tokens_lock:
-            api._ui_tokens[tok] = time.time() - 1  # già scaduto
+            api._ui_tokens[tok] = (time.time() - 1, "deploy")  # già scaduto
         resp = client.get(f"/deploy-client?key={tok}")
         assert resp.status_code == 401
 
@@ -1409,6 +1409,80 @@ class TestDeployClientAuth:
         import time
         tok = "priority-test-token"
         with api._ui_tokens_lock:
-            api._ui_tokens[tok] = time.time() + 3600
+            api._ui_tokens[tok] = (time.time() + 3600, "deploy")
         resp = client.get(f"/deploy-client?key={tok}")
         assert resp.status_code == 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Token scoping — enrollment token / deploy session key vs API key / admin token
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestTokenScoping:
+    """SEC: un token a scopo ristretto (enrollment monouso o session key da
+    /api/deploy/enroll) deve poter chiamare SOLO gli endpoint di provisioning
+    (_AGENT_SCOPED_ENDPOINTS), non l'intera API come una API key master."""
+
+    def _make_enrollment_token(self, client):
+        r = client.post("/api/enrollment-token", headers=AUTH)
+        assert r.status_code == 200
+        return r.get_json()["token"]
+
+    def test_enrollment_token_can_call_scoped_endpoint(self, client):
+        tok = self._make_enrollment_token(client)
+        # Endpoint in scope: nessun workflow assegnato → 404, non 401/403
+        # (prova che l'auth è passata, il 404 è business logic a valle)
+        r = client.get("/api/pc/PC-TEST-01/workflow",
+                        headers={"X-Api-Key": tok})
+        assert r.status_code == 404
+
+    def test_enrollment_token_cannot_list_cr(self, client):
+        tok = self._make_enrollment_token(client)
+        r = client.get("/api/cr", headers={"X-Api-Key": tok})
+        assert r.status_code == 403
+
+    def test_enrollment_token_cannot_read_autounattend_with_credentials(self, client):
+        """IDOR: un token di un solo PC non deve poter leggere admin_pass/join_pass
+        di un pc_name arbitrario tramite /api/cr/by-name/<pc_name>/autounattend.xml."""
+        _create_cr(client, pc_name="PC-VICTIM", admin_pass="SuperSegreta123")
+        tok = self._make_enrollment_token(client)
+        r = client.get("/api/cr/by-name/PC-VICTIM/autounattend.xml",
+                        headers={"X-Api-Key": tok})
+        assert r.status_code == 403
+
+    def test_enrollment_token_cannot_delete_cr(self, client):
+        cr = _create_cr(client, pc_name="PC-TEST-02").get_json()
+        tok = self._make_enrollment_token(client)
+        r = client.delete(f"/api/cr/{cr['id']}", headers={"X-Api-Key": tok})
+        assert r.status_code == 403
+
+    def test_deploy_scope_session_key_cannot_list_cr(self, client):
+        import time
+        tok = "deploy-scope-cr-test"
+        with api._ui_tokens_lock:
+            api._ui_tokens[tok] = (time.time() + 3600, "deploy")
+        r = client.get("/api/cr", headers={"X-Api-Key": tok})
+        assert r.status_code == 403
+
+    def test_admin_scope_session_key_can_list_cr(self, client):
+        """Un token emesso da /api/ui-token (scope admin) resta pieno accesso."""
+        r = client.get("/api/ui-token", headers=AUTH)
+        assert r.status_code == 200
+        admin_tok = r.get_json()["token"]
+        r2 = client.get("/api/cr", headers={"X-Api-Key": admin_tok})
+        assert r2.status_code == 200
+
+    def test_admin_scope_session_key_can_read_autounattend(self, client):
+        _create_cr(client, pc_name="PC-ADMIN-VIEW")
+        r = client.get("/api/ui-token", headers=AUTH)
+        admin_tok = r.get_json()["token"]
+        r2 = client.get("/api/cr/by-name/PC-ADMIN-VIEW/autounattend.xml",
+                         headers={"X-Api-Key": admin_tok})
+        assert r2.status_code == 200
+
+    def test_master_api_key_unaffected_by_scoping(self, client):
+        """Regressione: la API key master resta accesso pieno su tutto."""
+        r = client.get("/api/cr", headers=AUTH)
+        assert r.status_code == 200
+        r2 = client.get("/api/pc/PC-TEST-01/workflow", headers=AUTH)
+        assert r2.status_code == 404  # non 401/403
