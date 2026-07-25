@@ -3141,27 +3141,37 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>2</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Invoke-WebRequest -Uri &apos;{xurl}/api/download/agent?key={xkey}&apos; -OutFile &apos;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&apos; -UseBasicParsing&quot;</CommandLine>
-          <Description>NovaSCM: scarica agente</Description>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Get-NetAdapter|ForEach-Object{{try{{Set-NetAdapterPowerManagement $_.Name -AllowComputerToTurnOffDevice Disabled -ErrorAction SilentlyContinue}}catch{{}}}};Get-WmiObject MSPower_DeviceEnable -Namespace root/wmi|Where-Object{{$_.InstanceName -match &apos;PCI\\\\VEN&apos;}}|ForEach-Object{{$_.Enable=$false;$_.Put()|Out-Null}}&quot;</CommandLine>
+          <Description>NovaSCM: disabilita power management NIC</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>3</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Invoke-WebRequest -Uri &apos;{xurl}/api/download/deploy-screen?key={xkey}&apos; -OutFile &apos;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&apos; -UseBasicParsing&quot;</CommandLine>
-          <Description>NovaSCM: scarica DeployScreen</Description>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;$h=&apos;{_urlparse(xurl).hostname}&apos;;for($i=0;$i -lt 30;$i++){{if(Test-Connection $h -Count 1 -Quiet){{break}};Start-Sleep 2}}&quot;</CommandLine>
+          <Description>NovaSCM: attendi rete</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
           <Order>4</Order>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;for($i=0;$i -lt 5;$i++){{try{{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;(New-Object Net.WebClient).DownloadFile(&apos;{xurl}/api/download/agent?key={xkey}&apos;,&apos;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&apos;);break}}catch{{Start-Sleep 5}}}}&quot;</CommandLine>
+          <Description>NovaSCM: scarica agente (retry)</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>5</Order>
+          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;for($i=0;$i -lt 5;$i++){{try{{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;(New-Object Net.WebClient).DownloadFile(&apos;{xurl}/api/download/deploy-screen?key={xkey}&apos;,&apos;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&apos;);break}}catch{{Start-Sleep 5}}}}&quot;</CommandLine>
+          <Description>NovaSCM: scarica DeployScreen (retry)</Description>
+        </SynchronousCommand>
+        <SynchronousCommand wcm:action="add">
+          <Order>6</Order>
           <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;@{{api_url=&apos;{xurl}&apos;;api_key=&apos;{xkey}&apos;;pc_name=&apos;{xpc}&apos;;poll_sec=30;domain=&apos;{xdom}&apos;}}|ConvertTo-Json|Set-Content &apos;C:\\ProgramData\\NovaSCM\\agent.json&apos; -Encoding UTF8&quot;</CommandLine>
           <Description>NovaSCM: crea config agente</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>5</Order>
-          <CommandLine>cmd /c start &quot;&quot; &quot;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&quot; hostname={xpc} domain={xdom or "WORKGROUP"} server={xurl} key={xkey} pw_id={_pw_id} wf=Deploy</CommandLine>
+          <Order>7</Order>
+          <CommandLine>cmd /c if exist &quot;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&quot; start &quot;&quot; &quot;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&quot; hostname={xpc} domain={xdom or "WORKGROUP"} server={xurl} key={xkey} pw_id={_pw_id} wf=Deploy</CommandLine>
           <Description>NovaSCM: avvia Deploy Screen</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>6</Order>
-          <CommandLine>cmd /c start &quot;&quot; /b &quot;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&quot;</CommandLine>
+          <Order>8</Order>
+          <CommandLine>cmd /c if exist &quot;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&quot; start &quot;&quot; /b &quot;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&quot;</CommandLine>
           <Description>NovaSCM: avvia agente</Description>
         </SynchronousCommand>
       </FirstLogonCommands>
