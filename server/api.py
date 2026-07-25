@@ -2764,7 +2764,7 @@ if %errorlevel% neq 0 (
     wpeutil reboot
 )
 echo 2 > X:\\status.txt
-downloader.exe "{wim_url}" "C:\\install.wim"
+downloader.exe "{wim_url}" "C:\\install.wim" "X:\\status.txt"
 if %errorlevel% neq 0 (
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
