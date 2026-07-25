@@ -2763,7 +2763,7 @@ if %errorlevel% neq 0 (
     wpeutil reboot
 )
 echo [NovaSCM] Scarico install.wim via HTTP (~6GB, attendere 5-15 min)...
-curl.exe -f --retry 3 --retry-delay 5 -o C:\\install.wim "{wim_url}"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "(New-Object System.Net.WebClient).DownloadFile('{wim_url}', 'C:\\install.wim')"
 if %errorlevel% neq 0 (
     echo [NovaSCM] ERRORE: download install.wim fallito. Riavvio tra 30s...
     ping -n 30 127.0.0.1 >nul
