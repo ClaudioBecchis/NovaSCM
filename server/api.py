@@ -3101,6 +3101,14 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
 
   <!-- Pass 7: oobeSystem — OOBE, account, primo avvio -->
   <settings pass="oobeSystem">
+    <component name="Microsoft-Windows-International-Core"
+               processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
+               language="neutral" versionScope="nonSxS">
+      <InputLocale>0410:00000410</InputLocale>
+      <SystemLocale>it-IT</SystemLocale>
+      <UILanguage>it-IT</UILanguage>
+      <UserLocale>it-IT</UserLocale>
+    </component>
     <component name="Microsoft-Windows-Shell-Setup"
                processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35"
                language="neutral" versionScope="nonSxS"
