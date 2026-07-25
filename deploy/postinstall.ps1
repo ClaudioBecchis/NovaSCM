@@ -124,27 +124,31 @@ try {
     Write-Warning "deploy/start non riuscito: $_"
 }
 
-# 2. Apri Deploy Screen in Edge kiosk mode (fullscreen)
+# 2. Scarica e avvia NovaSCMDeployScreen.exe
+$deployScreenPath = "C:\Windows\Temp\NovaSCMDeployScreen.exe"
 try {
-    $domain  = "polariscore.it"
-    $ver     = "2.2.1"
-    $deployUrl = if ($PW_ID) {
-        "$SERVER/deploy-client?pw_id=$PW_ID&key=$APIKEY&hostname=$PC&domain=$domain&ver=$ver"
-    } else {
-        "$SERVER/deploy-client?hostname=$PC&domain=$domain&ver=$ver&demo=1"
-    }
-    $edgePath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-    if (Test-Path $edgePath) {
-        Start-Process $edgePath "--kiosk `"$deployUrl`" --edge-kiosk-type=fullscreen --no-first-run --disable-infobars" `
-            -WindowStyle Maximized
-    } else {
-        # Fallback: apri nel browser predefinito
-        Start-Process $deployUrl
-    }
-    Start-Sleep 3
-    Write-Output "NovaSCM DeployScreen avviato in Edge kiosk (pw_id=$PW_ID)"
+    $wc = New-Object System.Net.WebClient
+    $wc.Headers.Add("X-Api-Key", $APIKEY)
+    $wc.DownloadFile("$SERVER/api/deploy-screen", $deployScreenPath)
+    Write-Output "NovaSCM DeployScreen scaricato in $deployScreenPath"
 } catch {
-    Write-Warning "DeployScreen non disponibile: $_"
+    Write-Warning "DeployScreen download fallito: $_ — continuo senza grafica"
+    $deployScreenPath = $null
+}
+
+if ($deployScreenPath -and (Test-Path $deployScreenPath)) {
+    try {
+        $domain = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "Domain" -ErrorAction SilentlyContinue)?.Domain
+        if (-not $domain) { $domain = "." }
+        $ver = "2.5.0"
+        $args = "hostname=$PC domain=$domain server=$SERVER key=$APIKEY ver=$ver"
+        if ($PW_ID) { $args += " pw_id=$PW_ID" } else { $args += " demo=1" }
+        Start-Process $deployScreenPath -ArgumentList $args -WindowStyle Maximized
+        Start-Sleep 2
+        Write-Output "NovaSCM DeployScreen avviato (pw_id=$PW_ID)"
+    } catch {
+        Write-Warning "DeployScreen avvio fallito: $_"
+    }
 }
 
 # ── Funzioni Report ───────────────────────────────────────────────────────────

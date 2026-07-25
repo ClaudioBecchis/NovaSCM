@@ -2763,7 +2763,7 @@ if %errorlevel% neq 0 (
     wpeutil reboot
 )
 echo [NovaSCM] Scarico install.wim via HTTP (~6GB, attendere 5-15 min)...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "(New-Object System.Net.WebClient).DownloadFile('{wim_url}', 'C:\\install.wim')"
+certutil -urlcache -split -f "{wim_url}" "C:\\install.wim"
 if %errorlevel% neq 0 (
     echo [NovaSCM] ERRORE: download install.wim fallito. Riavvio tra 30s...
     ping -n 30 127.0.0.1 >nul
@@ -2787,6 +2787,25 @@ wpeutil reboot
 """
     log.info("startnet.cmd PXE: servito per %s a %s", pc_name, client_ip)
     return cmd, 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+
+@app.route("/api/deploy-screen", methods=["GET"])
+@require_auth
+def serve_deploy_screen():
+    """Serve NovaSCMDeployScreen.exe per il download da postinstall.ps1."""
+    from flask import send_file as _send_file
+    exe_path = os.path.join(DIST_DIR, "NovaSCMDeployScreen.exe")
+    if not os.path.isfile(exe_path):
+        return jsonify({"error": "NovaSCMDeployScreen.exe non trovato in dist/"}), 404
+    fsize = os.path.getsize(exe_path)
+    log.info("deploy-screen: serving NovaSCMDeployScreen.exe (%s) a %s", _sizeof_fmt(fsize), _get_client_ip())
+    return _send_file(
+        exe_path,
+        mimetype="application/octet-stream",
+        as_attachment=True,
+        download_name="NovaSCMDeployScreen.exe",
+        conditional=False,
+    )
 
 
 @app.route("/api/pxe/file/<name>", methods=["GET"])
