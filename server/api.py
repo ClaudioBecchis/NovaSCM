@@ -156,17 +156,15 @@ def _get_pxe_static_url() -> str:
     custom = _get_setting("pxe_static_url", "").strip().rstrip("/")
     if custom:
         return custom
-    if _PUBLIC_URL:
-        from urllib.parse import urlparse
-        p = urlparse(_PUBLIC_URL)
-        host = p.hostname or "localhost"
-        scheme = p.scheme or "http"
-        return f"{scheme}://{host}/winpe"
     from urllib.parse import urlparse
-    p = urlparse(request.host_url)
-    host = p.hostname or "localhost"
+    if _PUBLIC_URL:
+        p = urlparse(_PUBLIC_URL)
+    else:
+        p = urlparse(request.host_url)
+    host   = p.hostname or "localhost"
     scheme = p.scheme or "http"
-    return f"{scheme}://{host}/winpe"
+    port   = f":{p.port}" if p.port else ""
+    return f"{scheme}://{host}{port}/winpe"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
