@@ -11,9 +11,9 @@ x86_64-w64-mingw32-gcc -O2 -municode \
     -lwinhttp -lkernel32
 
 echo "[build] NovaSCM_Progress_CPP_Source.exe"
-x86_64-w64-mingw32-gcc -O2 -mwindows -municode \
-    -o "$OUTDIR/NovaSCM_Progress_CPP_Source.exe" splash.c \
-    -lgdi32 -luser32 -lshell32 -lkernel32
+x86_64-w64-mingw32-g++ -O2 -mwindows \
+    -o "$OUTDIR/NovaSCM_Progress_CPP_Source.exe" ProgressUI.cpp \
+    -lcomctl32 -luser32 -lkernel32 -static
 
 echo "[done] binari in $OUTDIR"
 ls -lh "$OUTDIR/downloader.exe" "$OUTDIR/NovaSCM_Progress_CPP_Source.exe"

@@ -4,16 +4,12 @@
 #include <stdio.h>
 
 /*
- * Scrive X:\DeployStatus.ini nel formato che splash.exe si aspetta:
+ * Scrive X:\DeployStatus.ini come ANSI (senza BOM):
  *   [Status]
  *   Action=<testo>
  *   ActionPercent=<0-100>
  *   TotalPercent=<0-100>
  *   Details=<testo>
- */
-/*
- * Scrive il file INI come ANSI (senza BOM).
- * GetPrivateProfileStringW in WinPE legge ANSI senza BOM correttamente.
  */
 static void WriteIni(const wchar_t *path, const wchar_t *action,
                      int actPct, int totPct, const wchar_t *details) {

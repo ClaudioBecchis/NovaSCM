@@ -1,0 +1,156 @@
+#define UNICODE
+#define _UNICODE
+#include <windows.h>
+#include <commctrl.h>
+#include <tchar.h>
+
+#pragma comment(lib, "comctl32.lib")
+
+#define IDT_TIMER1     1
+#define IDC_PROGACTION 101
+#define IDC_PROGTOTAL  102
+#define IDC_LBLACTION  103
+#define IDC_LBLDETAILS 104
+
+static HWND hLblAction, hLblDetails;
+static HWND hProgAction, hProgTotal;
+static wchar_t g_iniPath[MAX_PATH] = L"X:\\DeployStatus.ini";
+
+LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    switch (message) {
+        case WM_CREATE: {
+            INITCOMMONCONTROLSEX icex;
+            icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
+            icex.dwICC = ICC_PROGRESS_CLASS;
+            InitCommonControlsEx(&icex);
+
+            HFONT hFontBold = CreateFont(20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("Segoe UI"));
+            HFONT hFontNormal = CreateFont(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, _T("Segoe UI"));
+
+            HWND hTitle = CreateWindow(_T("STATIC"),
+                _T("NovaSCM \x2014 PolarisCore Infrastructure"),
+                WS_CHILD | WS_VISIBLE | SS_LEFT,
+                20, 20, 440, 25, hWnd, NULL, NULL, NULL);
+            SendMessage(hTitle, WM_SETFONT, (WPARAM)hFontBold, TRUE);
+
+            HWND hActTitle = CreateWindow(_T("STATIC"),
+                _T("Running action:"),
+                WS_CHILD | WS_VISIBLE | SS_LEFT,
+                20, 60, 440, 20, hWnd, NULL, NULL, NULL);
+            SendMessage(hActTitle, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+
+            hLblAction = CreateWindow(_T("STATIC"),
+                _T("Attendere..."),
+                WS_CHILD | WS_VISIBLE | SS_LEFT,
+                35, 80, 410, 20, hWnd, (HMENU)IDC_LBLACTION, NULL, NULL);
+            SendMessage(hLblAction, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+
+            hProgAction = CreateWindow(PROGRESS_CLASS, NULL,
+                WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
+                20, 105, 420, 20, hWnd, (HMENU)IDC_PROGACTION, NULL, NULL);
+            SendMessage(hProgAction, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
+
+            HWND hTotTitle = CreateWindow(_T("STATIC"),
+                _T("Overall progress:"),
+                WS_CHILD | WS_VISIBLE | SS_LEFT,
+                20, 145, 440, 20, hWnd, NULL, NULL, NULL);
+            SendMessage(hTotTitle, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+
+            hProgTotal = CreateWindow(PROGRESS_CLASS, NULL,
+                WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
+                20, 165, 420, 20, hWnd, (HMENU)IDC_PROGTOTAL, NULL, NULL);
+            SendMessage(hProgTotal, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
+
+            hLblDetails = CreateWindow(_T("STATIC"),
+                _T("Inizializzazione..."),
+                WS_CHILD | WS_VISIBLE | SS_LEFT,
+                20, 205, 440, 40, hWnd, (HMENU)IDC_LBLDETAILS, NULL, NULL);
+            SendMessage(hLblDetails, WM_SETFONT, (WPARAM)hFontNormal, TRUE);
+
+            SetTimer(hWnd, IDT_TIMER1, 500, NULL);
+            break;
+        }
+        case WM_TIMER: {
+            TCHAR action[256]  = _T("");
+            TCHAR details[256] = _T("");
+
+            /* Flush cache GetPrivateProfileString prima di rileggere */
+            WritePrivateProfileString(NULL, NULL, NULL, g_iniPath);
+
+            GetPrivateProfileString(_T("Status"), _T("Action"),  _T(""), action,  256, g_iniPath);
+            GetPrivateProfileString(_T("Status"), _T("Details"), _T(""), details, 256, g_iniPath);
+            int actionPct = GetPrivateProfileInt(_T("Status"), _T("ActionPercent"), 0, g_iniPath);
+            int totalPct  = GetPrivateProfileInt(_T("Status"), _T("TotalPercent"),  0, g_iniPath);
+
+            if (_tcslen(action)  > 0) SetWindowText(hLblAction,  action);
+            if (_tcslen(details) > 0) SetWindowText(hLblDetails, details);
+
+            SendMessage(hProgAction, PBM_SETPOS, (WPARAM)actionPct, 0);
+            SendMessage(hProgTotal,  PBM_SETPOS, (WPARAM)totalPct,  0);
+
+            if (totalPct >= 100) {
+                Sleep(1500);
+                DestroyWindow(hWnd);
+            }
+            break;
+        }
+        case WM_CTLCOLORSTATIC: {
+            HDC hdcStatic = (HDC)wParam;
+            SetBkColor(hdcStatic, RGB(240, 240, 240));
+            return (LRESULT)GetStockObject(NULL_BRUSH);
+        }
+        case WM_DESTROY:
+            KillTimer(hWnd, IDT_TIMER1);
+            PostQuitMessage(0);
+            break;
+        default:
+            return DefWindowProc(hWnd, message, wParam, lParam);
+    }
+    return 0;
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+                   LPSTR lpCmdLine, int nCmdShow) {
+    /* Legge path INI da argv[1] se presente */
+    int argc;
+    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argc >= 2)
+        lstrcpyW(g_iniPath, argv[1]);
+    LocalFree(argv);
+
+    WNDCLASS wc = {0};
+    wc.lpfnWndProc   = WndProc;
+    wc.hInstance     = hInstance;
+    wc.hbrBackground = CreateSolidBrush(RGB(240, 240, 240));
+    wc.lpszClassName = _T("NovaSCMProgressClass");
+    wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
+    RegisterClass(&wc);
+
+    int screenW = GetSystemMetrics(SM_CXSCREEN);
+    int screenH = GetSystemMetrics(SM_CYSCREEN);
+
+    HWND hWnd = CreateWindowEx(
+        WS_EX_TOPMOST,
+        wc.lpszClassName,
+        _T("Installation Progress"),
+        WS_POPUP | WS_CAPTION,
+        (screenW - 480) / 2,
+        (screenH - 280) / 2,
+        480, 280,
+        NULL, NULL, hInstance, NULL
+    );
+
+    ShowWindow(hWnd, SW_SHOW);
+    UpdateWindow(hWnd);
+
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+    }
+    return (int)msg.wParam;
+}
