@@ -2746,14 +2746,24 @@ def serve_pxe_startnet(pc_name: str):
     unattend_url = f"{server_url}/api/autounattend/{pc_name}"
 
     cmd = f"""@echo off
+echo [NovaSCM] wpeinit...
 wpeinit
+echo [NovaSCM] Attendo rete...
 ping -n 5 {parts[0] if parts else '192.168.10.112'} >nul
-net use G: {smb_share} /user:{smb_domain}\\{smb_user} {smb_pass} /persistent:no
+echo [NovaSCM] Monto share SMB {smb_share}...
+net use G: {smb_share} /user:{smb_domain}\\{smb_user} "{smb_pass}" /persistent:no
 if %errorlevel% neq 0 (
+    echo [NovaSCM] Retry SMB tra 10s...
     ping -n 10 {parts[0] if parts else '192.168.10.112'} >nul
-    net use G: {smb_share} /user:{smb_domain}\\{smb_user} {smb_pass} /persistent:no
+    net use G: {smb_share} /user:{smb_domain}\\{smb_user} "{smb_pass}" /persistent:no
 )
-(echo SELECT DISK=0
+if %errorlevel% neq 0 (
+    echo [NovaSCM] ERRORE: mount SMB fallito. Riavvio tra 30s...
+    ping -n 30 127.0.0.1 >nul
+    wpeutil reboot
+)
+echo [NovaSCM] Partiziono disco 0...
+(echo SELECT DISK 0
 echo CLEAN
 echo CONVERT GPT
 echo CREATE PARTITION EFI SIZE=300
@@ -2765,10 +2775,24 @@ echo FORMAT QUICK FS=NTFS LABEL=Windows
 echo ASSIGN LETTER=C
 echo EXIT) > X:\\diskpart.txt
 diskpart /s X:\\diskpart.txt
-dism /Apply-Image /ImageFile:{wim_path} /Index:{wim_index} /ApplyDir:C:\\
+if %errorlevel% neq 0 (
+    echo [NovaSCM] ERRORE: diskpart fallito. Riavvio tra 30s...
+    ping -n 30 127.0.0.1 >nul
+    wpeutil reboot
+)
+echo [NovaSCM] Applico immagine WIM (DISM)... attendere 10-15 minuti
+dism /Apply-Image /ImageFile:G:\\sources\\install.wim /Index:{wim_index} /ApplyDir:C:\\ /LogPath:X:\\dism.log
+if %errorlevel% neq 0 (
+    echo [NovaSCM] ERRORE: DISM fallito. Vedi X:\\dism.log. Riavvio tra 60s...
+    ping -n 60 127.0.0.1 >nul
+    wpeutil reboot
+)
+echo [NovaSCM] bcdboot...
 bcdboot C:\\Windows /l it-IT /s S: /f UEFI
+echo [NovaSCM] Copia unattend.xml...
 mkdir C:\\Windows\\Panther 2>nul
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '{unattend_url}' -OutFile 'C:\\Windows\\Panther\\unattend.xml' -UseBasicParsing" 2>nul
+echo [NovaSCM] Deploy completato. Riavvio...
 wpeutil reboot
 """
     log.info("startnet.cmd PXE: servito per %s a %s", pc_name, client_ip)
