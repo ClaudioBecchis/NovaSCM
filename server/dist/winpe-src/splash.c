@@ -27,12 +27,14 @@
 #include <wchar.h>
 
 /* ── Palette identica AutoIt/SCCM ────────────────────────────────────────── */
-#define CLR_BG        RGB(240, 240, 240)   /* #F0F0F0 */
+#define CLR_SCREEN    RGB( 30,  30,  30)   /* sfondo schermo scuro */
+#define CLR_BG        RGB(240, 240, 240)   /* #F0F0F0 dialog */
 #define CLR_BLUE      RGB(  0, 120, 215)   /* #0078D7 */
 #define CLR_TEXT      RGB(  0,   0,   0)
 #define CLR_LABEL     RGB( 80,  80,  80)
 #define CLR_BAR_TRACK RGB(204, 204, 204)
 #define CLR_DIVIDER   RGB(211, 211, 211)
+#define CLR_SHADOW    RGB(160, 160, 160)
 
 #define ORG_NAME  L"NovaSCM \x2014 PolarisCore Infrastructure"
 #define WIN_TITLE L"Installation Progress"
@@ -108,38 +110,56 @@ static void OnPaint(HWND hwnd) {
     SelectObject(mem, bmp);
     SetBkMode(mem, TRANSPARENT);
 
-    /* sfondo grigio chiaro */
-    FillR(mem, full, CLR_BG);
+    /* sfondo schermo scuro — copre il cmd nero */
+    FillR(mem, full, CLR_SCREEN);
 
-    int pad  = 20;
-    int fw   = W - pad*2;
+    /* dialog centrata (proporzione 480:300 scalata al 55% della larghezza) */
+    int dlgW = W * 55 / 100;
+    if (dlgW < 480) dlgW = 480;
+    if (dlgW > 700) dlgW = 700;
+    int dlgH = dlgW * 300 / 480;
+    int dlgX = (W - dlgW) / 2;
+    int dlgY = (H - dlgH) / 2;
+
+    /* ombra leggera */
+    RECT shadow = {dlgX+4, dlgY+4, dlgX+dlgW+4, dlgY+dlgH+4};
+    FillR(mem, shadow, CLR_SHADOW);
+
+    /* sfondo dialog grigio */
+    RECT dlgRect = {dlgX, dlgY, dlgX+dlgW, dlgY+dlgH};
+    FillR(mem, dlgRect, CLR_BG);
+
+    int pad  = dlgX + 20;
+    int fw   = dlgW - 40;
     int barH = 20;
-    int y    = 20;
+    int y    = dlgY + 20;
 
     HFONT fOrg   = MakeFont(16, FW_BOLD,    L"Segoe UI");
     HFONT fLbl   = MakeFont(13, FW_NORMAL,  L"Segoe UI");
     HFONT fAct   = MakeFont(13, FW_NORMAL,  L"Segoe UI");
     HFONT fDet   = MakeFont(12, FW_NORMAL,  L"Segoe UI");
 
+    int rgt = dlgX + dlgW - 20;  /* bordo destro dialog */
+
     /* ── Nome organizzazione (centrato, bold) ─────────────────────────── */
     DrawStr(mem, fOrg, CLR_TEXT,
-            (RECT){pad, y, W-pad, y+22},
+            (RECT){pad, y, rgt, y+22},
             DT_CENTER | DT_SINGLELINE, ORG_NAME);
     y += 30;
 
     /* separatore */
-    RECT div1 = {pad, y, W-pad, y+1};
+    RECT div1 = {pad, y, rgt, y+1};
     FillR(mem, div1, CLR_DIVIDER);
     y += 10;
 
     /* ── Running action ───────────────────────────────────────────────── */
     DrawStr(mem, fLbl, CLR_LABEL,
-            (RECT){pad, y, W-pad, y+18},
+            (RECT){pad, y, rgt, y+18},
             DT_LEFT | DT_SINGLELINE, L"Running action:");
     y += 20;
 
     DrawStr(mem, fAct, CLR_TEXT,
-            (RECT){pad+15, y, W-pad, y+18},
+            (RECT){pad+15, y, rgt, y+18},
             DT_LEFT | DT_SINGLELINE, g_action);
     y += 22;
 
@@ -148,7 +168,7 @@ static void OnPaint(HWND hwnd) {
 
     /* ── Overall progress ─────────────────────────────────────────────── */
     DrawStr(mem, fLbl, CLR_LABEL,
-            (RECT){pad, y, W-pad, y+18},
+            (RECT){pad, y, rgt, y+18},
             DT_LEFT | DT_SINGLELINE, L"Overall progress:");
     y += 20;
 
@@ -156,13 +176,13 @@ static void OnPaint(HWND hwnd) {
     y += barH + 10;
 
     /* separatore */
-    RECT div2 = {pad, y, W-pad, y+1};
+    RECT div2 = {pad, y, rgt, y+1};
     FillR(mem, div2, CLR_DIVIDER);
     y += 8;
 
     /* ── Dettagli ─────────────────────────────────────────────────────── */
     DrawStr(mem, fDet, CLR_LABEL,
-            (RECT){pad, y, W-pad, H-8},
+            (RECT){pad, y, rgt, dlgY+dlgH-8},
             DT_LEFT | DT_WORDBREAK, g_details);
 
     DeleteObject(fOrg); DeleteObject(fLbl);
@@ -209,29 +229,22 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow) {
     wc.cbSize        = sizeof(wc);
     wc.lpfnWndProc   = WndProc;
     wc.hInstance     = hInst;
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
+    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
     wc.lpszClassName = L"NovaSCMSplash";
     wc.hCursor       = LoadCursorW(NULL, IDC_ARROW);
     RegisterClassExW(&wc);
 
-    /* dimensioni finestra — proporzionali come AutoIt (480x260 base)
-       ma scalate per risoluzioni maggiori                             */
+    /* Finestra FULLSCREEN — copre il cmd nero di WinPE.
+       La dialog SCCM viene disegnata al centro in OnPaint. */
     int SW = GetSystemMetrics(SM_CXSCREEN);
     int SH = GetSystemMetrics(SM_CYSCREEN);
-    int dlgW = SW * 50 / 100;   /* ~50% larghezza schermo  */
-    if (dlgW < 480) dlgW = 480;
-    if (dlgW > 700) dlgW = 700;
-    int dlgH = dlgW * 260 / 480; /* mantieni proporzione 480:260 */
-
-    int posX = (SW - dlgW) / 2;
-    int posY = (SH - dlgH) / 2;
 
     HWND hw = CreateWindowExW(
         WS_EX_TOPMOST,
         L"NovaSCMSplash",
         WIN_TITLE,
-        WS_CAPTION | WS_POPUP | WS_VISIBLE,
-        posX, posY, dlgW, dlgH,
+        WS_POPUP | WS_VISIBLE,
+        0, 0, SW, SH,
         NULL, NULL, hInst, NULL
     );
     if (!hw) return 1;

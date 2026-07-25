@@ -2336,7 +2336,8 @@ def _sizeof_fmt(num: int) -> str:
 def _ipxe_deploy(pc_name: str, server_url: str, static_url: str) -> str:
     """Script iPXE: avvia deploy Windows via wimboot + WinPE."""
     return f"""#!ipxe
-echo NovaSCM PXE deploy — {pc_name}
+console --x 1024 --y 768 --picture {server_url}/api/pxe/splash-bg.png || true
+echo NovaSCM PXE deploy -- {pc_name}
 kernel {static_url}/wimboot index=1
 imgfetch {static_url}/BCD            BCD
 imgfetch {static_url}/boot.sdi       boot.sdi
@@ -2742,13 +2743,19 @@ def serve_pxe_startnet(pc_name: str):
     unattend_url = f"{server_url}/api/autounattend/{pc_name}"
 
     cmd = f"""@echo off
+(echo [Status]
+echo Action=Avvio sistema
+echo ActionPercent=0
+echo TotalPercent=0
+echo Details=Inizializzazione WinPE...) > X:\\DeployStatus.ini
+start "" NovaSCM_Progress_CPP_Source.exe X:\\DeployStatus.ini
+ping -n 2 127.0.0.1 >nul
 wpeinit
 (echo [Status]
 echo Action=Inizializzazione rete
-echo ActionPercent=0
-echo TotalPercent=0
-echo Details=Avvio WinPE in corso...) > X:\\DeployStatus.ini
-start "" NovaSCM_Progress_CPP_Source.exe X:\\DeployStatus.ini
+echo ActionPercent=50
+echo TotalPercent=2
+echo Details=Configurazione rete in corso...) > X:\\DeployStatus.ini
 ping -n 8 {server_host} >nul
 (echo [Status]
 echo Action=Partizionamento disco
@@ -2956,6 +2963,37 @@ def pxe_agent_config(pc_name: str):
     }
     log.info("pxe/agent-config: token generato per %s a %s", pc_name, _get_client_ip())
     return Response(_json.dumps(cfg, indent=2), mimetype="application/json")
+
+
+@app.route("/api/pxe/splash-bg.png", methods=["GET"])
+def pxe_splash_bg():
+    """Immagine di sfondo per iPXE console --picture durante il download boot.wim."""
+    import io, struct, zlib
+    # PNG 1024x768 a sfondo scuro #1E1E1E con scritta bianca centrata
+    W, H = 1024, 768
+    BG = (30, 30, 30)
+    FG = (255, 255, 255)
+
+    def png_chunk(ctype, data):
+        c = struct.pack(">I", len(data)) + ctype + data
+        return c + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+
+    # Costruisce bitmap RGB grezza
+    row = bytes([BG[0], BG[1], BG[2]] * W)
+    raw = b""
+    for _ in range(H):
+        raw += b"\x00" + row   # filtro tipo 0 per ogni riga
+
+    ihdr = struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0)
+    idat = zlib.compress(raw, 9)
+    png = (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", ihdr)
+        + png_chunk(b"IDAT", idat)
+        + png_chunk(b"IEND", b"")
+    )
+    return Response(png, mimetype="image/png",
+                    headers={"Cache-Control": "public, max-age=3600"})
 
 
 def _build_autounattend_xml_pxe(d: dict) -> str:
