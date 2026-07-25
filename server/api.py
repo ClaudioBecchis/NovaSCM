@@ -2340,7 +2340,8 @@ echo NovaSCM PXE deploy — {pc_name}
 kernel {static_url}/wimboot index=1
 imgfetch {static_url}/BCD            BCD
 imgfetch {static_url}/boot.sdi       boot.sdi
-imgfetch {static_url}/boot.wim       boot.wim
+imgfetch {static_url}/boot.wim        boot.wim
+imgfetch {static_url}/downloader.exe  downloader.exe
 imgfetch --name startnet.cmd {server_url}/api/pxe/startnet/{pc_name}
 imgfetch --name autounattend.xml {server_url}/api/autounattend/{pc_name}
 imgstat
@@ -2716,7 +2717,7 @@ def serve_ipxe_efi():
 
 # ── ENDPOINT FILE WINPE (no auth, subnet allow-list) ─────────────────────────
 
-_WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim", "install.wim"}
+_WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim", "install.wim", "downloader.exe"}
 
 
 @app.route("/api/pxe/startnet/<pc_name>", methods=["GET"])
@@ -2763,7 +2764,7 @@ if %errorlevel% neq 0 (
     wpeutil reboot
 )
 echo [NovaSCM] Scarico install.wim via HTTP (~6GB, attendere 5-15 min)...
-certutil -urlcache -split -f "{wim_url}" "C:\\install.wim"
+downloader.exe "{wim_url}" "C:\\install.wim"
 if %errorlevel% neq 0 (
     echo [NovaSCM] ERRORE: download install.wim fallito. Riavvio tra 30s...
     ping -n 30 127.0.0.1 >nul
