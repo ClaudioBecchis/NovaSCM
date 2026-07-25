@@ -164,7 +164,7 @@ def _get_pxe_static_url() -> str:
     host   = p.hostname or "localhost"
     scheme = p.scheme or "http"
     port   = f":{p.port}" if p.port else ""
-    return f"{scheme}://{host}{port}/winpe"
+    return f"{scheme}://{host}{port}/api/pxe/file"
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
