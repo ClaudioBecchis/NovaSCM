@@ -1,16 +1,24 @@
 /*
- * NovaSCM WinPE Splash — layout identico SCCM Task Sequence OSD
+ * NovaSCM WinPE Splash — replica fedele del codice AutoIt SCCM-style
  *
- * Sfondo nero, header grigio scuro, step corrente in grande al centro,
- * barra progresso larga e spessa, "Passaggio X di 7" sotto.
- * Nessuna lista, nessun pallino: esattamente come SCCM.
+ * Finestra dialog centrata (come SCCM):
+ *   - Titolo: "Installation Progress"
+ *   - Sfondo #F0F0F0, Segoe UI
+ *   - Nome organizzazione in alto (bold, centrato)
+ *   - "Running action:" + testo step + barra azione (blu)
+ *   - "Overall progress:" + barra totale (blu)
+ *   - Area dettagli in basso
+ *
+ * File di stato (INI):  X:\DeployStatus.ini
+ *   [Status]
+ *   Action=<testo step>
+ *   ActionPercent=<0-100>
+ *   TotalPercent=<0-100>
+ *   Details=<testo dettaglio>
  *
  * Compilare:
  *   x86_64-w64-mingw32-gcc -O2 -mwindows -municode -o splash.exe splash.c
  *     -lgdi32 -luser32 -lshell32 -lkernel32
- *
- * Argomento: splash.exe [status_file]   (default X:\status.txt)
- * status.txt: "N" oppure "N P"  (step 0-6, percentuale 0-100)
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -18,36 +26,49 @@
 #include <stdio.h>
 #include <wchar.h>
 
-/* ── Palette SCCM autentica ──────────────────────────────────────────────── */
-#define CLR_BG          RGB(  0,   0,   0)   /* sfondo nero */
-#define CLR_HEADER_BG   RGB( 32,  32,  32)   /* header grigio scuro */
-#define CLR_HEADER_LINE RGB(  0, 120, 215)   /* linea accent blu sotto header */
-#define CLR_TEXT_WHITE  RGB(255, 255, 255)
-#define CLR_TEXT_GRAY   RGB(160, 160, 160)
-#define CLR_BAR_TRACK   RGB( 45,  45,  45)   /* binario barra */
-#define CLR_BAR_FILL    RGB(  0, 120, 215)   /* blu Windows */
-#define CLR_BAR_BORDER  RGB( 80,  80,  80)
+/* ── Palette identica AutoIt/SCCM ────────────────────────────────────────── */
+#define CLR_BG        RGB(240, 240, 240)   /* #F0F0F0 */
+#define CLR_BLUE      RGB(  0, 120, 215)   /* #0078D7 */
+#define CLR_TEXT      RGB(  0,   0,   0)
+#define CLR_LABEL     RGB( 80,  80,  80)
+#define CLR_BAR_TRACK RGB(204, 204, 204)
+#define CLR_DIVIDER   RGB(211, 211, 211)
 
-#define NUM_STEPS   7
-#define TIMER_POLL  1
-#define TIMER_ANIM  2
-#define POLL_MS   500
-#define ANIM_MS   150
+#define ORG_NAME  L"NovaSCM \x2014 PolarisCore Infrastructure"
+#define WIN_TITLE L"Installation Progress"
 
-static const wchar_t *STEP_NAMES[NUM_STEPS] = {
-    L"Inizializzazione rete",
-    L"Partizionamento disco",
-    L"Download immagine Windows",
-    L"Installazione Windows",
-    L"Configurazione avvio",
-    L"Preparazione sistema",
-    L"Riavvio in corso"
-};
+#define TIMER_POLL 1
+#define POLL_MS  500
 
-static volatile int g_step = 0;
-static volatile int g_pct  = 0;
-static volatile int g_anim = 0;
-static wchar_t      g_statusFile[MAX_PATH];
+/* stato letto dal file INI */
+static wchar_t g_statusFile[MAX_PATH];
+static wchar_t g_action[256]  = L"Inizializzazione...";
+static int     g_actPct       = 0;
+static int     g_totPct       = 0;
+static wchar_t g_details[256] = L"";
+
+/* ── Legge X:\DeployStatus.ini ───────────────────────────────────────────── */
+static void ReadIni(void) {
+    wchar_t val[256];
+
+    GetPrivateProfileStringW(L"Status", L"Action", g_action,
+                             val, 256, g_statusFile);
+    wcsncpy(g_action, val, 255);
+
+    g_actPct = (int)GetPrivateProfileIntW(L"Status", L"ActionPercent",
+                                          g_actPct, g_statusFile);
+    g_totPct = (int)GetPrivateProfileIntW(L"Status", L"TotalPercent",
+                                          g_totPct, g_statusFile);
+
+    GetPrivateProfileStringW(L"Status", L"Details", g_details,
+                             val, 256, g_statusFile);
+    wcsncpy(g_details, val, 255);
+
+    if (g_actPct < 0)  g_actPct = 0;
+    if (g_actPct > 100) g_actPct = 100;
+    if (g_totPct < 0)  g_totPct = 0;
+    if (g_totPct > 100) g_totPct = 100;
+}
 
 /* ── GDI helpers ─────────────────────────────────────────────────────────── */
 static void FillR(HDC h, RECT r, COLORREF c) {
@@ -55,174 +76,100 @@ static void FillR(HDC h, RECT r, COLORREF c) {
     FillRect(h, &r, b);
     DeleteObject(b);
 }
-static void HLine(HDC h, int x1, int x2, int y, int thick, COLORREF c) {
-    HPEN p  = CreatePen(PS_SOLID, thick, c);
-    HPEN op = (HPEN)SelectObject(h, p);
-    MoveToEx(h, x1, y, NULL);
-    LineTo(h, x2, y);
-    SelectObject(h, op);
-    DeleteObject(p);
-}
-static HFONT MakeFont(int h, int weight, const wchar_t *face) {
-    return CreateFontW(h, 0, 0, 0, weight, FALSE, FALSE, FALSE,
+static HFONT MakeFont(int sz, int weight, const wchar_t *face) {
+    return CreateFontW(sz, 0, 0, 0, weight, 0, 0, 0,
         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
         CLEARTYPE_QUALITY, DEFAULT_PITCH, face);
 }
-
-/* ── Legge status.txt ────────────────────────────────────────────────────── */
-static void PollStatus(void) {
-    HANDLE hf = CreateFileW(g_statusFile, GENERIC_READ, FILE_SHARE_WRITE,
-                            NULL, OPEN_EXISTING, 0, NULL);
-    if (hf == INVALID_HANDLE_VALUE) return;
-    char buf[32] = {0};
-    DWORD rd = 0;
-    ReadFile(hf, buf, sizeof(buf)-1, &rd, NULL);
-    CloseHandle(hf);
-    int s = 0, p = 0;
-    sscanf(buf, "%d %d", &s, &p);
-    if (s >= 0 && s < NUM_STEPS) {
-        g_step = s;
-        g_pct  = (p >= 0 && p <= 100) ? p : 0;
+static void DrawStr(HDC h, HFONT f, COLORREF c, RECT r, UINT fmt,
+                    const wchar_t *s) {
+    SelectObject(h, f);
+    SetTextColor(h, c);
+    DrawTextW(h, s, -1, &r, fmt);
+}
+static void ProgressBar(HDC h, int x, int y, int w, int bh, int pct) {
+    RECT track = {x, y, x+w, y+bh};
+    FillR(h, track, CLR_BAR_TRACK);
+    if (pct > 0) {
+        RECT fill = {x, y, x + w*pct/100, y+bh};
+        FillR(h, fill, CLR_BLUE);
     }
 }
 
-/* ── Disegna il frame ────────────────────────────────────────────────────── */
+/* ── Paint ───────────────────────────────────────────────────────────────── */
 static void OnPaint(HWND hwnd) {
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint(hwnd, &ps);
+    RECT full; GetClientRect(hwnd, &full);
+    int W = full.right, H = full.bottom;
 
-    RECT full;
-    GetClientRect(hwnd, &full);
-    int W = full.right;
-    int H = full.bottom;
-
-    /* doppio buffer */
-    HDC     mem = CreateCompatibleDC(hdc);
+    HDC mem = CreateCompatibleDC(hdc);
     HBITMAP bmp = CreateCompatibleBitmap(hdc, W, H);
     SelectObject(mem, bmp);
     SetBkMode(mem, TRANSPARENT);
 
-    /* ── sfondo nero ──────────────────────────────────────────────────── */
+    /* sfondo grigio chiaro */
     FillR(mem, full, CLR_BG);
 
-    /* ── header (grigio scuro, 1/10 altezza) ──────────────────────────── */
-    int hdrH = H / 10;
-    RECT rHdr = {0, 0, W, hdrH};
-    FillR(mem, rHdr, CLR_HEADER_BG);
-    /* linea accent blu sotto l'header */
-    HLine(mem, 0, W, hdrH, 3, CLR_HEADER_LINE);
+    int pad  = 20;
+    int fw   = W - pad*2;
+    int barH = 20;
+    int y    = 20;
 
-    /* testo header: "NovaSCM" a sinistra */
-    HFONT fHdrTitle = MakeFont(hdrH * 52 / 100, FW_BOLD, L"Segoe UI");
-    HFONT fHdrSub   = MakeFont(hdrH * 34 / 100, FW_NORMAL, L"Segoe UI");
+    HFONT fOrg   = MakeFont(16, FW_BOLD,    L"Segoe UI");
+    HFONT fLbl   = MakeFont(13, FW_NORMAL,  L"Segoe UI");
+    HFONT fAct   = MakeFont(13, FW_NORMAL,  L"Segoe UI");
+    HFONT fDet   = MakeFont(12, FW_NORMAL,  L"Segoe UI");
 
-    SelectObject(mem, fHdrTitle);
-    SetTextColor(mem, CLR_TEXT_WHITE);
-    RECT rHdrL = {W / 20, 0, W / 2, hdrH};
-    DrawTextW(mem, L"NovaSCM", -1, &rHdrL,
-              DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+    /* ── Nome organizzazione (centrato, bold) ─────────────────────────── */
+    DrawStr(mem, fOrg, CLR_TEXT,
+            (RECT){pad, y, W-pad, y+22},
+            DT_CENTER | DT_SINGLELINE, ORG_NAME);
+    y += 30;
 
-    /* sottotitolo a destra nell'header */
-    SelectObject(mem, fHdrSub);
-    SetTextColor(mem, CLR_TEXT_GRAY);
-    RECT rHdrR = {W / 2, 0, W - W / 20, hdrH};
-    DrawTextW(mem, L"Distribuzione automatica sistema operativo",
-              -1, &rHdrR, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+    /* separatore */
+    RECT div1 = {pad, y, W-pad, y+1};
+    FillR(mem, div1, CLR_DIVIDER);
+    y += 10;
 
-    /* ── zona centrale ────────────────────────────────────────────────── */
-    /*
-     * Layout verticale della zona centrale (identico SCCM):
-     *
-     *   [hdrH + gap]
-     *   Operazione corrente  (testo grande bianco)
-     *   [piccolo gap]
-     *   Passaggio X di 7     (testo grigio medio)
-     *   [gap]
-     *   ────────────────────────────────────  barra progresso
-     *   XX%                                   percentuale sotto
-     */
-    int gap      = H / 18;
-    int stepFH   = H / 8;            /* font step corrente — grande */
-    int subFH    = H / 22;           /* font "Passaggio X di Y" */
-    int barH     = H / 18;           /* altezza barra (grossa, SCCM-style) */
-    int barW     = W * 78 / 100;
-    int barX     = (W - barW) / 2;
+    /* ── Running action ───────────────────────────────────────────────── */
+    DrawStr(mem, fLbl, CLR_LABEL,
+            (RECT){pad, y, W-pad, y+18},
+            DT_LEFT | DT_SINGLELINE, L"Running action:");
+    y += 20;
 
-    int topY     = hdrH + gap;       /* inizio zona centrale */
+    DrawStr(mem, fAct, CLR_TEXT,
+            (RECT){pad+15, y, W-pad, y+18},
+            DT_LEFT | DT_SINGLELINE, g_action);
+    y += 22;
 
-    /* nome step corrente — testo grande */
-    HFONT fStep  = MakeFont(stepFH, FW_SEMIBOLD, L"Segoe UI");
-    SelectObject(mem, fStep);
-    SetTextColor(mem, CLR_TEXT_WHITE);
-    RECT rStep = {W / 10, topY, W * 9 / 10, topY + stepFH + 4};
-    DrawTextW(mem, STEP_NAMES[g_step], -1, &rStep,
-              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    ProgressBar(mem, pad, y, fw, barH, g_actPct);
+    y += barH + 16;
 
-    /* "Passaggio X di 7" */
-    HFONT fSub = MakeFont(subFH, FW_NORMAL, L"Segoe UI");
-    SelectObject(mem, fSub);
-    SetTextColor(mem, CLR_TEXT_GRAY);
-    wchar_t passaggioBuf[64];
-    swprintf(passaggioBuf, 64, L"Passaggio %d di %d", g_step + 1, NUM_STEPS);
-    int passaggioY = topY + stepFH + gap / 2;
-    RECT rPass = {W / 10, passaggioY, W * 9 / 10, passaggioY + subFH + 4};
-    DrawTextW(mem, passaggioBuf, -1, &rPass,
-              DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    /* ── Overall progress ─────────────────────────────────────────────── */
+    DrawStr(mem, fLbl, CLR_LABEL,
+            (RECT){pad, y, W-pad, y+18},
+            DT_LEFT | DT_SINGLELINE, L"Overall progress:");
+    y += 20;
 
-    /* ── barra progresso ──────────────────────────────────────────────── */
-    int barY = passaggioY + subFH + gap;
+    ProgressBar(mem, pad, y, fw, barH, g_totPct);
+    y += barH + 10;
 
-    /* bordo esterno */
-    RECT rBarOuter = {barX - 1, barY - 1, barX + barW + 1, barY + barH + 1};
-    FillR(mem, rBarOuter, CLR_BAR_BORDER);
+    /* separatore */
+    RECT div2 = {pad, y, W-pad, y+1};
+    FillR(mem, div2, CLR_DIVIDER);
+    y += 8;
 
-    /* binario */
-    RECT rBarTrack = {barX, barY, barX + barW, barY + barH};
-    FillR(mem, rBarTrack, CLR_BAR_TRACK);
+    /* ── Dettagli ─────────────────────────────────────────────────────── */
+    DrawStr(mem, fDet, CLR_LABEL,
+            (RECT){pad, y, W-pad, H-8},
+            DT_LEFT | DT_WORDBREAK, g_details);
 
-    /* riempimento — globale: se step ha %, usa parziale; altrimenti step-based */
-    int fillPct;
-    if (g_pct > 0 && (g_step == 2 || g_step == 3 || g_step == 5)) {
-        fillPct = (g_step * 100 + g_pct) / NUM_STEPS;
-    } else {
-        fillPct = g_step * 100 / NUM_STEPS;
-    }
-    if (fillPct > 0) {
-        RECT rFill = {barX, barY, barX + barW * fillPct / 100, barY + barH};
-        FillR(mem, rFill, CLR_BAR_FILL);
-    }
+    DeleteObject(fOrg); DeleteObject(fLbl);
+    DeleteObject(fAct); DeleteObject(fDet);
 
-    /* testo percentuale sotto la barra */
-    wchar_t pctBuf[16];
-    if (g_pct > 0 && (g_step == 2 || g_step == 3 || g_step == 5)) {
-        swprintf(pctBuf, 16, L"%d%%", g_pct);
-    } else {
-        /* spinner durante step senza % esplicita */
-        static const wchar_t *spin[] = {L"|", L"/", L"—", L"\\"};
-        swprintf(pctBuf, 16, L"%s", spin[g_anim % 4]);
-    }
-    HFONT fPct = MakeFont(subFH, FW_NORMAL, L"Segoe UI");
-    SelectObject(mem, fPct);
-    SetTextColor(mem, CLR_TEXT_GRAY);
-    int pctLabelY = barY + barH + gap / 3;
-    RECT rPct = {barX, pctLabelY, barX + barW, pctLabelY + subFH + 4};
-    DrawTextW(mem, pctBuf, -1, &rPct, DT_CENTER | DT_SINGLELINE);
-
-    /* ── footer ───────────────────────────────────────────────────────── */
-    HFONT fFooter = MakeFont(H / 42, FW_NORMAL, L"Segoe UI");
-    SelectObject(mem, fFooter);
-    SetTextColor(mem, RGB(60, 60, 60));
-    RECT rFoot = {0, H - H / 16, W, H};
-    DrawTextW(mem, L"NovaSCM  \x2014  PolarisCore Infrastructure",
-              -1, &rFoot, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
-
-    /* blit */
     BitBlt(hdc, 0, 0, W, H, mem, 0, 0, SRCCOPY);
-
     DeleteObject(bmp); DeleteDC(mem);
-    DeleteObject(fHdrTitle); DeleteObject(fHdrSub);
-    DeleteObject(fStep);     DeleteObject(fSub);
-    DeleteObject(fPct);      DeleteObject(fFooter);
     EndPaint(hwnd, &ps);
 }
 
@@ -231,20 +178,16 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     switch (msg) {
     case WM_CREATE:
         SetTimer(hwnd, TIMER_POLL, POLL_MS, NULL);
-        SetTimer(hwnd, TIMER_ANIM, ANIM_MS, NULL);
         return 0;
     case WM_TIMER:
-        if (wp == TIMER_POLL) { PollStatus(); InvalidateRect(hwnd, NULL, FALSE); }
-        if (wp == TIMER_ANIM) { g_anim++;    InvalidateRect(hwnd, NULL, FALSE); }
+        ReadIni();
+        InvalidateRect(hwnd, NULL, FALSE);
+        if (g_totPct >= 100) { Sleep(1500); DestroyWindow(hwnd); }
         return 0;
-    case WM_PAINT:       OnPaint(hwnd); return 0;
-    case WM_ERASEBKGND:  return 1;
-    case WM_KEYDOWN:     return 0;
-    case WM_DESTROY:
-        KillTimer(hwnd, TIMER_POLL);
-        KillTimer(hwnd, TIMER_ANIM);
-        PostQuitMessage(0);
-        return 0;
+    case WM_PAINT:      OnPaint(hwnd); return 0;
+    case WM_ERASEBKGND: return 1;
+    case WM_KEYDOWN:    return 0;
+    case WM_DESTROY:    PostQuitMessage(0); return 0;
     }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
@@ -253,28 +196,45 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmd, int nShow) {
     (void)hPrev; (void)lpCmd; (void)nShow;
 
-    int argc;
-    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    int argc; LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     wcsncpy(g_statusFile,
-            argc >= 2 ? argv[1] : L"X:\\status.txt",
-            MAX_PATH - 1);
+            argc >= 2 ? argv[1] : L"X:\\DeployStatus.ini",
+            MAX_PATH-1);
     LocalFree(argv);
+
+    /* prima lettura */
+    ReadIni();
 
     WNDCLASSEXW wc = {0};
     wc.cbSize        = sizeof(wc);
     wc.lpfnWndProc   = WndProc;
     wc.hInstance     = hInst;
-    wc.hbrBackground = (HBRUSH)GetStockObject(BLACK_BRUSH);
+    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
     wc.lpszClassName = L"NovaSCMSplash";
     wc.hCursor       = LoadCursorW(NULL, IDC_ARROW);
     RegisterClassExW(&wc);
 
+    /* dimensioni finestra — proporzionali come AutoIt (480x260 base)
+       ma scalate per risoluzioni maggiori                             */
     int SW = GetSystemMetrics(SM_CXSCREEN);
     int SH = GetSystemMetrics(SM_CYSCREEN);
-    HWND hw = CreateWindowExW(WS_EX_TOPMOST, L"NovaSCMSplash", L"NovaSCM",
-        WS_POPUP | WS_VISIBLE, 0, 0, SW, SH, NULL, NULL, hInst, NULL);
+    int dlgW = SW * 50 / 100;   /* ~50% larghezza schermo  */
+    if (dlgW < 480) dlgW = 480;
+    if (dlgW > 700) dlgW = 700;
+    int dlgH = dlgW * 260 / 480; /* mantieni proporzione 480:260 */
+
+    int posX = (SW - dlgW) / 2;
+    int posY = (SH - dlgH) / 2;
+
+    HWND hw = CreateWindowExW(
+        WS_EX_TOPMOST,
+        L"NovaSCMSplash",
+        WIN_TITLE,
+        WS_CAPTION | WS_POPUP | WS_VISIBLE,
+        posX, posY, dlgW, dlgH,
+        NULL, NULL, hInst, NULL
+    );
     if (!hw) return 1;
-    ShowWindow(hw, SW_SHOWMAXIMIZED);
     SetForegroundWindow(hw);
 
     MSG msg;

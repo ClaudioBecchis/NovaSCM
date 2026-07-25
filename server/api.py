@@ -2341,8 +2341,8 @@ kernel {static_url}/wimboot index=1
 imgfetch {static_url}/BCD            BCD
 imgfetch {static_url}/boot.sdi       boot.sdi
 imgfetch {static_url}/boot.wim        boot.wim
-imgfetch {static_url}/downloader.exe  downloader.exe
-imgfetch {static_url}/splash.exe      splash.exe
+imgfetch {static_url}/downloader.exe                    downloader.exe
+imgfetch {static_url}/NovaSCM_Progress_CPP_Source.exe  NovaSCM_Progress_CPP_Source.exe
 imgfetch --name startnet.cmd {server_url}/api/pxe/startnet/{pc_name}
 imgfetch --name autounattend.xml {server_url}/api/autounattend/{pc_name}
 imgstat
@@ -2718,7 +2718,7 @@ def serve_ipxe_efi():
 
 # ── ENDPOINT FILE WINPE (no auth, subnet allow-list) ─────────────────────────
 
-_WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim", "install.wim", "downloader.exe", "splash.exe"}
+_WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim", "install.wim", "downloader.exe", "NovaSCM_Progress_CPP_Source.exe"}
 
 
 @app.route("/api/pxe/startnet/<pc_name>", methods=["GET"])
@@ -2743,10 +2743,18 @@ def serve_pxe_startnet(pc_name: str):
 
     cmd = f"""@echo off
 wpeinit
-echo 0 > X:\\status.txt
-start "" splash.exe X:\\status.txt
+(echo [Status]
+echo Action=Inizializzazione rete
+echo ActionPercent=0
+echo TotalPercent=0
+echo Details=Avvio WinPE in corso...) > X:\\DeployStatus.ini
+start "" NovaSCM_Progress_CPP_Source.exe X:\\DeployStatus.ini
 ping -n 8 {server_host} >nul
-echo 1 > X:\\status.txt
+(echo [Status]
+echo Action=Partizionamento disco
+echo ActionPercent=50
+echo TotalPercent=5
+echo Details=Preparazione partizioni GPT...) > X:\\DeployStatus.ini
 (echo SELECT DISK 0
 echo CLEAN
 echo CONVERT GPT
@@ -2763,29 +2771,44 @@ if %errorlevel% neq 0 (
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
 )
-echo 2 > X:\\status.txt
-downloader.exe "{wim_url}" "C:\\install.wim" "X:\\status.txt"
+downloader.exe "{wim_url}" "C:\\install.wim" "X:\\DeployStatus.ini" "10" "70" "Download immagine Windows"
 if %errorlevel% neq 0 (
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
 )
-echo 3 > X:\\status.txt
+(echo [Status]
+echo Action=Installazione Windows
+echo ActionPercent=0
+echo TotalPercent=70
+echo Details=Applicazione immagine disco...) > X:\\DeployStatus.ini
 dism /Apply-Image /ImageFile:C:\\install.wim /Index:{wim_index} /ApplyDir:C:\\ /LogPath:X:\\dism.log
 if %errorlevel% neq 0 (
     ping -n 60 127.0.0.1 >nul
     wpeutil reboot
 )
 del C:\\install.wim 2>nul
-echo 4 > X:\\status.txt
+(echo [Status]
+echo Action=Configurazione avvio
+echo ActionPercent=100
+echo TotalPercent=80
+echo Details=Configurazione boot loader UEFI...) > X:\\DeployStatus.ini
 bcdboot C:\\Windows /l it-IT /s S: /f UEFI
-echo 5 > X:\\status.txt
+(echo [Status]
+echo Action=Preparazione sistema
+echo ActionPercent=0
+echo TotalPercent=85
+echo Details=Download configurazione e agenti NovaSCM...) > X:\\DeployStatus.ini
 mkdir C:\\Windows\\Panther 2>nul
-downloader.exe "{unattend_url}" "C:\\Windows\\Panther\\unattend.xml"
+downloader.exe "{unattend_url}" "C:\\Windows\\Panther\\unattend.xml" "X:\\DeployStatus.ini" "85" "87" "Download configurazione automatica"
 mkdir C:\\ProgramData\\NovaSCM\\logs 2>nul
-downloader.exe "{server_url}/api/pxe/download/agent" "C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe" "X:\\status.txt" "5"
-downloader.exe "{server_url}/api/pxe/download/deploy-screen" "C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe" "X:\\status.txt" "5"
+downloader.exe "{server_url}/api/pxe/download/agent" "C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe" "X:\\DeployStatus.ini" "87" "93" "Download agente NovaSCM"
+downloader.exe "{server_url}/api/pxe/download/deploy-screen" "C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe" "X:\\DeployStatus.ini" "93" "98" "Download NovaSCM Deploy Screen"
 downloader.exe "{server_url}/api/pxe/agent-config/{pc_name}" "C:\\ProgramData\\NovaSCM\\agent.json"
-echo 6 > X:\\status.txt
+(echo [Status]
+echo Action=Riavvio in corso
+echo ActionPercent=100
+echo TotalPercent=100
+echo Details=Il sistema si riavviera a breve...) > X:\\DeployStatus.ini
 ping -n 3 127.0.0.1 >nul
 wpeutil reboot
 """

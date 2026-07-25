@@ -10,10 +10,10 @@ x86_64-w64-mingw32-gcc -O2 -municode \
     -o "$OUTDIR/downloader.exe" downloader.c \
     -lwinhttp -lkernel32
 
-echo "[build] splash.exe"
+echo "[build] NovaSCM_Progress_CPP_Source.exe"
 x86_64-w64-mingw32-gcc -O2 -mwindows -municode \
-    -o "$OUTDIR/splash.exe" splash.c \
+    -o "$OUTDIR/NovaSCM_Progress_CPP_Source.exe" splash.c \
     -lgdi32 -luser32 -lshell32 -lkernel32
 
 echo "[done] binari in $OUTDIR"
-ls -lh "$OUTDIR/downloader.exe" "$OUTDIR/splash.exe"
+ls -lh "$OUTDIR/downloader.exe" "$OUTDIR/NovaSCM_Progress_CPP_Source.exe"
