@@ -97,10 +97,17 @@ int wmain(int argc, wchar_t *argv[]) {
         return 1;
     }
 
-    DWORD total = 0, bufLen = sizeof(DWORD);
-    WinHttpQueryHeaders(hReq,
-        WINHTTP_QUERY_CONTENT_LENGTH | WINHTTP_QUERY_FLAG_NUMBER,
-        NULL, &total, &bufLen, NULL);
+    /* Content-Length come stringa per supportare file >4GB (ULONGLONG) */
+    ULONGLONG total = 0;
+    {
+        wchar_t lenStr[64] = {0};
+        DWORD lenSize = sizeof(lenStr);
+        if (WinHttpQueryHeaders(hReq, WINHTTP_QUERY_CONTENT_LENGTH,
+                                WINHTTP_HEADER_NAME_BY_INDEX,
+                                lenStr, &lenSize, WINHTTP_NO_HEADER_INDEX)) {
+            total = (ULONGLONG)_wcstoui64(lenStr, NULL, 10);
+        }
+    }
 
     HANDLE hFile = CreateFileW(argv[2], GENERIC_WRITE, 0, NULL,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -110,9 +117,10 @@ int wmain(int argc, wchar_t *argv[]) {
     }
 
     char buf[131072];
-    DWORD read, written, downloaded = 0;
+    DWORD read, written;
+    ULONGLONG downloaded = 0;
     int lastActPct = -1;
-    wprintf(L"Download %s\n", argv[1]);
+    wprintf(L"Download %s (%.1f GB)\n", argv[1], (double)total / (1024*1024*1024));
 
     /* Stato iniziale */
     WriteIni(statusFile, actionLabel, 0, totStart, L"Connessione al server...");
@@ -125,21 +133,19 @@ int wmain(int argc, wchar_t *argv[]) {
         int totPct = totStart;
 
         if (total > 0) {
-            actPct = (int)(100.0 * downloaded / total);
-            /* overall: interpolazione lineare tra totStart e totEnd */
+            actPct = (int)(100.0 * (double)downloaded / (double)total);
             totPct = totStart + (totEnd - totStart) * actPct / 100;
 
             wchar_t details[128];
-            _snwprintf(details, 127, L"%lu MB / %lu MB",
-                       (unsigned long)(downloaded>>20),
-                       (unsigned long)(total>>20));
+            _snwprintf(details, 127, L"%llu MB / %llu MB",
+                       downloaded >> 20, total >> 20);
 
             if (actPct != lastActPct) {
                 WriteIni(statusFile, actionLabel, actPct, totPct, details);
                 lastActPct = actPct;
             }
         } else {
-            wprintf(L"\r  %lu MB", (unsigned long)(downloaded>>20));
+            wprintf(L"\r  %llu MB", downloaded >> 20);
         }
     }
     wprintf(L"\n");
