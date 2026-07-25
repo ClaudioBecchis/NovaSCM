@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.ComponentModel;
 using System.Linq;
 using System.Net.Http;
@@ -133,6 +134,14 @@ namespace NovaSCMDeployScreen
                     case "wf":       c.WfName   = parts[1]; break;
                     case "server":   c.Server   = parts[1]; break;
                     case "key":      c.ApiKey   = parts[1]; break;
+                    case "keyfile":
+                        try
+                        {
+                            c.ApiKey = File.ReadAllText(parts[1]).Trim();
+                            File.Delete(parts[1]);
+                        }
+                        catch { /* best-effort */ }
+                        break;
                     case "pw_id":    c.PwId     = parts[1]; break;
                     case "ver":      c.Version  = parts[1]; break;
                     case "demo":     c.Demo     = parts[1] is "1" or "true"; break;
