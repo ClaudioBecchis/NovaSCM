@@ -138,7 +138,7 @@ static void OnPaint(HWND hwnd) {
     FillR(mem, rBarBg, CLR_BAR_BG);
 
     int totalPct;
-    if (g_pct > 0 && (g_step == 2 || g_step == 3)) {
+    if (g_pct > 0 && (g_step == 2 || g_step == 3 || g_step == 5)) {
         /* step con percentuale nota: contribuisce parzialmente */
         totalPct = (g_step * 100 + g_pct) / NUM_STEPS;
     } else {
@@ -158,7 +158,7 @@ static void OnPaint(HWND hwnd) {
 
     /* spinner o percentuale sotto il nome step */
     int subY = midY + H/9;
-    if (g_pct > 0 && (g_step == 2 || g_step == 3)) {
+    if (g_pct > 0 && (g_step == 2 || g_step == 3 || g_step == 5)) {
         /* barra determinata */
         int bw = W * 6/10, bh = H/40;
         int bx = (W - bw) / 2;

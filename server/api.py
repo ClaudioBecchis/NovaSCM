@@ -2781,6 +2781,10 @@ bcdboot C:\\Windows /l it-IT /s S: /f UEFI
 echo 5 > X:\\status.txt
 mkdir C:\\Windows\\Panther 2>nul
 downloader.exe "{unattend_url}" "C:\\Windows\\Panther\\unattend.xml"
+mkdir C:\\ProgramData\\NovaSCM\\logs 2>nul
+downloader.exe "{server_url}/api/pxe/download/agent" "C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe" "X:\\status.txt" "5"
+downloader.exe "{server_url}/api/pxe/download/deploy-screen" "C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe" "X:\\status.txt" "5"
+downloader.exe "{server_url}/api/pxe/agent-config/{pc_name}" "C:\\ProgramData\\NovaSCM\\agent.json"
 echo 6 > X:\\status.txt
 ping -n 3 127.0.0.1 >nul
 wpeutil reboot
@@ -2870,6 +2874,65 @@ def serve_autounattend_pxe(pc_name: str):
     xml = _build_autounattend_xml_pxe(cr_dict)
     log.info("autounattend PXE: servito XML per %s a %s (deploy token)", pc_name, client_ip)
     return xml, 200, {"Content-Type": "application/xml"}
+
+
+# ── Endpoint PXE subnet-only: download file + config agente ──────────────────
+
+@app.route("/api/pxe/download/agent", methods=["GET"])
+@limiter.limit("10 per minute")
+def pxe_download_agent():
+    """Serve NovaSCMAgent.exe senza auth — protetto da subnet PXE (WinPE download)."""
+    if not _is_pxe_allowed(_get_client_ip()):
+        return "Accesso negato", 403
+    fpath = os.path.join(os.path.dirname(DB), "NovaSCMAgent.exe")
+    if not os.path.isfile(fpath):
+        return jsonify({"error": "NovaSCMAgent.exe non trovato"}), 404
+    log.info("pxe/download/agent: serving a %s", _get_client_ip())
+    return send_file(fpath, as_attachment=True, download_name="NovaSCMAgent.exe",
+                     mimetype="application/octet-stream")
+
+
+@app.route("/api/pxe/download/deploy-screen", methods=["GET"])
+@limiter.limit("10 per minute")
+def pxe_download_deploy_screen():
+    """Serve NovaSCMDeployScreen.exe senza auth — protetto da subnet PXE (WinPE download)."""
+    if not _is_pxe_allowed(_get_client_ip()):
+        return "Accesso negato", 403
+    fpath = os.path.join(DIST_DIR, "NovaSCMDeployScreen.exe")
+    if not os.path.isfile(fpath):
+        return jsonify({"error": "NovaSCMDeployScreen.exe non trovato"}), 404
+    log.info("pxe/download/deploy-screen: serving a %s", _get_client_ip())
+    return send_file(fpath, as_attachment=True, download_name="NovaSCMDeployScreen.exe",
+                     mimetype="application/octet-stream")
+
+
+@app.route("/api/pxe/agent-config/<pc_name>", methods=["GET"])
+@limiter.limit("10 per minute")
+def pxe_agent_config(pc_name: str):
+    """Genera e serve agent.json con enrollment token monouso — protetto da subnet PXE."""
+    if not _is_pxe_allowed(_get_client_ip()):
+        return "Accesso negato", 403
+    import json as _json
+    server_url = _get_public_url()
+    # Recupera dominio dal CR (se presente)
+    with get_db_ctx() as conn:
+        cr = conn.execute("SELECT domain FROM cr WHERE pc_name=?", (pc_name,)).fetchone()
+        domain = (cr["domain"] or "") if cr else ""
+        token = secrets.token_hex(32)
+        conn.execute(
+            "INSERT INTO enrollment_tokens (token, expires_at) VALUES (?,?)",
+            (token, time.time() + 86400)   # validità 24h
+        )
+        conn.commit()
+    cfg = {
+        "api_url":  server_url,
+        "api_key":  token,
+        "pc_name":  pc_name.upper(),
+        "domain":   domain,
+        "poll_sec": 30,
+    }
+    log.info("pxe/agent-config: token generato per %s a %s", pc_name, _get_client_ip())
+    return Response(_json.dumps(cfg, indent=2), mimetype="application/json")
 
 
 def _build_autounattend_xml_pxe(d: dict) -> str:
@@ -3136,41 +3199,16 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
       <FirstLogonCommands>
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
-          <CommandLine>cmd /c mkdir C:\\ProgramData\\NovaSCM\\logs</CommandLine>
-          <Description>NovaSCM: crea cartella</Description>
-        </SynchronousCommand>
-        <SynchronousCommand wcm:action="add">
-          <Order>2</Order>
           <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;Get-NetAdapter|ForEach-Object{{try{{Set-NetAdapterPowerManagement $_.Name -AllowComputerToTurnOffDevice Disabled -ErrorAction SilentlyContinue}}catch{{}}}};Get-WmiObject MSPower_DeviceEnable -Namespace root/wmi|Where-Object{{$_.InstanceName -match &apos;PCI\\\\VEN&apos;}}|ForEach-Object{{$_.Enable=$false;$_.Put()|Out-Null}}&quot;</CommandLine>
           <Description>NovaSCM: disabilita power management NIC</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>3</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;$h=&apos;{_urlparse(xurl).hostname}&apos;;for($i=0;$i -lt 30;$i++){{if(Test-Connection $h -Count 1 -Quiet){{break}};Start-Sleep 2}}&quot;</CommandLine>
-          <Description>NovaSCM: attendi rete</Description>
-        </SynchronousCommand>
-        <SynchronousCommand wcm:action="add">
-          <Order>4</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;for($i=0;$i -lt 5;$i++){{try{{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;(New-Object Net.WebClient).DownloadFile(&apos;{xurl}/api/download/agent?key={xkey}&apos;,&apos;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&apos;);break}}catch{{Start-Sleep 5}}}}&quot;</CommandLine>
-          <Description>NovaSCM: scarica agente (retry)</Description>
-        </SynchronousCommand>
-        <SynchronousCommand wcm:action="add">
-          <Order>5</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;for($i=0;$i -lt 5;$i++){{try{{[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12;(New-Object Net.WebClient).DownloadFile(&apos;{xurl}/api/download/deploy-screen?key={xkey}&apos;,&apos;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&apos;);break}}catch{{Start-Sleep 5}}}}&quot;</CommandLine>
-          <Description>NovaSCM: scarica DeployScreen (retry)</Description>
-        </SynchronousCommand>
-        <SynchronousCommand wcm:action="add">
-          <Order>6</Order>
-          <CommandLine>powershell.exe -NonInteractive -ExecutionPolicy Bypass -Command &quot;@{{api_url=&apos;{xurl}&apos;;api_key=&apos;{xkey}&apos;;pc_name=&apos;{xpc}&apos;;poll_sec=30;domain=&apos;{xdom}&apos;}}|ConvertTo-Json|Set-Content &apos;C:\\ProgramData\\NovaSCM\\agent.json&apos; -Encoding UTF8&quot;</CommandLine>
-          <Description>NovaSCM: crea config agente</Description>
-        </SynchronousCommand>
-        <SynchronousCommand wcm:action="add">
-          <Order>7</Order>
+          <Order>2</Order>
           <CommandLine>cmd /c if exist &quot;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&quot; start &quot;&quot; &quot;C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe&quot; hostname={xpc} domain={xdom or "WORKGROUP"} server={xurl} key={xkey} pw_id={_pw_id} wf=Deploy</CommandLine>
           <Description>NovaSCM: avvia Deploy Screen</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>8</Order>
+          <Order>3</Order>
           <CommandLine>cmd /c if exist &quot;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&quot; start &quot;&quot; /b &quot;C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe&quot;</CommandLine>
           <Description>NovaSCM: avvia agente</Description>
         </SynchronousCommand>

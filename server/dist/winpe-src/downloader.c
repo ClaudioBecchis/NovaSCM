@@ -21,8 +21,9 @@ int wmain(int argc, wchar_t *argv[]) {
         fwprintf(stderr, L"Usage: downloader.exe <url> <destfile> [status_file]\n");
         return 1;
     }
-    /* Argomento opzionale: file di stato per aggiornare la splash (es. X:\status.txt) */
+    /* argv[3] = file di stato (opzionale), argv[4] = step WinPE (default 2) */
     const wchar_t *statusFile = (argc >= 4) ? argv[3] : NULL;
+    int statusStep = (argc >= 5) ? (int)wcstol(argv[4], NULL, 10) : 2;
 
     URL_COMPONENTS uc = {0};
     uc.dwStructSize = sizeof(uc);
@@ -85,7 +86,7 @@ int wmain(int argc, wchar_t *argv[]) {
             wprintf(L"\r  %lu / %lu MB  (%d%%)", downloaded>>20, total>>20, pct);
             /* Aggiorna status.txt solo quando la percentuale cambia (evita I/O eccessivo) */
             if (pct != lastPct) {
-                WriteStatus(statusFile, 2, pct);
+                WriteStatus(statusFile, statusStep, pct);
                 lastPct = pct;
             }
         } else {
