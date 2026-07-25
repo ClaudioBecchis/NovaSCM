@@ -7,6 +7,7 @@ from flask import Flask, request, jsonify, Response, send_from_directory, send_f
 from werkzeug.middleware.proxy_fix import ProxyFix
 import sqlite3, json, datetime, os, functools, hmac, logging, re, secrets, threading, time, uuid, queue
 import urllib.request as _urllib_req
+from urllib.parse import urlparse as _urlparse
 from xml.sax.saxutils import escape as _xe
 
 def _xe_ps(val: str) -> str:
@@ -2334,13 +2335,13 @@ def _sizeof_fmt(num: int) -> str:
 
 def _ipxe_deploy(pc_name: str, server_url: str, static_url: str) -> str:
     """Script iPXE: avvia deploy Windows via wimboot + WinPE."""
-    # File grandi (boot.wim, install.wim) via nginx; API solo per autounattend dinamico.
     return f"""#!ipxe
 echo NovaSCM PXE deploy — {pc_name}
 kernel {static_url}/wimboot index=1
 imgfetch {static_url}/BCD            BCD
 imgfetch {static_url}/boot.sdi       boot.sdi
 imgfetch {static_url}/boot.wim       boot.wim
+imgfetch --name startnet.cmd {server_url}/api/pxe/startnet/{pc_name}
 imgfetch --name autounattend.xml {server_url}/api/autounattend/{pc_name}
 imgstat
 boot || goto failed
@@ -2716,6 +2717,62 @@ def serve_ipxe_efi():
 # ── ENDPOINT FILE WINPE (no auth, subnet allow-list) ─────────────────────────
 
 _WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim", "install.wim"}
+
+
+@app.route("/api/pxe/startnet/<pc_name>", methods=["GET"])
+@limiter.limit("30 per minute")
+def serve_pxe_startnet(pc_name: str):
+    """
+    Genera startnet.cmd iniettato via wimboot: esegue wpeinit, monta SMB,
+    partiziona disco 0 con diskpart, applica install.wim con DISM, bcdboot,
+    copia unattend.xml in Panther e riavvia.
+    NESSUNA autenticazione — protetto da subnet allow-list.
+    """
+    client_ip = _get_client_ip()
+    if not _is_pxe_allowed(client_ip):
+        return "Accesso negato", 403
+
+    server_url  = _get_public_url()
+    smb_user    = _get_setting("pxe_smb_user", "novascm")
+    smb_pass    = _get_setting("pxe_smb_pass", "")
+    smb_domain  = _get_setting("pxe_smb_domain", "WORKGROUP")
+    wim_index   = _get_setting("pxe_wim_index", "5")
+    raw_wim     = _get_setting("pxe_install_wim_path",
+                               f"\\\\{_urlparse(server_url).hostname or '192.168.10.112'}\\wininstall\\sources\\install.wim")
+    # Ricava solo il percorso UNC della share (\\server\share) dal path completo
+    parts       = raw_wim.replace("/", "\\").lstrip("\\").split("\\")
+    smb_share   = f"\\\\{parts[0]}\\{parts[1]}" if len(parts) >= 2 else f"\\\\192.168.10.112\\wininstall"
+    wim_path    = raw_wim.replace("/", "\\")
+    unattend_url = f"{server_url}/api/autounattend/{pc_name}"
+
+    cmd = f"""@echo off
+wpeinit
+ping -n 5 {parts[0] if parts else '192.168.10.112'} >nul
+net use G: {smb_share} /user:{smb_domain}\\{smb_user} {smb_pass} /persistent:no
+if %errorlevel% neq 0 (
+    ping -n 10 {parts[0] if parts else '192.168.10.112'} >nul
+    net use G: {smb_share} /user:{smb_domain}\\{smb_user} {smb_pass} /persistent:no
+)
+(echo SELECT DISK=0
+echo CLEAN
+echo CONVERT GPT
+echo CREATE PARTITION EFI SIZE=300
+echo FORMAT QUICK FS=FAT32 LABEL=System
+echo ASSIGN LETTER=S
+echo CREATE PARTITION MSR SIZE=128
+echo CREATE PARTITION PRIMARY
+echo FORMAT QUICK FS=NTFS LABEL=Windows
+echo ASSIGN LETTER=C
+echo EXIT) > X:\\diskpart.txt
+diskpart /s X:\\diskpart.txt
+dism /Apply-Image /ImageFile:{wim_path} /Index:{wim_index} /ApplyDir:C:\\
+bcdboot C:\\Windows /l it-IT /s S: /f UEFI
+mkdir C:\\Windows\\Panther 2>nul
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '{unattend_url}' -OutFile 'C:\\Windows\\Panther\\unattend.xml' -UseBasicParsing" 2>nul
+wpeutil reboot
+"""
+    log.info("startnet.cmd PXE: servito per %s a %s", pc_name, client_ip)
+    return cmd, 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 
 @app.route("/api/pxe/file/<name>", methods=["GET"])
