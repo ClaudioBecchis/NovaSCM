@@ -49,27 +49,50 @@ static int     g_actPct       = 0;
 static int     g_totPct       = 0;
 static wchar_t g_details[256] = L"";
 
-/* ── Legge X:\DeployStatus.ini ───────────────────────────────────────────── */
+/* ── Legge X:\DeployStatus.ini senza cache (lettura diretta) ─────────────── */
+static void trim(char *s) {
+    /* rimuove spazi/CR/LF in coda */
+    int n = (int)strlen(s) - 1;
+    while (n >= 0 && (s[n]==' '||s[n]=='\r'||s[n]=='\n'||s[n]=='\t'))
+        s[n--] = 0;
+}
+
 static void ReadIni(void) {
-    wchar_t val[256];
+    HANDLE hf = CreateFileW(g_statusFile, GENERIC_READ,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE,
+                            NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hf == INVALID_HANDLE_VALUE) return;
 
-    GetPrivateProfileStringW(L"Status", L"Action", g_action,
-                             val, 256, g_statusFile);
-    wcsncpy(g_action, val, 255);
+    char raw[4096] = {0};
+    DWORD rd = 0;
+    ReadFile(hf, raw, sizeof(raw)-1, &rd, NULL);
+    CloseHandle(hf);
+    raw[rd] = 0;
 
-    g_actPct = (int)GetPrivateProfileIntW(L"Status", L"ActionPercent",
-                                          g_actPct, g_statusFile);
-    g_totPct = (int)GetPrivateProfileIntW(L"Status", L"TotalPercent",
-                                          g_totPct, g_statusFile);
+    /* parse riga per riga */
+    char *p = raw;
+    while (*p) {
+        char *eol = p;
+        while (*eol && *eol != '\n') eol++;
+        char line[512] = {0};
+        int len = (int)(eol - p);
+        if (len > 511) len = 511;
+        memcpy(line, p, len);
+        trim(line);
+        p = (*eol == '\n') ? eol+1 : eol;
 
-    GetPrivateProfileStringW(L"Status", L"Details", g_details,
-                             val, 256, g_statusFile);
-    wcsncpy(g_details, val, 255);
-
-    if (g_actPct < 0)  g_actPct = 0;
-    if (g_actPct > 100) g_actPct = 100;
-    if (g_totPct < 0)  g_totPct = 0;
-    if (g_totPct > 100) g_totPct = 100;
+        if (strncmp(line, "Action=", 7) == 0) {
+            MultiByteToWideChar(CP_ACP, 0, line+7, -1, g_action, 255);
+        } else if (strncmp(line, "ActionPercent=", 14) == 0) {
+            int v = atoi(line+14);
+            if (v >= 0 && v <= 100) g_actPct = v;
+        } else if (strncmp(line, "TotalPercent=", 13) == 0) {
+            int v = atoi(line+13);
+            if (v >= 0 && v <= 100) g_totPct = v;
+        } else if (strncmp(line, "Details=", 8) == 0) {
+            MultiByteToWideChar(CP_ACP, 0, line+8, -1, g_details, 255);
+        }
+    }
 }
 
 /* ── GDI helpers ─────────────────────────────────────────────────────────── */
