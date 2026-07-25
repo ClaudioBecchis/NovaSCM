@@ -1,7 +1,7 @@
 {
-  "version": "2.2.1",
+  "version": "2.5.0",
   "channel": "stable",
-  "stable": "2.2.1",
+  "stable": "2.5.0",
   "url": "",
-  "notes": "v2.2.1: bug fix PXE (file handle, enrollment token, deploy-client auth). 149 test."
+  "notes": "v2.5.0: debug totale — 14 fix (2 sec, 5 significativi, 7 minori). 185 test."
 }

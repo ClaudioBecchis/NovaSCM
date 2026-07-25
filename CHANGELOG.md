@@ -4,6 +4,78 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [2.5.0] - 2026-07-25
+
+### Security
+
+- **IDOR cross-PC**: deploy_token ora è legato al `pc_name`/`pw_id` specifico tramite `_SCOPED_PC_BINDING`; un token per PC-A non può chiamare endpoint di PC-B.
+- **Password admin hardcoded rimossa**: `"Polaris2026!"` sostituita da `_resolve_admin_pass()` che genera e persiste una password casuale per CR.
+- **`odj_blob` mascherato** nei listing CR (aggiunto a `_SENSITIVE`).
+- **XML injection `TimeZone`**: `cfg.TimeZone` ora wrappato in `Xe()` in `BuildAutounattendXml`.
+
+### Bug fix — Client WPF
+
+- **Gauge RAM**: usa `ComputerInfo.TotalPhysicalMemory/AvailablePhysicalMemory` invece di `Environment.WorkingSet` — mostra la RAM di sistema, non quella del processo.
+- **ApiCache thread-safe**: aggiunto `lock` su tutti i metodi per evitare `InvalidOperationException` da accessi concorrenti.
+- **Guard anti-scan-concorrenti**: flag `_scanning` con `try/finally` in `RunScanAsync`.
+- **Sidebar tag corretti**: `NavImpostazioni Tag="15"`, `NavAbout Tag="12"` — correggono apertura tab sbagliato.
+- **Export CSV RFC 4180**: valori quotati con doppio apice.
+- **Export HTML**: `HtmlEncode` su IP e MAC nel network report.
+- **Nota device persistente**: `DeviceRow.Notes` aggiunto a `Database.GetDevices()` e sincronizzato su load.
+- **OsdWindow PollAsync**: correzione parsing JSON — il server risponde un oggetto `{"steps":[...]}`, non un array diretto.
+- **CrDebugWindow RefreshStepsAsync**: stesso fix, endpoint paginato risponde `{"items":[...]}`.
+- **WfAssignDetailWindow**: campo `log` (non `output`) per il log step.
+- **WorkflowViewModel**: tutti i campi JSON letti in italiano (`nome`, `descrizione`, `versione`, `ordine`, `tipo`, `parametri`, `su_errore`).
+- **Settings crash**: `SettingsViewModel.Save()` ora gestisce eccezioni IO.
+- **CR→USB API key**: `MenuCrGenUsb_Click` ora include `NovaSCMApiKey` in `DeployConfig`.
+- **BtnPxeSettingsReload**: `TryGetProperty` per campi opzionali — no più eccezioni su risposta parziale.
+- **`ReadToEnd` deadlock**: `BtnRunScriptOnPc/Local` ora usa `ReadToEndAsync()` concorrente su stdout+stderr in `Task.Run(async ...)`.
+- **scp orphan su timeout**: `WaitForExit` controlla il valore di ritorno; se scade fa `Kill()` + throw.
+- **`_monitorCts` leak**: `Dispose()` prima di ogni riassegnazione/stop.
+- **OU djoin escaping**: apici doppi nell'OU vengono escaped per PowerShell.
+- **`ArcPath` dead code**: rimossa chiamata e variabili calcolate ogni gauge tick senza essere usate.
+
+### Bug fix — DeployScreen
+
+- **`.deploy_key` mai cancellato**: `Config.Parse` ora gestisce `keyfile=<path>` — legge la API key e cancella il file immediatamente. Prima il file restava su disco indefinitamente.
+- **Step `Skip` senza stile**: `ColorStepRow` ora gestisce `StepStatus.Skip` con colore grigio e icona "⤼".
+
+### Bug fix — Agent C# (NovaSCMAgent)
+
+- **MAC/IP coerenti su multi-homed**: `PrimaryNic()` sceglie la NIC con gateway IPv4 default — MAC e IP riferiti alla stessa interfaccia.
+- **Bootstrap log visibile su servizio Windows**: `LogLine()` scrive su `Console.Error` + `logs/bootstrap.log`.
+- **Timeout download self-update**: `_dlHttp` dedicato con timeout 5 minuti per `DownloadExeAsync`.
+- **`SendHardwareAsync` ritorna bool**: `AgentConfig.MarkHwSent()` chiamato solo su HTTP 2xx.
+- **Retry validati**: `Math.Clamp` su `retry_max` (1–10) e `retry_delay_sec` (0–300).
+
+### Bug fix — Agent Python
+
+- **Resume set-based**: `completed_step_ids` (set) invece di `resume_step` (indice intero).
+- **`evaluate_condition` crash**: guard `isinstance(condizione, str)` prima di `.strip()`.
+- **`run_workflow` senza ID**: guard su `pw_id` null prima di usarlo.
+- **`load_config` errori JSON**: try/except con fallback alla cache; `poll_sec` validato.
+
+### Bug fix — Server API
+
+- **`_SCOPED_PC_BINDING`**: `get_steps_by_name` e `get_pc_workflow` aggiunti alla whitelist scoped.
+- **`_ui_tokens` esteso a 3-tupla**: `(exp, scope, pc_name)` per binding per-PC.
+- **Enrollment trust-on-first-use**: `bound_pc_name` in DB lega il token al primo PC che lo usa.
+- **IntegrityError PXE hosts → 400**: `create_pxe_host`/`update_pxe_host` restituiscono 400 invece di 500.
+- **`/api/health` alias**: sinonimo di `/health`.
+- **Rate limit su autounattend/unattend-specialize**: `@limiter.limit` aggiunto.
+- **`VERSION_FILE` fallback**: se `version.json` non è nella working dir, cerca nella dir del repo.
+- **Dead code `winget_block`** rimosso.
+
+### Test
+
+- 185/185 ✅ (+36 dalla v2.4.0, incluse suite `TestScopedTokenPcBinding`, `TestDeployStart`, `TestWorkflowDelete`)
+
+### CI
+
+- Aggiunto job `client-build` in `.github/workflows/test.yml`: `dotnet build` su `PolarisManager.csproj` e `NovaSCMDeployScreen.csproj` a ogni push.
+
+---
+
 ## [2.4.0] - 2026-03-24
 
 ### Security

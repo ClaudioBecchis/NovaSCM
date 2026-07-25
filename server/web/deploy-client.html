@@ -3,355 +3,394 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NovaSCM — Configurazione in corso</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>Installation Progress — NovaSCM</title>
 <style>
+/* ═══════════════════════════════════════════════════════════
+   UI ispirata a ConfigMgr Task Sequence Progress (TSProgressUI)
+   Leggibile, sobria, stile Windows/SCCM — non dashboard “cyber”
+   ═══════════════════════════════════════════════════════════ */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#05080f;--ok:#00d97e;--run:#4d9fff;--warn:#f5a623;--err:#ff4757;
-  --txt:rgba(195,210,235,.88);--hi:#e8f0ff;--muted:rgba(130,150,190,.5);
-  --dim:rgba(60,80,120,.35);--bdim:rgba(40,55,90,.4);
+  --desktop:#1a3a5c;           /* sfondo tipo WinPE / setup */
+  --dlg-bg:#f0f0f0;
+  --dlg-face:#ffffff;
+  --dlg-border:#696969;
+  --dlg-title:#005a9e;         /* blu console ConfigMgr-ish */
+  --dlg-title-text:#ffffff;
+  --text:#1a1a1a;
+  --text-sec:#505050;
+  --bar-track:#e6e6e6;
+  --bar-fill:#06b025;          /* verde progress classico */
+  --bar-fill-hi:#3ddc65;
+  --btn-face:#e1e1e1;
+  --ok:#107c10;
+  --err:#c50f1f;
+  --run:#0078d4;
+  --font:"Segoe UI",Tahoma,Geneva,Verdana,sans-serif;
+  --mono:Consolas,"Courier New",monospace;
 }
-html,body{height:100%;width:100%;overflow:hidden;background:var(--bg);font-family:'IBM Plex Sans',sans-serif;color:var(--txt)}
-.bg-grad{position:fixed;inset:0;z-index:0;background:radial-gradient(ellipse 55% 45% at 15% 85%,rgba(0,70,155,.16) 0%,transparent 65%),radial-gradient(ellipse 45% 35% at 85% 15%,rgba(0,40,110,.1) 0%,transparent 65%),var(--bg)}
-.bg-grid{position:fixed;inset:0;z-index:0;background-image:linear-gradient(rgba(77,159,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(77,159,255,.035) 1px,transparent 1px);background-size:56px 56px}
-.bg-scan{position:fixed;inset:0;z-index:1;pointer-events:none;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.05) 2px,rgba(0,0,0,.05) 3px)}
-.bg-vig{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse 110% 110% at 50% 50%,transparent 45%,rgba(2,4,12,.9) 100%)}
+html,body{
+  height:100%;width:100%;overflow:hidden;
+  font-family:var(--font);color:var(--text);
+  background:var(--desktop);
+  -webkit-font-smoothing:antialiased;
+}
 
-/* ── SHELL: 3 righe, 3 colonne ── */
-.shell{position:relative;z-index:2;height:100vh;width:100vw;display:grid;
-  grid-template-columns:1fr 1px 340px;
-  grid-template-rows:auto auto 1fr auto auto;
-  grid-template-areas:
-    "hdr  hdr  hdr"
-    "hw   hw   hw"
-    "left div  right"
-    "log  div  right"
-    "ftr  ftr  ftr"}
+/* Sfondo pieno schermo (kiosk) */
+.desktop{
+  min-height:100vh;width:100%;
+  display:flex;align-items:center;justify-content:center;
+  padding:24px;
+  background:
+    radial-gradient(ellipse 80% 60% at 50% 40%,#2a5080 0%,var(--desktop) 70%);
+}
 
-/* ── HEADER ── */
-.hdr{grid-area:hdr;padding:14px 28px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bdim);animation:fade-down .6s ease both}
-.logo{display:flex;align-items:center;gap:10px}
-.logo-box{width:34px;height:34px;border-radius:8px;background:rgba(77,159,255,.08);border:1.5px solid rgba(77,159,255,.3);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:13px;font-weight:500;color:var(--run)}
-.logo-n{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;color:var(--hi);letter-spacing:2px}
-.logo-s{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase}
-.pc-name{font-family:'DM Mono',monospace;font-size:20px;font-weight:500;color:var(--hi);text-align:center}
-.pc-domain{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px;text-align:center}
-.wf-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:4px;background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.2);font-family:'DM Mono',monospace;font-size:9px;color:var(--run);text-transform:uppercase;letter-spacing:.5px}
-.led{width:5px;height:5px;border-radius:50%;background:var(--run);box-shadow:0 0 5px var(--run);animation:blink 1.6s ease-in-out infinite;flex-shrink:0}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
-.hdr-time{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px;text-align:right}
+/* Finestra stile dialog Windows / TS Progress */
+.dialog{
+  width:min(560px,100%);
+  background:var(--dlg-bg);
+  border:1px solid var(--dlg-border);
+  box-shadow:0 12px 40px rgba(0,0,0,.45),0 0 0 1px rgba(255,255,255,.08);
+  border-radius:0; /* SCCM classico: angoli netti */
+}
 
-/* ── HW STRIP ── */
-.hw-strip{grid-area:hw;display:flex;align-items:stretch;border-bottom:1px solid var(--bdim);animation:fade-down .6s .1s ease both}
-.hw-item{flex:1;display:flex;align-items:center;gap:10px;padding:8px 28px;border-right:1px solid var(--bdim)}
-.hw-item:last-child{border-right:none}
-.hw-icon{font-size:14px;opacity:.55;flex-shrink:0}
-.hw-info{display:flex;flex-direction:column;gap:1px}
-.hw-val{font-family:'DM Mono',monospace;font-size:11px;font-weight:500;color:var(--hi)}
-.hw-lbl{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
-.hw-bar{height:2px;border-radius:2px;margin-top:3px;background:var(--bdim);width:80px;overflow:hidden}
-.hw-bar-fill{height:100%;border-radius:2px;background:var(--run);transition:width 1s ease}
-.hw-pending{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);animation:blink-txt 2s ease-in-out infinite}
-@keyframes blink-txt{0%,100%{opacity:.8}50%{opacity:.2}}
+.titlebar{
+  background:linear-gradient(180deg,#0072c6 0%,var(--dlg-title) 100%);
+  color:var(--dlg-title-text);
+  padding:8px 12px;
+  display:flex;align-items:center;gap:10px;
+  user-select:none;
+}
+.titlebar-icon{
+  width:16px;height:16px;flex-shrink:0;
+  background:rgba(255,255,255,.95);
+  border-radius:2px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;color:var(--dlg-title);
+}
+.titlebar-text{font-size:13px;font-weight:600;letter-spacing:.2px;flex:1}
+.titlebar-clock{font-size:11px;opacity:.9;font-family:var(--mono)}
 
-/* ── DIVISORE ── */
-.divider{grid-area:div;background:var(--bdim)}
+.dialog-body{padding:18px 20px 16px;background:var(--dlg-face)}
 
-/* ── COLONNA SINISTRA ── */
-.col-left{grid-area:left;padding:16px 28px 10px;display:flex;flex-direction:column;gap:14px;overflow:hidden;animation:fade-right .6s .1s ease both}
+.org{
+  font-size:13px;color:var(--text-sec);
+  margin-bottom:14px;
+}
+.org b{color:var(--text);font-weight:600}
 
-.ring-wrap{display:flex;align-items:center;gap:18px}
-.ring-svg{flex-shrink:0;filter:drop-shadow(0 0 10px rgba(77,159,255,.2))}
-.ring-track{fill:none;stroke:rgba(77,159,255,.1);stroke-width:5}
-.ring-fill{fill:none;stroke:var(--run);stroke-width:5;stroke-linecap:round;stroke-dasharray:251.2;stroke-dashoffset:251.2;transition:stroke-dashoffset 1s cubic-bezier(.25,.46,.45,.94),stroke .5s;transform-origin:50% 50%;transform:rotate(-90deg)}
-.ring-fill.done{stroke:var(--ok)}
-.ring-center{font-family:'DM Mono',monospace;font-size:20px;font-weight:500;fill:var(--hi)}
-.ring-label{font-family:'DM Mono',monospace;font-size:8px;fill:var(--muted);text-transform:uppercase;letter-spacing:1px}
-.ri-label{font-size:15px;font-weight:300;color:var(--hi)}
-.ri-sub{font-family:'DM Mono',monospace;font-size:10px;color:var(--run);margin-top:4px;animation:blink-txt 2s ease-in-out infinite}
+.pc-line{
+  font-size:12px;color:var(--text-sec);
+  margin-bottom:16px;
+  padding-bottom:12px;
+  border-bottom:1px solid #e0e0e0;
+}
+.pc-line strong{color:var(--text);font-size:14px}
 
-.bar-meta{display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-bottom:4px}
-.bar-outer{height:4px;background:rgba(77,159,255,.1);border-radius:4px;overflow:hidden}
-.bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#2a6fff,#7ec8ff);transition:width .9s cubic-bezier(.25,.46,.45,.94);position:relative;overflow:hidden}
-.bar-fill::after{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.4),transparent);animation:shimmer 2s linear infinite}
-@keyframes shimmer{to{left:100%}}
-.bar-fill.done{background:linear-gradient(90deg,var(--ok),#5fffb8)}
-.bar-fill.done::after{display:none}
+.section-label{
+  font-size:12px;color:var(--text-sec);
+  margin-bottom:6px;
+}
+.action-name{
+  font-size:15px;font-weight:600;color:var(--text);
+  min-height:22px;margin-bottom:4px;
+  word-break:break-word;
+}
+.action-detail{
+  font-size:12px;color:var(--text-sec);
+  min-height:18px;margin-bottom:14px;
+}
 
-/* stats */
-.stats-row{display:flex;gap:0}
-.stat{flex:1;padding:8px 0;border-right:1px solid var(--bdim);display:flex;flex-direction:column;gap:2px}
-.stat:last-child{border-right:none}
-.stat-val{font-family:'DM Mono',monospace;font-size:16px;font-weight:500;color:var(--hi);text-align:center}
+/* Progress bar stile Windows */
+.progress-wrap{margin-bottom:8px}
+.progress-track{
+  height:15px;
+  background:var(--bar-track);
+  border:1px solid #a0a0a0;
+  border-top-color:#696969;
+  border-left-color:#696969;
+  position:relative;overflow:hidden;
+}
+.progress-fill{
+  height:100%;width:0%;
+  background:linear-gradient(180deg,var(--bar-fill-hi) 0%,var(--bar-fill) 45%,#04911e 100%);
+  transition:width .7s ease;
+}
+.progress-fill.done{
+  background:linear-gradient(180deg,#5fdc5f 0%,var(--ok) 100%);
+}
+.progress-fill.err{
+  background:linear-gradient(180deg,#f1707b 0%,var(--err) 100%);
+}
+/* Marquee indeterm when 0% but running */
+.progress-fill.marquee{
+  width:35% !important;
+  animation:marquee 1.4s linear infinite;
+}
+@keyframes marquee{
+  0%{transform:translateX(-100%)}
+  100%{transform:translateX(320%)}
+}
+
+.progress-meta{
+  display:flex;justify-content:space-between;
+  font-size:12px;color:var(--text-sec);
+  margin-top:6px;margin-bottom:14px;
+}
+.progress-meta b{color:var(--text);font-weight:600}
+
+/* Stats row SCCM-like compact */
+.stats{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:8px;
+  margin-bottom:14px;
+}
+.stat{
+  background:var(--dlg-bg);
+  border:1px solid #d0d0d0;
+  padding:8px 6px;text-align:center;
+}
+.stat-val{font-size:16px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
 .stat-val.run{color:var(--run)}
 .stat-val.ok{color:var(--ok)}
-.stat-val.warn{color:var(--warn)}
-.stat-lbl{font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;text-align:center}
+.stat-val.warn{color:#ca5010}
+.stat-lbl{font-size:10px;color:var(--text-sec);text-transform:uppercase;letter-spacing:.3px;margin-top:2px}
 
-/* cur box */
-.cur-box{padding:9px 12px;background:rgba(77,159,255,.05);border:1px solid rgba(77,159,255,.15);border-radius:8px;display:flex;align-items:center;gap:10px}
-.cur-spinner{width:24px;height:24px;border-radius:50%;flex-shrink:0;border:2px solid rgba(77,159,255,.2);border-top-color:var(--run);animation:spin .9s linear infinite}
-@keyframes spin{to{transform:rotate(360deg)}}
-.cur-spinner.done{border:2px solid var(--ok);animation:none;display:flex;align-items:center;justify-content:center;color:var(--ok);font-size:11px}
-.cur-name{font-size:12px;font-weight:500;color:var(--hi);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cur-tipo{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);margin-top:2px}
-.cur-time{font-family:'DM Mono',monospace;font-size:12px;color:var(--run);flex-shrink:0;margin-left:auto}
+/* Details / step list (come “more details”) */
+.details{
+  border:1px solid #d0d0d0;
+  background:#fafafa;
+  max-height:220px;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.details-head{
+  padding:6px 10px;
+  background:var(--dlg-bg);
+  border-bottom:1px solid #d0d0d0;
+  font-size:12px;font-weight:600;
+  display:flex;justify-content:space-between;
+}
+.pipeline{overflow-y:auto;flex:1;padding:4px 0}
+.pipeline::-webkit-scrollbar{width:8px}
+.pipeline::-webkit-scrollbar-thumb{background:#c0c0c0}
 
-/* ── LOG BOX ── */
-.log-area{grid-area:log;padding:0 28px 12px;display:flex;flex-direction:column;animation:fade-up .6s .2s ease both}
-.log-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.log-title{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;display:flex;align-items:center;gap:6px}
-.log-dot{width:4px;height:4px;border-radius:50%;background:var(--run);animation:blink 1.2s ease-in-out infinite}
-.log-box{height:90px;background:rgba(5,10,22,.7);border:1px solid var(--bdim);border-radius:6px;overflow-y:auto;padding:6px 10px;font-family:'DM Mono',monospace;font-size:9.5px;line-height:1.55;color:rgba(130,160,210,.75)}
-.log-box::-webkit-scrollbar{width:2px}
-.log-box::-webkit-scrollbar-thumb{background:var(--bdim)}
-.log-line{white-space:pre-wrap;word-break:break-all}
+.step-row{
+  display:flex;align-items:center;gap:8px;
+  padding:5px 10px;font-size:12px;
+  border-left:3px solid transparent;
+}
+.step-row.st-active{
+  background:#e5f1fb;
+  border-left-color:var(--run);
+}
+.step-row.st-error{
+  background:#fde7e9;
+  border-left-color:var(--err);
+}
+.step-row.st-done{color:var(--text-sec)}
+.step-icon{
+  width:16px;text-align:center;flex-shrink:0;
+  font-size:11px;font-weight:700;
+}
+.st-done .step-icon{color:var(--ok)}
+.st-active .step-icon{color:var(--run)}
+.st-error .step-icon{color:var(--err)}
+.st-future .step-icon{color:#a0a0a0}
+.step-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-active .step-name{font-weight:600;color:var(--text)}
+.step-time{
+  flex-shrink:0;font-family:var(--mono);font-size:11px;color:var(--text-sec);min-width:40px;text-align:right;
+}
+.st-done .step-time{color:var(--ok)}
+.st-active .step-time{color:var(--run)}
+
+/* Log collassabile stile dettaglio */
+.log-panel{
+  margin-top:12px;
+  border:1px solid #d0d0d0;
+  background:#fff;
+}
+.log-head{
+  padding:6px 10px;background:var(--dlg-bg);
+  border-bottom:1px solid #d0d0d0;
+  font-size:12px;font-weight:600;
+  display:flex;justify-content:space-between;
+}
+.log-box{
+  height:90px;overflow-y:auto;padding:6px 10px;
+  font-family:var(--mono);font-size:11px;line-height:1.45;
+  color:#333;background:#fcfcfc;
+}
 .log-line.ok{color:var(--ok)}
 .log-line.err{color:var(--err)}
-.log-line.warn{color:var(--warn)}
-.log-line.info{color:rgba(77,159,255,.7)}
-.log-cursor{display:inline-block;width:6px;height:11px;background:var(--run);animation:blink .8s step-end infinite;vertical-align:text-bottom;margin-left:2px}
+.log-line.warn{color:#ca5010}
+.log-line.info{color:#0078d4}
 
-/* ── COLONNA DESTRA ── */
-.col-right{grid-area:right;padding:14px 28px 12px;display:flex;flex-direction:column;overflow:hidden;animation:fade-left .6s .15s ease both}
-.steps-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-shrink:0}
-.steps-title{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px}
-.steps-count{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}
-.pipeline{flex:1;overflow-y:auto;display:flex;flex-direction:column;padding-right:4px}
-.pipeline::-webkit-scrollbar{width:3px}
-.pipeline::-webkit-scrollbar-thumb{background:var(--bdim);border-radius:2px}
-.step-row{display:flex;align-items:center;position:relative}
-.step-row:not(:last-child) .step-connector{position:absolute;left:11px;top:26px;width:2px;height:calc(100% - 6px);background:var(--bdim);transition:background .4s;z-index:0}
-.step-row.st-done:not(:last-child) .step-connector{background:rgba(0,217,126,.25)}
-.step-row.st-active:not(:last-child) .step-connector{background:rgba(77,159,255,.2)}
-.step-left{display:flex;flex-direction:column;align-items:center;padding:5px 0;flex-shrink:0;width:26px;position:relative;z-index:1}
-.step-circle{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;font-family:'DM Mono',monospace;flex-shrink:0;transition:all .3s}
-.st-done .step-circle{background:rgba(0,217,126,.15);border:1.5px solid var(--ok);color:var(--ok)}
-.st-active .step-circle{background:rgba(77,159,255,.15);border:1.5px solid var(--run);color:var(--run);animation:pulse-c 1.5s ease-in-out infinite}
-.st-error .step-circle{background:rgba(255,71,87,.15);border:1.5px solid var(--err);color:var(--err)}
-.st-future .step-circle{background:rgba(20,30,55,.3);border:1.5px solid var(--bdim);color:var(--muted)}
-@keyframes pulse-c{0%,100%{box-shadow:0 0 0 0 rgba(77,159,255,.4)}50%{box-shadow:0 0 0 3px rgba(77,159,255,0)}}
-.step-body{flex:1;min-width:0;padding:5px 8px;display:flex;align-items:center;gap:8px;border-radius:5px;margin:1px 0;transition:background .25s}
-.st-active .step-body{background:rgba(77,159,255,.06)}
-.st-error .step-body{background:rgba(255,71,87,.06)}
-.step-text{flex:1;min-width:0}
-.step-name{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:color .3s}
-.st-done .step-name{color:var(--muted)}
-.st-active .step-name{color:var(--hi);font-weight:500}
-.st-error .step-name{color:var(--err)}
-.st-future .step-name{color:var(--muted);opacity:.5}
-.step-tipo{font-family:'DM Mono',monospace;font-size:8px;color:var(--dim);margin-top:1px}
-.st-active .step-tipo{color:rgba(77,159,255,.5)}
-.step-right{flex-shrink:0;font-family:'DM Mono',monospace;font-size:9px;min-width:32px;text-align:right}
-.st-done .step-right{color:var(--ok)}
-.st-active .step-right{color:var(--run)}
-.st-error .step-right{color:var(--err)}
-.st-future .step-right{color:var(--dim)}
-/* stima tempo futuro */
-.step-est{font-family:'DM Mono',monospace;font-size:8px;color:var(--dim);opacity:.6}
+/* Footer dialog */
+.dialog-foot{
+  padding:10px 20px 14px;
+  background:var(--dlg-bg);
+  border-top:1px solid #d0d0d0;
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;flex-wrap:wrap;
+}
+.warn{
+  font-size:12px;font-weight:600;color:#8a6116;
+  display:flex;align-items:center;gap:6px;
+}
+.foot-meta{font-size:11px;color:var(--text-sec)}
+.foot-meta b{color:var(--text);font-weight:600}
 
-/* ── FOOTER ── */
-.ftr{grid-area:ftr;padding:7px 28px;border-top:1px solid var(--bdim);display:flex;align-items:center;justify-content:space-between;animation:fade-up .6s .3s ease both}
-.ftr-item{font-family:'DM Mono',monospace;font-size:9px;color:var(--dim)}
-.ftr-item b{color:rgba(140,160,200,.4);font-weight:400}
-.ftr-warn{font-family:'DM Mono',monospace;font-size:9px;color:rgba(245,166,35,.55)}
+/* HW strip minimal under dialog optional */
+.hw-strip{
+  margin-top:12px;
+  display:grid;grid-template-columns:1fr 1fr;gap:6px;
+  font-size:11px;color:var(--text-sec);
+}
+.hw-chip{
+  background:var(--dlg-bg);border:1px solid #e0e0e0;padding:6px 8px;
+}
+.hw-chip b{display:block;color:var(--text);font-weight:600;margin-top:2px;word-break:break-word}
+.hw-pending{font-weight:400 !important;color:#888;animation:blink 1.6s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* ── OVERLAY COMPLETATO ── */
-.overlay{position:fixed;inset:0;z-index:20;background:rgba(5,8,15,.96);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;opacity:0;pointer-events:none;transition:opacity .7s ease}
+/* Overlay completato — stesso linguaggio grafico */
+.overlay{
+  position:fixed;inset:0;z-index:50;
+  background:rgba(26,58,92,.92);
+  display:flex;align-items:center;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .4s;
+  padding:24px;
+}
 .overlay.show{opacity:1;pointer-events:all}
-.ov-top{display:flex;align-items:flex-start;gap:40px;max-width:780px;width:100%}
-.ov-left{display:flex;flex-direction:column;align-items:center;gap:14px}
-.ov-ring{width:90px;height:90px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:38px}
-.ov-ring.ok{background:rgba(0,217,126,.1);border:2px solid var(--ok);box-shadow:0 0 40px rgba(0,217,126,.15)}
-.ov-title{font-size:26px;font-weight:300;color:var(--hi);text-align:center}
-.ov-sub.ok{font-family:'DM Mono',monospace;font-size:12px;color:var(--ok);text-align:center}
-.ov-detail{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);padding:6px 16px;background:rgba(255,255,255,.03);border:1px solid var(--bdim);border-radius:5px;text-align:center}
-.reboot-line{font-family:'DM Mono',monospace;font-size:10px;color:var(--muted);display:flex;align-items:center;gap:5px}
-.reboot-n{color:var(--warn);font-size:13px;font-weight:500}
+.overlay .dialog{max-width:480px}
+.ov-check{
+  width:48px;height:48px;border-radius:50%;
+  background:#dff6dd;border:2px solid var(--ok);
+  color:var(--ok);font-size:24px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 12px;
+}
+.ov-title{font-size:18px;font-weight:700;text-align:center;margin-bottom:6px}
+.ov-sub{text-align:center;color:var(--ok);font-weight:600;margin-bottom:8px}
+.ov-detail{text-align:center;font-size:12px;color:var(--text-sec);margin-bottom:12px}
+.reboot-line{text-align:center;font-size:13px;color:var(--text-sec)}
+.reboot-n{color:#ca5010;font-weight:700;font-size:16px}
+.ov-hw{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:10px 0}
+.ov-hw-chip{font-size:11px;padding:4px 8px;background:var(--dlg-bg);border:1px solid #ddd}
 
-/* screenshot preview */
-.ov-right{flex:1}
-.screenshot-box{width:100%;border-radius:8px;border:1px solid var(--bdim);overflow:hidden;background:rgba(10,15,30,.8)}
-.screenshot-header{padding:6px 12px;border-bottom:1px solid var(--bdim);font-family:'DM Mono',monospace;font-size:8px;color:var(--muted);display:flex;align-items:center;gap:6px}
-.screenshot-img{width:100%;height:160px;object-fit:cover;display:block}
-.screenshot-placeholder{width:100%;height:160px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:rgba(5,10,22,.5)}
-.screenshot-placeholder .icon{font-size:28px;opacity:.25}
-.screenshot-placeholder .lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--muted)}
-
-/* hw overlay summary */
-.ov-hw{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
-.ov-hw-chip{padding:4px 10px;border-radius:4px;background:rgba(77,159,255,.06);border:1px solid var(--bdim);font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);display:flex;align-items:center;gap:5px}
-.ov-hw-chip b{color:var(--hi);font-weight:500}
-
-@keyframes fade-down{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
-@keyframes fade-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
-@keyframes fade-right{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
-@keyframes fade-left{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+/* hidden stubs for JS */
+#ring-fill,#hw-mac,#hw-ip,#ss-placeholder,#ss-status,#ss-time{position:absolute;width:0;height:0;overflow:hidden;opacity:0;pointer-events:none}
+#ss-img{display:none;max-width:100%;margin-top:10px;border:1px solid #ccc}
 </style>
 </head>
 <body>
-<div class="bg-grad"></div>
-<div class="bg-grid"></div>
-<div class="bg-scan"></div>
-<div class="bg-vig"></div>
-
-<div class="shell">
-
-  <!-- HEADER -->
-  <header class="hdr">
-    <div class="logo">
-      <div class="logo-box">N</div>
-      <div style="display:flex;flex-direction:column;gap:1px">
-        <span class="logo-n">NOVASCM</span>
-        <span class="logo-s">Deployment Agent</span>
-      </div>
-    </div>
-    <div>
-      <div class="pc-name" id="pc-name">PC-HOSTNAME</div>
-      <div class="pc-domain" id="pc-domain">workgroup</div>
-    </div>
-    <div style="text-align:right">
-      <div class="wf-badge"><span class="led"></span><span id="wf-name">Deploy Windows 11</span></div>
-      <div class="hdr-time" id="clock">--:--:--</div>
-    </div>
-  </header>
-
-  <!-- HW STRIP -->
-  <div class="hw-strip" id="hw-strip">
-    <div class="hw-item">
-      <span class="hw-icon">🖥</span>
-      <div class="hw-info">
-        <div class="hw-val" id="hw-cpu"><span class="hw-pending">rilevamento…</span></div>
-        <div class="hw-lbl">MODELLO CPU</div>
-      </div>
-    </div>
-    <div class="hw-item">
-      <span class="hw-icon">💾</span>
-      <div class="hw-info">
-        <div class="hw-val" id="hw-ram"><span class="hw-pending">rilevamento…</span></div>
-        <div class="hw-lbl">RAM</div>
-      </div>
-    </div>
-    <div class="hw-item">
-      <span class="hw-icon">💿</span>
-      <div class="hw-info">
-        <div class="hw-val" id="hw-disk"><span class="hw-pending">rilevamento…</span></div>
-        <div class="hw-lbl">DISCO</div>
-      </div>
-    </div>
-    <div class="hw-item" style="flex:1.4">
-      <span class="hw-icon">🌐</span>
-      <div class="hw-info">
-        <div class="hw-val" id="hw-mac"><span class="hw-pending">rilevamento…</span></div>
-        <div class="hw-val" style="font-size:10px;margin-top:2px" id="hw-ip"><span class="hw-pending">—</span></div>
-        <div class="hw-lbl">RETE — MAC / IP</div>
-      </div>
+<div class="desktop">
+  <div class="dialog" role="dialog" aria-labelledby="dlg-title">
+    <div class="titlebar">
+      <div class="titlebar-icon">N</div>
+      <div class="titlebar-text" id="dlg-title">Installation Progress</div>
+      <div class="titlebar-clock" id="clock">--:--:--</div>
     </div>
 
-  </div>
+    <div class="dialog-body">
+      <div class="org">Organizzazione: <b id="wf-name">NovaSCM Deployment</b></div>
+      <div class="pc-line">
+        Computer: <strong id="pc-name">PC-HOSTNAME</strong>
+        <span id="pc-domain" style="margin-left:8px">workgroup</span>
+      </div>
 
-  <!-- COLONNA SINISTRA -->
-  <div class="col-left">
-    <div class="ring-wrap">
-      <svg class="ring-svg" width="78" height="78" viewBox="0 0 90 90">
-        <circle class="ring-track" cx="45" cy="45" r="40"/>
-        <circle class="ring-fill" cx="45" cy="45" r="40" id="ring-fill"/>
-        <text x="45" y="41" text-anchor="middle" dominant-baseline="middle" class="ring-center" id="ring-pct">0%</text>
-        <text x="45" y="55" text-anchor="middle" class="ring-label">completato</text>
-      </svg>
-      <div>
-        <div class="ri-label" id="cur-name">Avvio in corso…</div>
-        <div class="ri-sub" id="cur-tipo">inizializzazione</div>
+      <div class="section-label">Azione in corso:</div>
+      <div class="action-name" id="cur-name">Inizializzazione…</div>
+      <div class="action-detail" id="cur-tipo">Attendere prego</div>
+
+      <!-- dual labels kept for JS -->
+      <div style="display:none">
+        <span id="cur-box-name"></span>
+        <span id="cur-box-tipo"></span>
+        <span id="cur-box-time"></span>
+        <span id="cur-spinner"></span>
+        <span id="status-phrase"></span>
+        <span id="ring-pct">0%</span>
       </div>
-    </div>
-    <div>
-      <div class="bar-meta">
-        <span>Progresso</span>
-        <span id="bar-steps-lbl">step 0 / 0</span>
+
+      <div class="progress-wrap">
+        <div class="progress-track">
+          <div class="progress-fill" id="bar" style="width:0%"></div>
+        </div>
+        <div class="progress-meta">
+          <span id="bar-steps-lbl">Passo 0 di 0</span>
+          <span><b id="pct-label">0%</b> completato</span>
+        </div>
       </div>
-      <div class="bar-outer"><div class="bar-fill" id="bar" style="width:0%"></div></div>
-    </div>
-    <div class="stats-row">
-      <div class="stat"><div class="stat-val run" id="stat-done">0</div><div class="stat-lbl">Completati</div></div>
-      <div class="stat"><div class="stat-val" id="stat-rem">0</div><div class="stat-lbl">Rimanenti</div></div>
-      <div class="stat"><div class="stat-val warn" id="stat-eta">—</div><div class="stat-lbl">Stima fin.</div></div>
-      <div class="stat"><div class="stat-val" id="stat-ela">—</div><div class="stat-lbl">Trascorso</div></div>
-    </div>
-    <div class="cur-box">
-      <div class="cur-spinner" id="cur-spinner"></div>
-      <div style="flex:1;min-width:0">
-        <div class="cur-name" id="cur-box-name">In attesa…</div>
-        <div class="cur-tipo" id="cur-box-tipo">—</div>
+
+      <div class="stats">
+        <div class="stat"><div class="stat-val ok" id="stat-done">0</div><div class="stat-lbl">Completati</div></div>
+        <div class="stat"><div class="stat-val run" id="stat-rem">0</div><div class="stat-lbl">Rimanenti</div></div>
+        <div class="stat"><div class="stat-val warn" id="stat-eta">—</div><div class="stat-lbl">Stima</div></div>
+        <div class="stat"><div class="stat-val" id="stat-ela">—</div><div class="stat-lbl">Trascorso</div></div>
       </div>
-      <div class="cur-time" id="cur-box-time">—</div>
+
+      <div class="details">
+        <div class="details-head">
+          <span>Dettagli sequenza</span>
+          <span id="steps-count">— passi</span>
+        </div>
+        <div class="pipeline" id="pipeline"></div>
+      </div>
+
+      <div class="log-panel">
+        <div class="log-head">
+          <span>Output — <span id="log-step-name">—</span></span>
+          <span id="log-lines" style="font-weight:400;color:var(--text-sec)">0 righe</span>
+        </div>
+        <div class="log-box" id="log-box">
+          <span style="color:#888">In attesa dell'output…</span>
+        </div>
+      </div>
+
+      <div class="hw-strip">
+        <div class="hw-chip">CPU <b id="hw-cpu"><span class="hw-pending">rilevamento…</span></b></div>
+        <div class="hw-chip">RAM <b id="hw-ram"><span class="hw-pending">rilevamento…</span></b></div>
+        <div class="hw-chip">Disco <b id="hw-disk"><span class="hw-pending">rilevamento…</span></b></div>
+        <div class="hw-chip">Rete <b id="hw-net"><span class="hw-pending">rilevamento…</span></b></div>
+      </div>
+      <span id="hw-mac"></span><span id="hw-ip"></span>
+    </div>
+
+    <div class="dialog-foot">
+      <div class="warn">⚠ Non spegnere il computer</div>
+      <div class="foot-meta">NovaSCM <b id="ftr-ver">2.5.0</b> · Server <b id="ftr-server">—</b></div>
     </div>
   </div>
-
-  <!-- LOG BOX -->
-  <div class="log-area">
-    <div class="log-header">
-      <div class="log-title"><span class="log-dot"></span>OUTPUT — <span id="log-step-name">—</span></div>
-      <div style="font-family:'DM Mono',monospace;font-size:8px;color:var(--dim)" id="log-lines">0 righe</div>
-    </div>
-    <div class="log-box" id="log-box">
-      <span style="color:var(--dim)">In attesa dell'output…</span>
-    </div>
-  </div>
-
-  <div class="divider"></div>
-
-  <!-- COLONNA DESTRA -->
-  <div class="col-right">
-    <div class="steps-header">
-      <span class="steps-title">Pipeline</span>
-      <span class="steps-count" id="steps-count">— step</span>
-    </div>
-    <div class="pipeline" id="pipeline"></div>
-  </div>
-
-  <!-- FOOTER -->
-  <footer class="ftr">
-    <div class="ftr-item">NovaSCM <b id="ftr-ver">2.5.0</b></div>
-    <div class="ftr-warn">▲ Non spegnere il PC durante la configurazione</div>
-    <div class="ftr-item">Server <b id="ftr-server">—</b></div>
-  </footer>
 </div>
 
-<!-- OVERLAY COMPLETATO -->
+<svg aria-hidden="true" style="position:absolute;width:0;height:0"><circle id="ring-fill" class="ring-fill"/></svg>
+
 <div class="overlay" id="ov-done">
-  <div class="ov-top">
-    <div class="ov-left">
-      <div class="ov-ring ok">✓</div>
-      <div class="ov-title">Configurazione<br>completata</div>
-      <div class="ov-sub ok" id="ov-host">PC-HOSTNAME</div>
+  <div class="dialog">
+    <div class="titlebar">
+      <div class="titlebar-icon">N</div>
+      <div class="titlebar-text">Installation Progress</div>
+    </div>
+    <div class="dialog-body" style="padding-top:28px;padding-bottom:28px">
+      <div class="ov-check">✓</div>
+      <div class="ov-title">Configurazione completata</div>
+      <div class="ov-sub" id="ov-host">PC-HOSTNAME</div>
       <div class="ov-detail" id="ov-detail">—</div>
       <div class="ov-hw" id="ov-hw"></div>
-      <div class="reboot-line">Riavvio tra <span class="reboot-n" id="reboot-n">30</span>s</div>
+      <div class="reboot-line">Riavvio tra <span class="reboot-n" id="reboot-n">30</span> secondi</div>
+      <img id="ss-img" alt=""/>
+      <div id="ss-placeholder"></div>
+      <span id="ss-status"></span><span id="ss-time"></span>
     </div>
-    <div class="ov-right">
-      <div class="screenshot-box">
-        <div class="screenshot-header">
-          <span>📷</span>
-          <span>Screenshot finale — <span id="ss-time">—</span></span>
-        </div>
-        <div class="screenshot-placeholder" id="ss-placeholder">
-          <div class="icon">🖥</div>
-          <div class="lbl" id="ss-status">Acquisizione in corso…</div>
-        </div>
-        <img id="ss-img" class="screenshot-img" style="display:none" alt="screenshot finale"/>
-      </div>
-      <div style="margin-top:12px;font-family:'DM Mono',monospace;font-size:9px;color:var(--muted);text-align:center">
-        Salvato su NovaSCM server · disponibile nella UI Deploy Floor
-      </div>
+    <div class="dialog-foot">
+      <div class="warn">Il PC si riavvierà automaticamente</div>
+      <div class="foot-meta">NovaSCM</div>
     </div>
   </div>
 </div>
 
 <script>
-// ══════════════════════════════════════════════════
-//  CONFIG — URL params (postinstall.ps1 / PXE)
-// ══════════════════════════════════════════════════
 const CFG=(()=>{
   const p=new URLSearchParams(location.search);
   return{
@@ -362,10 +401,10 @@ const CFG=(()=>{
     pw_id:   p.get("pw_id")||"",
     version: p.get("ver")||"2.5.0",
     demo:    p.get("demo")==="1",
+    org:     p.get("org")||"NovaSCM Deployment",
   };
 })();
 
-// Demo fallback (solo ?demo=1 o senza pw_id)
 const DEMO_STEPS=[
   {id:1, nome:"Partizionamento disco",         tipo:"ps_script",       dur:16,  est:18},
   {id:2, nome:"Formattazione partizioni",       tipo:"ps_script",       dur:8,   est:9},
@@ -394,9 +433,9 @@ const DEMO_STEPS=[
   {id:25,nome:"Riavvio finale",                 tipo:"reboot",          dur:3,   est:4},
 ];
 const DEMO_LOGS={
-  1:["[INFO] Avvio partizionamento...","[INFO] Rilevato disco: Samsung SSD 980 500GB","[INFO] Creazione partizione EFI (500MB)","[INFO] Creazione partizione Windows (450GB)","[OK] Partizionamento completato"],
-  2:["[INFO] Formattazione EFI: FAT32","[INFO] Formattazione C:\\: NTFS (quick)","[OK] Formattazione completata in 7s"],
-  3:["[INFO] Avvio setup.exe /unattend:X:\\autounattend.xml","[INFO] Fase 1: Copia file Windows...","[INFO] Fase 2: Preparazione file da installare...","[INFO] Fase 3: Installazione feature...","[INFO] Fase 4: Installazione aggiornamenti...","[WARN] Riavvio richiesto dal setup","[OK] Windows 11 Pro 23H2 installato"],
+  1:["[INFO] Avvio partizionamento...","[INFO] Rilevato disco: Samsung SSD 980 500GB","[OK] Partizionamento completato"],
+  2:["[INFO] Formattazione EFI: FAT32","[INFO] Formattazione C:\\: NTFS","[OK] Formattazione completata"],
+  3:["[INFO] Applicazione immagine Windows...","[INFO] Copia file in corso...","[OK] Windows 11 Pro installato"],
 };
 const HW_DEMO={cpu:"Intel Core i5-12400",ram:"16 GB DDR4",disk:"Samsung SSD 980 500GB",mac:"00:1A:2B:3C:4D:5E",ip:"192.168.10.42"};
 const EST_BY_TIPO={ps_script:12,windows_update:180,winget_install:20,reg_set:6,shell_script:5,reboot:3};
@@ -418,13 +457,13 @@ function apiUrl(path){
   return CFG.api_key?`${base}${path}${sep}key=${encodeURIComponent(CFG.api_key)}`:`${base}${path}`;
 }
 
-// ── INIT ──
 function init(){
   $("pc-name").textContent=CFG.hostname;
   $("pc-domain").textContent=CFG.domain;
   $("ov-host").textContent=CFG.hostname;
   $("ftr-ver").textContent=CFG.version;
   $("ftr-server").textContent=CFG.server.replace(/^https?:\/\//,"");
+  $("wf-name").textContent=CFG.org;
   startTime=Date.now();
   tick();setInterval(tick,1000);
   if(CFG.demo||!CFG.pw_id)initDemo();
@@ -434,7 +473,8 @@ function init(){
 function initLive(){
   liveMode=true;
   $("cur-name").textContent="Connessione al server…";
-  $("cur-tipo").textContent="polling API";
+  $("cur-tipo").textContent="Collegamento in corso";
+  syncCurBoxes();
   fetchStatus();
   polling=setInterval(fetchStatus,3000);
   stepTimer=setInterval(()=>{
@@ -449,16 +489,23 @@ function initLive(){
   },120);
 }
 
+function syncCurBoxes(){
+  $("cur-box-name").textContent=$("cur-name").textContent;
+  $("cur-box-tipo").textContent=$("cur-tipo").textContent;
+}
+
 async function fetchStatus(){
   try{
     const r=await fetch(apiUrl(`/api/pc-workflows/${CFG.pw_id}`));
     if(!r.ok){
-      $("cur-tipo").textContent=`errore API ${r.status}`;
+      $("cur-tipo").textContent=`Errore API ${r.status}`;
+      syncCurBoxes();
       return;
     }
     applyServerState(await r.json());
   }catch(e){
-    $("cur-tipo").textContent="server non raggiungibile";
+    $("cur-tipo").textContent="Server non raggiungibile";
+    syncCurBoxes();
   }
 }
 
@@ -482,7 +529,7 @@ function applyServerState(data){
       est:s.est_sec||EST_BY_TIPO[s.tipo]||15,
       log:s.log||"",
     }));
-    $("steps-count").textContent=steps.length+" step";
+    $("steps-count").textContent=steps.length+" passi";
     activeIdx=steps.findIndex(s=>s.status==="active");
     if(activeIdx<0){
       const errIdx=steps.findIndex(s=>s.status==="error");
@@ -494,12 +541,13 @@ function applyServerState(data){
     }
     updateLogFromActive();
   }else if(!steps.length){
-    $("cur-name").textContent="In attesa workflow…";
-    $("cur-tipo").textContent="nessuno step dal server";
+    $("cur-name").textContent="In attesa del workflow…";
+    $("cur-tipo").textContent="Nessuno step dal server";
   }
 
   if(data.log)appendGlobalLog(data.log);
   updateLeft();renderPipeline();updateETA();
+  syncCurBoxes();
 
   if(data.status==="completed"){
     clearInterval(polling);clearInterval(stepTimer);
@@ -508,12 +556,11 @@ function applyServerState(data){
   }else if(data.status==="failed"){
     clearInterval(polling);clearInterval(stepTimer);
     const err=steps.find(s=>s.status==="error")||steps[activeIdx];
-    $("cur-name").textContent="Errore deploy";
+    $("cur-name").textContent="Errore durante il deploy";
     $("cur-tipo").textContent=err?err.nome:"step sconosciuto";
-    $("cur-spinner").classList.add("done");
-    $("cur-spinner").textContent="✕";
-    $("cur-spinner").style.color="var(--err)";
-    $("cur-spinner").style.borderColor="var(--err)";
+    $("bar").classList.add("err");
+    $("bar").classList.remove("marquee");
+    syncCurBoxes();
   }
 }
 
@@ -533,8 +580,6 @@ function updateLogFromActive(){
     });
   }else if(active.status==="active"){
     addLog(`[INFO] ${active.nome} in corso…`,"info");
-  }else if(active.status==="future"){
-    addLog(`[INFO] In attesa: ${active.nome}`,"info");
   }
 }
 
@@ -545,25 +590,22 @@ function appendGlobalLog(text){
 
 function showScreenshot(b64){
   if(!b64)return;
-  const img=$("ss-img"),ph=$("ss-placeholder");
+  const img=$("ss-img");
   img.src="data:image/png;base64,"+b64;
   img.style.display="block";
-  ph.style.display="none";
-  $("ss-status").textContent="Screenshot acquisito ✓";
+  $("ss-status").textContent="Screenshot acquisito";
   $("ss-time").textContent=new Date().toLocaleTimeString("it-IT");
 }
 
-// ── INIT DEMO ──
 function initDemo(){
   liveMode=false;
   steps=DEMO_STEPS.map(s=>({...s,status:"future",elapsed:0}));
-  $("steps-count").textContent=steps.length+" step";
+  $("steps-count").textContent=steps.length+" passi";
   renderPipeline();updateLeft();
   setTimeout(()=>setHardware(HW_DEMO),2000);
   runDemoStep(0);
 }
 
-// ── HARDWARE ──
 function setHardware(hw){
   if(!hw)return;
   if(hw.cpu) $("hw-cpu").textContent=hw.cpu;
@@ -571,15 +613,17 @@ function setHardware(hw){
   if(hw.disk)$("hw-disk").textContent=hw.disk;
   if(hw.mac) $("hw-mac").textContent=hw.mac;
   if(hw.ip)  $("hw-ip").textContent=hw.ip;
+  const net=[];
+  if(hw.mac)net.push(hw.mac);
+  if(hw.ip)net.push(hw.ip);
+  if(net.length)$("hw-net").textContent=net.join(" · ");
 }
 
-// ── DEMO STEP ──
 function runDemoStep(idx){
   if(idx>=steps.length){setTimeout(showDone,400);return;}
   steps[idx].status="active";activeIdx=idx;demoElapsed=0;
   logLines=[];clearLog(steps[idx].nome);
-  updateLeft();renderPipeline();
-  // simula log lines
+  updateLeft();renderPipeline();syncCurBoxes();
   const logs=DEMO_LOGS[steps[idx].id]||[`[INFO] Avvio ${steps[idx].nome}...`,"[INFO] Esecuzione in corso…"];
   let li=0;
   function addNextLog(){
@@ -604,10 +648,9 @@ function runDemoStep(idx){
   },120);
 }
 
-// ── LOG ──
 function clearLog(stepName){
   logLines=[];
-  $("log-box").innerHTML='';
+  $("log-box").innerHTML="";
   $("log-step-name").textContent=stepName;
   $("log-lines").textContent="0 righe";
 }
@@ -622,9 +665,7 @@ function addLog(text,cls=""){
   $("log-lines").textContent=logLines.length+" "+(logLines.length===1?"riga":"righe");
 }
 
-// ── ETA ──
 function updateETA(){
-  const done=steps.filter(s=>s.status==="done").length;
   const future=steps.filter(s=>s.status==="future");
   let remSec=future.reduce((a,s)=>a+(s.est||s.dur||10),0);
   const active=steps.find(s=>s.status==="active");
@@ -632,76 +673,96 @@ function updateETA(){
   $("stat-eta").textContent=remSec>0?fmt(remSec):"—";
 }
 
-// ── PIPELINE ──
 function renderPipeline(){
   const pipe=$("pipeline");
-  pipe.innerHTML=steps.map(s=>{
-    const spinner=s.status==="active"?`<div style="width:9px;height:9px;border-radius:50%;border:1.5px solid rgba(77,159,255,.25);border-top-color:var(--run);animation:spin .8s linear infinite"></div>`
-      :s.status==="done"?"✓":s.status==="error"?"✕":String(s.id);
+  pipe.innerHTML=steps.map((s,i)=>{
+    const icon=s.status==="done"?"✓":s.status==="error"?"✕":s.status==="active"?"►":"·";
     const elapsed=s.status==="done"?(s.elapsed?fmt(s.elapsed):"✓")
       :s.status==="active"?`<span id="lt-${s.id}">${s.elapsed?fmt(s.elapsed):"0s"}</span>`
-      :s.status==="error"?"ERR":"";
-    const est=s.status==="future"&&s.est?`<div class="step-est">~${fmt(s.est)}</div>`:"";
+      :s.status==="error"?"ERR"
+      :(s.est?`~${fmt(s.est)}`:"");
     return`<div class="step-row st-${s.status}" id="sr-${s.id}">
-      <div class="step-connector"></div>
-      <div class="step-left"><div class="step-circle">${spinner}</div></div>
-      <div class="step-body">
-        <div class="step-text">
-          <div class="step-name">${s.nome}</div>
-          <div class="step-tipo">${s.tipo}${est}</div>
-        </div>
-        <div class="step-right">${elapsed}</div>
-      </div></div>`;
+      <div class="step-icon">${icon}</div>
+      <div class="step-name">${esc(s.nome)}</div>
+      <div class="step-time">${elapsed}</div>
+    </div>`;
   }).join("");
-  if(activeIdx>=0){const el=document.getElementById("sr-"+steps[activeIdx].id);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});}
+  if(activeIdx>=0){
+    const el=document.getElementById("sr-"+steps[activeIdx].id);
+    if(el)el.scrollIntoView({behavior:"smooth",block:"nearest"});
+  }
 }
 
-// ── LEFT ──
+function esc(s){
+  return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
 function updateLeft(){
   const done=steps.filter(s=>s.status==="done").length;
   const total=steps.length;
   const pct=total?Math.round(done/total*100):0;
   const active=steps.find(s=>s.status==="active");
-  const circ=2*Math.PI*40;
-  $("ring-fill").style.strokeDashoffset=circ-(pct/100)*circ;
-  if(pct>=100)$("ring-fill").classList.add("done");
+  const bar=$("bar");
+
   $("ring-pct").textContent=pct+"%";
-  $("bar").style.width=pct+"%";
-  if(pct>=100)$("bar").classList.add("done");
-  $("bar-steps-lbl").textContent=`step ${done} / ${total}`;
+  $("pct-label").textContent=pct+"%";
+  bar.style.width=pct+"%";
+  bar.classList.remove("marquee","done","err");
+  if(pct>=100)bar.classList.add("done");
+  else if(active&&pct===0)bar.classList.add("marquee");
+
+  $("bar-steps-lbl").textContent=`Passo ${Math.min(done+(active?1:0),total||0)} di ${total}`;
   $("stat-done").textContent=done;
-  $("stat-rem").textContent=Math.max(0,total-done);
+  $("stat-rem").textContent=Math.max(0,total-done-(active?1:0));
+
   if(active){
-    $("cur-box-name").textContent=active.nome;
-    $("cur-box-tipo").textContent=active.tipo;
     $("cur-name").textContent=active.nome;
-    $("cur-tipo").textContent=active.tipo;
+    $("cur-tipo").textContent=tipoLabel(active.tipo)+" — in esecuzione";
+  }else if(pct>=100){
+    $("cur-name").textContent="Installazione completata";
+    $("cur-tipo").textContent="Tutti i passi eseguiti";
+  }else if(steps.some(s=>s.status==="error")){
+    $("cur-name").textContent="Installazione interrotta";
+    $("cur-tipo").textContent="Si è verificato un errore";
   }
+  syncCurBoxes();
 }
 
-// ── DONE ──
+function tipoLabel(t){
+  const m={ps_script:"Script",windows_update:"Windows Update",winget_install:"Applicazione",
+    reg_set:"Registro",shell_script:"Shell",reboot:"Riavvio",cmd:"Comando"};
+  return m[t]||t||"Operazione";
+}
+
 function showDone(data){
   const done=steps.filter(s=>s.status==="done").length;
-  $("bar").style.width="100%";$("bar").classList.add("done");
-  $("ring-fill").style.strokeDashoffset=0;$("ring-fill").classList.add("done");
-  $("ring-pct").textContent="100%";
-  $("ov-detail").textContent=`${done} step · durata ${fmtMs(Date.now()-startTime)}`;
-  const hw=data?.hardware||null;
-  if(hw){
-    $("ov-hw").innerHTML=`
-      <div class="ov-hw-chip">🖥 <b>${hw.cpu||"—"}</b></div>
-      <div class="ov-hw-chip">💾 <b>${hw.ram||"—"}</b></div>
-      <div class="ov-hw-chip">💿 <b>${hw.disk||"—"}</b></div>
-      <div class="ov-hw-chip">🌐 <b>${hw.mac||"—"}</b>${hw.ip?" · "+hw.ip:""}</div>`;
-  }
-  if(!$("ss-img").src)$("ss-status").textContent="Screenshot non disponibile";
+  const elapsed=fmtMs(Date.now()-startTime);
+  $("ov-detail").textContent=`${done} passi completati · tempo totale ${elapsed}`;
+  const chips=[];
+  const cpu=$("hw-cpu").textContent,ram=$("hw-ram").textContent,disk=$("hw-disk").textContent;
+  if(cpu&&!cpu.includes("rilevamento"))chips.push(`<span class="ov-hw-chip">CPU: <b>${esc(cpu)}</b></span>`);
+  if(ram&&!ram.includes("rilevamento"))chips.push(`<span class="ov-hw-chip">RAM: <b>${esc(ram)}</b></span>`);
+  if(disk&&!disk.includes("rilevamento"))chips.push(`<span class="ov-hw-chip">Disco: <b>${esc(disk)}</b></span>`);
+  $("ov-hw").innerHTML=chips.join("");
   $("ov-done").classList.add("show");
-  let n=30;const t=setInterval(()=>{$("reboot-n").textContent=--n;if(n<=0)clearInterval(t);},1000);
+  let n=30;
+  $("reboot-n").textContent=n;
+  const t=setInterval(()=>{
+    n--;$("reboot-n").textContent=n;
+    if(n<=0)clearInterval(t);
+  },1000);
 }
 
-function fmt(s){s=Math.round(s);return s<60?s+"s":Math.floor(s/60)+"m "+String(s%60).padStart(2,"0")+"s"}
-function fmtMs(ms){const s=Math.floor(ms/1000);return s<60?s+"s":Math.floor(s/60)+"m "+String(s%60).padStart(2,"0")+"s"}
-function tick(){$("clock").textContent=new Date().toLocaleTimeString("it-IT",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
+function tick(){
+  $("clock").textContent=new Date().toLocaleTimeString("it-IT");
+}
+function fmt(sec){
+  sec=Math.max(0,Math.round(sec));
+  if(sec<60)return sec+"s";
+  const m=Math.floor(sec/60),s=sec%60;
+  return m+"m "+s+"s";
+}
+function fmtMs(ms){return fmt(ms/1000);}
 
 init();
 </script>
