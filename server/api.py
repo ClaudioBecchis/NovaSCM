@@ -2794,6 +2794,8 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
     _x = _sax.escape
 
     server_url = _get_public_url()
+    from urllib.parse import urlparse as _urlparse
+    _server_host = _urlparse(server_url).hostname or "192.168.10.112"
     # C-1: usa deploy token monouso invece dell'API key globale
     deploy_token = d.get("_deploy_token", "")
     _pw_id = _x(str(d.get("_pw_id", "1")))
@@ -2833,7 +2835,7 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
     _smb_creds_xml = ""
     _wim_run_sync = ""
     _raw_wim = _get_setting(
-        "pxe_install_wim_path", "\\\\192.168.10.104\\wininstall\\sources\\install.wim"
+        "pxe_install_wim_path", f"\\\\{_server_host}\\wininstall\\sources\\install.wim"
     ).replace("/", "\\")
     # LabConfig: bypass requisiti hardware Win11 in VM/test (reg, no PowerShell — $ espansi da setup)
     _labconfig_sync = """
@@ -2867,7 +2869,7 @@ def _build_autounattend_xml_pxe(d: dict) -> str:
         </RunSynchronousCommand>
         <RunSynchronousCommand wcm:action="add">
           <Order>6</Order>
-          <Path>cmd /c ping -n 5 192.168.10.104</Path>
+          <Path>cmd /c ping -n 5 {_server_host}</Path>
           <Description>Attende rete (ping PXE server)</Description>
           <ContinueOnError>true</ContinueOnError>
         </RunSynchronousCommand>
