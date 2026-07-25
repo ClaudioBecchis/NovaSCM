@@ -2732,36 +2732,18 @@ def serve_pxe_startnet(pc_name: str):
     if not _is_pxe_allowed(client_ip):
         return "Accesso negato", 403
 
-    server_url  = _get_public_url()
-    smb_user    = _get_setting("pxe_smb_user", "novascm")
-    smb_pass    = _get_setting("pxe_smb_pass", "")
-    smb_domain  = _get_setting("pxe_smb_domain", "WORKGROUP")
-    wim_index   = _get_setting("pxe_wim_index", "5")
-    raw_wim     = _get_setting("pxe_install_wim_path",
-                               f"\\\\{_urlparse(server_url).hostname or '192.168.10.112'}\\wininstall\\sources\\install.wim")
-    # Ricava solo il percorso UNC della share (\\server\share) dal path completo
-    parts       = raw_wim.replace("/", "\\").lstrip("\\").split("\\")
-    smb_share   = f"\\\\{parts[0]}\\{parts[1]}" if len(parts) >= 2 else f"\\\\192.168.10.112\\wininstall"
-    wim_path    = raw_wim.replace("/", "\\")
+    server_url   = _get_public_url()
+    static_url   = _get_pxe_static_url()
+    wim_index    = _get_setting("pxe_wim_index", "5")
+    server_host  = _urlparse(server_url).hostname or "192.168.10.112"
+    wim_url      = f"{static_url}/install.wim"
     unattend_url = f"{server_url}/api/autounattend/{pc_name}"
 
     cmd = f"""@echo off
 echo [NovaSCM] wpeinit...
 wpeinit
-echo [NovaSCM] Attendo rete...
-ping -n 5 {parts[0] if parts else '192.168.10.112'} >nul
-echo [NovaSCM] Monto share SMB {smb_share}...
-net use G: {smb_share} /user:{smb_domain}\\{smb_user} "{smb_pass}" /persistent:no
-if %errorlevel% neq 0 (
-    echo [NovaSCM] Retry SMB tra 10s...
-    ping -n 10 {parts[0] if parts else '192.168.10.112'} >nul
-    net use G: {smb_share} /user:{smb_domain}\\{smb_user} "{smb_pass}" /persistent:no
-)
-if %errorlevel% neq 0 (
-    echo [NovaSCM] ERRORE: mount SMB fallito. Riavvio tra 30s...
-    ping -n 30 127.0.0.1 >nul
-    wpeutil reboot
-)
+echo [NovaSCM] Attendo rete ({server_host})...
+ping -n 8 {server_host} >nul
 echo [NovaSCM] Partiziono disco 0...
 (echo SELECT DISK 0
 echo CLEAN
@@ -2780,18 +2762,26 @@ if %errorlevel% neq 0 (
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
 )
-echo [NovaSCM] Applico immagine WIM (DISM)... attendere 10-15 minuti
-dism /Apply-Image /ImageFile:G:\\sources\\install.wim /Index:{wim_index} /ApplyDir:C:\\ /LogPath:X:\\dism.log
+echo [NovaSCM] Scarico install.wim via HTTP (~6GB, attendere 5-15 min)...
+curl.exe -f --retry 3 --retry-delay 5 -o C:\\install.wim "{wim_url}"
+if %errorlevel% neq 0 (
+    echo [NovaSCM] ERRORE: download install.wim fallito. Riavvio tra 30s...
+    ping -n 30 127.0.0.1 >nul
+    wpeutil reboot
+)
+echo [NovaSCM] Applico immagine WIM (DISM)...
+dism /Apply-Image /ImageFile:C:\\install.wim /Index:{wim_index} /ApplyDir:C:\\ /LogPath:X:\\dism.log
 if %errorlevel% neq 0 (
     echo [NovaSCM] ERRORE: DISM fallito. Vedi X:\\dism.log. Riavvio tra 60s...
     ping -n 60 127.0.0.1 >nul
     wpeutil reboot
 )
+del C:\\install.wim 2>nul
 echo [NovaSCM] bcdboot...
 bcdboot C:\\Windows /l it-IT /s S: /f UEFI
 echo [NovaSCM] Copia unattend.xml...
 mkdir C:\\Windows\\Panther 2>nul
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-WebRequest -Uri '{unattend_url}' -OutFile 'C:\\Windows\\Panther\\unattend.xml' -UseBasicParsing" 2>nul
+curl.exe -f -o C:\\Windows\\Panther\\unattend.xml "{unattend_url}" 2>nul
 echo [NovaSCM] Deploy completato. Riavvio...
 wpeutil reboot
 """
