@@ -2342,6 +2342,7 @@ imgfetch {static_url}/BCD            BCD
 imgfetch {static_url}/boot.sdi       boot.sdi
 imgfetch {static_url}/boot.wim        boot.wim
 imgfetch {static_url}/downloader.exe  downloader.exe
+imgfetch {static_url}/splash.exe      splash.exe
 imgfetch --name startnet.cmd {server_url}/api/pxe/startnet/{pc_name}
 imgfetch --name autounattend.xml {server_url}/api/autounattend/{pc_name}
 imgstat
@@ -2717,7 +2718,7 @@ def serve_ipxe_efi():
 
 # ── ENDPOINT FILE WINPE (no auth, subnet allow-list) ─────────────────────────
 
-_WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim", "install.wim", "downloader.exe"}
+_WINPE_ALLOWED_FILES = {"wimboot", "BCD", "boot.sdi", "boot.wim", "install.wim", "downloader.exe", "splash.exe"}
 
 
 @app.route("/api/pxe/startnet/<pc_name>", methods=["GET"])
@@ -2741,11 +2742,11 @@ def serve_pxe_startnet(pc_name: str):
     unattend_url = f"{server_url}/api/autounattend/{pc_name}"
 
     cmd = f"""@echo off
-echo [NovaSCM] wpeinit...
 wpeinit
-echo [NovaSCM] Attendo rete ({server_host})...
+echo 0 > X:\\status.txt
+start "" splash.exe X:\\status.txt
 ping -n 8 {server_host} >nul
-echo [NovaSCM] Partiziono disco 0...
+echo 1 > X:\\status.txt
 (echo SELECT DISK 0
 echo CLEAN
 echo CONVERT GPT
@@ -2759,31 +2760,29 @@ echo ASSIGN LETTER=C
 echo EXIT) > X:\\diskpart.txt
 diskpart /s X:\\diskpart.txt
 if %errorlevel% neq 0 (
-    echo [NovaSCM] ERRORE: diskpart fallito. Riavvio tra 30s...
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
 )
-echo [NovaSCM] Scarico install.wim via HTTP (~6GB, attendere 5-15 min)...
+echo 2 > X:\\status.txt
 downloader.exe "{wim_url}" "C:\\install.wim"
 if %errorlevel% neq 0 (
-    echo [NovaSCM] ERRORE: download install.wim fallito. Riavvio tra 30s...
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
 )
-echo [NovaSCM] Applico immagine WIM (DISM)...
+echo 3 > X:\\status.txt
 dism /Apply-Image /ImageFile:C:\\install.wim /Index:{wim_index} /ApplyDir:C:\\ /LogPath:X:\\dism.log
 if %errorlevel% neq 0 (
-    echo [NovaSCM] ERRORE: DISM fallito. Vedi X:\\dism.log. Riavvio tra 60s...
     ping -n 60 127.0.0.1 >nul
     wpeutil reboot
 )
 del C:\\install.wim 2>nul
-echo [NovaSCM] bcdboot...
+echo 4 > X:\\status.txt
 bcdboot C:\\Windows /l it-IT /s S: /f UEFI
-echo [NovaSCM] Copia unattend.xml...
+echo 5 > X:\\status.txt
 mkdir C:\\Windows\\Panther 2>nul
-curl.exe -f -o C:\\Windows\\Panther\\unattend.xml "{unattend_url}" 2>nul
-echo [NovaSCM] Deploy completato. Riavvio...
+downloader.exe "{unattend_url}" "C:\\Windows\\Panther\\unattend.xml"
+echo 6 > X:\\status.txt
+ping -n 3 127.0.0.1 >nul
 wpeutil reboot
 """
     log.info("startnet.cmd PXE: servito per %s a %s", pc_name, client_ip)
