@@ -2145,6 +2145,8 @@ public partial class MainWindow : Window
         if (_monitoring)
         {
             _monitorCts?.Cancel();
+            _monitorCts?.Dispose();
+            _monitorCts = null;
             _monitoring = false;
             BtnMonitor.Content = "👁  Monitora";
             SetStatus("⏹ Monitoraggio fermato");
@@ -2158,6 +2160,7 @@ public partial class MainWindow : Window
         }
 
         _monitoring = true;
+        _monitorCts?.Dispose();
         _monitorCts = new CancellationTokenSource();
         BtnMonitor.Content = "⏹  Stop Monitor";
         SetStatus("👁 Monitoraggio attivo — scansione ogni 30s");
@@ -3840,7 +3843,7 @@ public partial class MainWindow : Window
             TxtCrStatus.Foreground = System.Windows.Media.Brushes.Orange;
             return;
         }
-        var ouPart = string.IsNullOrEmpty(ou) ? "" : $" /machineou \"{ou}\"";
+        var ouPart = string.IsNullOrEmpty(ou) ? "" : $" /machineou \"{ou.Replace("\"", "`\"")}\"";
         var cmd = $"# Esegui sul Domain Controller (PowerShell come Amministratore):\r\n" +
                   $"djoin /provision /domain \"{domain}\" /machine \"{pcName}\"{ouPart} /savefile \"$env:TEMP\\{pcName}.djoin\" /reuse\r\n" +
                   $"[System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes(\"$env:TEMP\\{pcName}.djoin\"))";
@@ -4344,7 +4347,11 @@ public partial class MainWindow : Window
                     scpInfo.ArgumentList.Add(src);
                     scpInfo.ArgumentList.Add($"root@{pxeIp}:{pxePath}{file}");
                     using var proc = Process.Start(scpInfo)!;
-                    proc.WaitForExit(30_000);
+                    if (!proc.WaitForExit(30_000))
+                    {
+                        proc.Kill();
+                        throw new Exception($"scp {file}: timeout (30s)");
+                    }
                     if (proc.ExitCode != 0)
                         throw new Exception($"scp {file} fallito (exit {proc.ExitCode}): " +
                                             proc.StandardError.ReadToEnd());
@@ -4542,7 +4549,7 @@ public partial class MainWindow : Window
                publicKeyToken=""31bf3856ad364e35""
                language=""neutral"" versionScope=""nonSxS"">
       <ComputerName>{Xe(pcName)}</ComputerName>
-      <TimeZone>{cfg.TimeZone}</TimeZone>
+      <TimeZone>{Xe(cfg.TimeZone)}</TimeZone>
       <RegisteredOrganization>NovaSCM</RegisteredOrganization>
       {runSyncBlock}
     </component>
@@ -5505,15 +5512,8 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hexColor);
         double cx    = w / 2;
         double cy    = h * 0.6;
-        double r     = Math.Min(w, h) * 0.38;
-        double start = 210 * Math.PI / 180;  // -150 gradi
-        double end   = 330 * Math.PI / 180;  // +150 gradi
-        double span  = (end - start + 2 * Math.PI) % (2 * Math.PI);  // 300 gradi totali
-        double pct   = Math.Clamp(value / max, 0, 1);
-
-        // Track grigio
-        var track = ArcPath(cx, cy, r, start, start + span * Math.PI * 2 / Math.PI, color, 0.15);
-        // Hmm, let me use a simpler arc approach
+        double r   = Math.Min(w, h) * 0.38;
+        double pct = Math.Clamp(value / max, 0, 1);
 
         // Track arc (background) — always full 300°
         DrawArc(canvas, cx, cy, r + 2, 210, 330, System.Windows.Media.Color.FromArgb(40, 100, 116, 139), 10);
@@ -6748,7 +6748,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         TxtScriptRunStatus.Text = $"⏳ Esecuzione su {ip}...";
         TxtScriptOutput.Text    = "";
 
-        var result = await Task.Run(() =>
+        var result = await Task.Run(async () =>
         {
             try
             {
@@ -6772,9 +6772,11 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                 psi.ArgumentList.Add("-File");
                 psi.ArgumentList.Add(tmp);
                 using var proc = Process.Start(psi)!;
-                var stdout = proc.StandardOutput.ReadToEnd();
-                var stderr = proc.StandardError.ReadToEnd();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
                 proc.WaitForExit(30000);
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
                 File.Delete(tmp);
                 return string.IsNullOrEmpty(stderr) ? stdout : $"{stdout}\n[ERRORE]\n{stderr}";
             }
@@ -6797,7 +6799,7 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
         TxtScriptRunStatus.Text = "⏳ Esecuzione locale...";
         TxtScriptOutput.Text    = "";
 
-        var result = await Task.Run(() =>
+        var result = await Task.Run(async () =>
         {
             try
             {
@@ -6816,9 +6818,11 @@ shutdown /r /t 15 /c ""NovaSCM: configurazione completata. Riavvio in 15 secondi
                 psi.ArgumentList.Add("-File");
                 psi.ArgumentList.Add(tmp);
                 using var proc = Process.Start(psi)!;
-                var stdout = proc.StandardOutput.ReadToEnd();
-                var stderr = proc.StandardError.ReadToEnd();
+                var stdoutTask = proc.StandardOutput.ReadToEndAsync();
+                var stderrTask = proc.StandardError.ReadToEndAsync();
                 proc.WaitForExit(30000);
+                var stdout = await stdoutTask;
+                var stderr = await stderrTask;
                 File.Delete(tmp);
                 return string.IsNullOrEmpty(stderr) ? stdout : $"{stdout}\n[ERRORE]\n{stderr}";
             }

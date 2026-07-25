@@ -86,7 +86,7 @@ public partial class DeviceDetailWindow : Window
         PortProgress.Maximum = CommonPorts.Length;
 
         Loaded += async (_, _) => await ScanPortsAsync();
-        Closed += (_, _) => _cts?.Cancel();
+        Closed += (_, _) => { _cts?.Cancel(); _cts?.Dispose(); };
     }
 
     private async Task ScanPortsAsync()
