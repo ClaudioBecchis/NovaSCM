@@ -2994,8 +2994,8 @@ def pxe_agent_config(pc_name: str):
         domain = (cr["domain"] or "") if cr else ""
         token = secrets.token_hex(32)
         conn.execute(
-            "INSERT INTO enrollment_tokens (token, expires_at) VALUES (?,?)",
-            (token, time.time() + 86400)   # validità 24h
+            "INSERT INTO enrollment_tokens (token, expires_at, created_at) VALUES (?,?,?)",
+            (token, time.time() + 86400, time.time())
         )
         conn.commit()
     cfg = {
