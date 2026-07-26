@@ -12,13 +12,13 @@
  *   Details=<testo>
  */
 static void WriteIni(const wchar_t *path, const wchar_t *action,
-                     int actPct, int totPct, const wchar_t *details) {
+                     int actPct, int totPct, const wchar_t *details,
+                     int stepIdx, int stepCnt) {
     if (!path) return;
     HANDLE hf = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ,
                             NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hf == INVALID_HANDLE_VALUE) return;
 
-    /* Converti stringhe Unicode → ANSI */
     char aAction[256]  = {0};
     char aDetails[256] = {0};
     WideCharToMultiByte(CP_ACP, 0, action,  -1, aAction,  255, NULL, NULL);
@@ -26,8 +26,9 @@ static void WriteIni(const wchar_t *path, const wchar_t *action,
 
     char buf[1024];
     int len = _snprintf(buf, 1023,
-        "[Status]\r\nAction=%s\r\nActionPercent=%d\r\nTotalPercent=%d\r\nDetails=%s\r\n",
-        aAction, actPct, totPct, aDetails);
+        "[Status]\r\nAction=%s\r\nActionPercent=%d\r\nTotalPercent=%d\r\n"
+        "Details=%s\r\nStepIndex=%d\r\nStepCount=%d\r\nError=\r\n",
+        aAction, actPct, totPct, aDetails, stepIdx, stepCnt);
     DWORD wr;
     WriteFile(hf, buf, (DWORD)len, &wr, NULL);
     CloseHandle(hf);
@@ -38,19 +39,23 @@ int wmain(int argc, wchar_t *argv[]) {
      * argv[1] = URL
      * argv[2] = file destinazione
      * argv[3] = percorso INI (opzionale, default X:\DeployStatus.ini)
-     * argv[4] = TotalPercent base (0-100) — punto di partenza overall progress
-     * argv[5] = TotalPercent end — punto di fine overall progress
-     * argv[6] = Action label (testo step corrente)
+     * argv[4] = TotalPercent base (0-100)
+     * argv[5] = TotalPercent end (0-100)
+     * argv[6] = Action label
+     * argv[7] = StepIndex (opzionale)
+     * argv[8] = StepCount (opzionale)
      */
     if (argc < 3) {
-        fwprintf(stderr, L"Usage: downloader.exe <url> <dest> [status.ini] [totStart] [totEnd] [action]\n");
+        fwprintf(stderr, L"Usage: downloader.exe <url> <dest> [ini] [totStart] [totEnd] [action] [stepIdx] [stepCnt]\n");
         return 1;
     }
 
     const wchar_t *statusFile = (argc >= 4) ? argv[3] : L"X:\\DeployStatus.ini";
-    int totStart = (argc >= 5) ? (int)wcstol(argv[4], NULL, 10) : 0;
-    int totEnd   = (argc >= 6) ? (int)wcstol(argv[5], NULL, 10) : 100;
+    int totStart   = (argc >= 5) ? (int)wcstol(argv[4], NULL, 10) : 0;
+    int totEnd     = (argc >= 6) ? (int)wcstol(argv[5], NULL, 10) : 100;
     const wchar_t *actionLabel = (argc >= 7) ? argv[6] : L"Download in corso...";
+    int stepIdx    = (argc >= 8) ? (int)wcstol(argv[7], NULL, 10) : 0;
+    int stepCnt    = (argc >= 9) ? (int)wcstol(argv[8], NULL, 10) : 0;
 
     URL_COMPONENTS uc = {0};
     uc.dwStructSize = sizeof(uc);
@@ -119,7 +124,7 @@ int wmain(int argc, wchar_t *argv[]) {
     wprintf(L"Download %s (%.1f GB)\n", argv[1], (double)total / (1024*1024*1024));
 
     /* Stato iniziale */
-    WriteIni(statusFile, actionLabel, 0, totStart, L"Connessione al server...");
+    WriteIni(statusFile, actionLabel, 0, totStart, L"Connessione al server...", stepIdx, stepCnt);
 
     while (WinHttpReadData(hReq, buf, sizeof(buf), &read) && read > 0) {
         WriteFile(hFile, buf, read, &written, NULL);
@@ -137,7 +142,7 @@ int wmain(int argc, wchar_t *argv[]) {
                        downloaded >> 20, total >> 20);
 
             if (actPct != lastActPct) {
-                WriteIni(statusFile, actionLabel, actPct, totPct, details);
+                WriteIni(statusFile, actionLabel, actPct, totPct, details, stepIdx, stepCnt);
                 lastActPct = actPct;
             }
         } else {

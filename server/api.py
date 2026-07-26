@@ -2747,6 +2747,8 @@ def serve_pxe_startnet(pc_name: str):
 echo Action=Avvio sistema
 echo ActionPercent=0
 echo TotalPercent=0
+echo StepIndex=1
+echo StepCount=9
 echo Details=Inizializzazione WinPE...) > X:\\DeployStatus.ini
 start "" NovaSCM_Progress_CPP_Source.exe X:\\DeployStatus.ini
 ping -n 2 127.0.0.1 >nul
@@ -2755,12 +2757,16 @@ wpeinit
 echo Action=Inizializzazione rete
 echo ActionPercent=50
 echo TotalPercent=2
+echo StepIndex=2
+echo StepCount=9
 echo Details=Configurazione rete in corso...) > X:\\DeployStatus.ini
 ping -n 8 {server_host} >nul
 (echo [Status]
 echo Action=Partizionamento disco
 echo ActionPercent=50
 echo TotalPercent=5
+echo StepIndex=3
+echo StepCount=9
 echo Details=Preparazione partizioni GPT...) > X:\\DeployStatus.ini
 (echo SELECT DISK 0
 echo CLEAN
@@ -2778,7 +2784,7 @@ if %errorlevel% neq 0 (
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
 )
-downloader.exe "{wim_url}" "C:\\install.wim" "X:\\DeployStatus.ini" "10" "70" "Download immagine Windows"
+downloader.exe "{wim_url}" "C:\\install.wim" "X:\\DeployStatus.ini" "10" "70" "Download immagine Windows" "4" "9"
 if %errorlevel% neq 0 (
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
@@ -2787,6 +2793,8 @@ if %errorlevel% neq 0 (
 echo Action=Installazione Windows
 echo ActionPercent=0
 echo TotalPercent=70
+echo StepIndex=5
+echo StepCount=9
 echo Details=Applicazione immagine disco...) > X:\\DeployStatus.ini
 dism /Apply-Image /ImageFile:C:\\install.wim /Index:{wim_index} /ApplyDir:C:\\ /LogPath:X:\\dism.log
 if %errorlevel% neq 0 (
@@ -2798,23 +2806,29 @@ del C:\\install.wim 2>nul
 echo Action=Configurazione avvio
 echo ActionPercent=100
 echo TotalPercent=80
+echo StepIndex=6
+echo StepCount=9
 echo Details=Configurazione boot loader UEFI...) > X:\\DeployStatus.ini
 bcdboot C:\\Windows /l it-IT /s S: /f UEFI
 (echo [Status]
 echo Action=Preparazione sistema
 echo ActionPercent=0
 echo TotalPercent=85
+echo StepIndex=7
+echo StepCount=9
 echo Details=Download configurazione e agenti NovaSCM...) > X:\\DeployStatus.ini
 mkdir C:\\Windows\\Panther 2>nul
-downloader.exe "{unattend_url}" "C:\\Windows\\Panther\\unattend.xml" "X:\\DeployStatus.ini" "85" "87" "Download configurazione automatica"
+downloader.exe "{unattend_url}" "C:\\Windows\\Panther\\unattend.xml" "X:\\DeployStatus.ini" "85" "87" "Download configurazione automatica" "7" "9"
 mkdir C:\\ProgramData\\NovaSCM\\logs 2>nul
-downloader.exe "{server_url}/api/pxe/download/agent" "C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe" "X:\\DeployStatus.ini" "87" "93" "Download agente NovaSCM"
-downloader.exe "{server_url}/api/pxe/download/deploy-screen" "C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe" "X:\\DeployStatus.ini" "93" "98" "Download NovaSCM Deploy Screen"
+downloader.exe "{server_url}/api/pxe/download/agent" "C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe" "X:\\DeployStatus.ini" "87" "93" "Download agente NovaSCM" "8" "9"
+downloader.exe "{server_url}/api/pxe/download/deploy-screen" "C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe" "X:\\DeployStatus.ini" "93" "98" "Download NovaSCM Deploy Screen" "8" "9"
 downloader.exe "{server_url}/api/pxe/agent-config/{pc_name}" "C:\\ProgramData\\NovaSCM\\agent.json"
 (echo [Status]
 echo Action=Riavvio in corso
 echo ActionPercent=100
 echo TotalPercent=100
+echo StepIndex=9
+echo StepCount=9
 echo Details=Il sistema si riavviera a breve...) > X:\\DeployStatus.ini
 ping -n 3 127.0.0.1 >nul
 wpeutil reboot
