@@ -1093,23 +1093,18 @@ def get_autounattend(pc_name):
       <FirstLogonCommands>
         <SynchronousCommand wcm:action="add">
           <Order>1</Order>
-          <CommandLine>cmd /c for %d in (D E F G H I J K L M N O P Q R S T U V W X Y Z) do if exist %d:\\postinstall.ps1 copy /Y %d:\\postinstall.ps1 C:\\Windows\\postinstall.ps1</CommandLine>
-          <Description>NovaSCM: recupera postinstall.ps1</Description>
-        </SynchronousCommand>
-        <SynchronousCommand wcm:action="add">
-          <Order>2</Order>
           <CommandLine>reg add &quot;HKLM\\SOFTWARE\\NovaSCM&quot; /v EnrollToken /t REG_SZ /d &quot;{enroll_token_str}&quot; /f</CommandLine>
           <Description>NovaSCM: scrive enrollment token nel registry</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>3</Order>
+          <Order>2</Order>
           <CommandLine>reg add &quot;HKLM\\SOFTWARE\\NovaSCM&quot; /v EnrollServer /t REG_SZ /d &quot;{enroll_server_str}&quot; /f</CommandLine>
           <Description>NovaSCM: scrive server URL nel registry</Description>
         </SynchronousCommand>
         <SynchronousCommand wcm:action="add">
-          <Order>4</Order>
+          <Order>3</Order>
           <CommandLine>powershell.exe -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\\Windows\\postinstall.ps1</CommandLine>
-          <Description>NovaSCM post-install</Description>
+          <Description>NovaSCM post-install (scaricato da WinPE)</Description>
         </SynchronousCommand>
       </FirstLogonCommands>
     </component>
@@ -2748,7 +2743,7 @@ echo Action=Avvio sistema
 echo ActionPercent=0
 echo TotalPercent=0
 echo StepIndex=1
-echo StepCount=9
+echo StepCount=10
 echo Details=Inizializzazione WinPE...) > X:\\DeployStatus.ini
 start "" NovaSCM_Progress_CPP_Source.exe X:\\DeployStatus.ini
 ping -n 2 127.0.0.1 >nul
@@ -2758,7 +2753,7 @@ echo Action=Inizializzazione rete
 echo ActionPercent=50
 echo TotalPercent=2
 echo StepIndex=2
-echo StepCount=9
+echo StepCount=10
 echo Details=Configurazione rete in corso...) > X:\\DeployStatus.ini
 ping -n 8 {server_host} >nul
 (echo [Status]
@@ -2766,7 +2761,7 @@ echo Action=Partizionamento disco
 echo ActionPercent=50
 echo TotalPercent=5
 echo StepIndex=3
-echo StepCount=9
+echo StepCount=10
 echo Details=Preparazione partizioni GPT...) > X:\\DeployStatus.ini
 (echo SELECT DISK 0
 echo CLEAN
@@ -2784,7 +2779,7 @@ if %errorlevel% neq 0 (
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
 )
-downloader.exe "{wim_url}" "C:\\install.wim" "X:\\DeployStatus.ini" "10" "70" "Download immagine Windows" "4" "9"
+downloader.exe "{wim_url}" "C:\\install.wim" "X:\\DeployStatus.ini" "10" "70" "Download immagine Windows" "4" "10"
 if %errorlevel% neq 0 (
     ping -n 30 127.0.0.1 >nul
     wpeutil reboot
@@ -2794,7 +2789,7 @@ echo Action=Installazione Windows
 echo ActionPercent=0
 echo TotalPercent=70
 echo StepIndex=5
-echo StepCount=9
+echo StepCount=10
 echo Details=Applicazione immagine disco...) > X:\\DeployStatus.ini
 dism /Apply-Image /ImageFile:C:\\install.wim /Index:{wim_index} /ApplyDir:C:\\ /LogPath:X:\\dism.log
 if %errorlevel% neq 0 (
@@ -2807,28 +2802,45 @@ echo Action=Configurazione avvio
 echo ActionPercent=100
 echo TotalPercent=80
 echo StepIndex=6
-echo StepCount=9
+echo StepCount=10
 echo Details=Configurazione boot loader UEFI...) > X:\\DeployStatus.ini
 bcdboot C:\\Windows /l it-IT /s S: /f UEFI
+bcdedit /set "{fwbootmgr}" displayorder "{bootmgr}" /addfirst
 (echo [Status]
-echo Action=Preparazione sistema
+echo Action=Download componenti NovaSCM
 echo ActionPercent=0
-echo TotalPercent=85
+echo TotalPercent=83
 echo StepIndex=7
-echo StepCount=9
-echo Details=Download configurazione e agenti NovaSCM...) > X:\\DeployStatus.ini
+echo StepCount=10
+echo Details=Download configurazione e agente...) > X:\\DeployStatus.ini
 mkdir C:\\Windows\\Panther 2>nul
-downloader.exe "{unattend_url}" "C:\\Windows\\Panther\\unattend.xml" "X:\\DeployStatus.ini" "85" "87" "Download configurazione automatica" "7" "9"
+downloader.exe "{unattend_url}" "C:\\Windows\\Panther\\unattend.xml" "X:\\DeployStatus.ini" "83" "85" "Download configurazione automatica" "7" "10"
 mkdir C:\\ProgramData\\NovaSCM\\logs 2>nul
-downloader.exe "{server_url}/api/pxe/download/agent" "C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe" "X:\\DeployStatus.ini" "87" "93" "Download agente NovaSCM" "8" "9"
-downloader.exe "{server_url}/api/pxe/download/deploy-screen" "C:\\ProgramData\\NovaSCM\\NovaSCMDeployScreen.exe" "X:\\DeployStatus.ini" "93" "98" "Download NovaSCM Deploy Screen" "8" "9"
+downloader.exe "{server_url}/api/pxe/download/agent" "C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe" "X:\\DeployStatus.ini" "85" "90" "Download agente NovaSCM" "8" "10"
 downloader.exe "{server_url}/api/pxe/agent-config/{pc_name}" "C:\\ProgramData\\NovaSCM\\agent.json"
+downloader.exe "{server_url}/api/pxe/download/postinstall.ps1" "C:\\Windows\\postinstall.ps1" "X:\\DeployStatus.ini" "90" "93" "Download postinstall" "8" "10"
+(echo [Status]
+echo Action=Registrazione servizio NovaSCM Agent
+echo ActionPercent=0
+echo TotalPercent=93
+echo StepIndex=9
+echo StepCount=10
+echo Details=Registrazione NovaSCMAgent come servizio Windows...) > X:\\DeployStatus.ini
+reg load HKLM\\NOVASCM_SYS "C:\\Windows\\System32\\config\\SYSTEM" >nul 2>&1
+reg add "HKLM\\NOVASCM_SYS\\ControlSet001\\Services\\NovaSCMAgent" /v "Type"         /t REG_DWORD     /d 16                                           /f >nul
+reg add "HKLM\\NOVASCM_SYS\\ControlSet001\\Services\\NovaSCMAgent" /v "Start"        /t REG_DWORD     /d 2                                            /f >nul
+reg add "HKLM\\NOVASCM_SYS\\ControlSet001\\Services\\NovaSCMAgent" /v "ErrorControl" /t REG_DWORD     /d 1                                            /f >nul
+reg add "HKLM\\NOVASCM_SYS\\ControlSet001\\Services\\NovaSCMAgent" /v "ImagePath"    /t REG_EXPAND_SZ /d "\"C:\\ProgramData\\NovaSCM\\NovaSCMAgent.exe\"" /f >nul
+reg add "HKLM\\NOVASCM_SYS\\ControlSet001\\Services\\NovaSCMAgent" /v "DisplayName"  /t REG_SZ        /d "NovaSCM Agent"                               /f >nul
+reg add "HKLM\\NOVASCM_SYS\\ControlSet001\\Services\\NovaSCMAgent" /v "ObjectName"   /t REG_SZ        /d "LocalSystem"                                 /f >nul
+reg add "HKLM\\NOVASCM_SYS\\ControlSet001\\Services\\NovaSCMAgent" /v "Description"  /t REG_SZ        /d "NovaSCM Workflow Agent"                      /f >nul
+reg unload HKLM\\NOVASCM_SYS >nul 2>&1
 (echo [Status]
 echo Action=Riavvio in corso
 echo ActionPercent=100
 echo TotalPercent=100
-echo StepIndex=9
-echo StepCount=9
+echo StepIndex=10
+echo StepCount=10
 echo Details=Il sistema si riavviera a breve...) > X:\\DeployStatus.ini
 ping -n 3 127.0.0.1 >nul
 wpeutil reboot
@@ -2948,6 +2960,24 @@ def pxe_download_deploy_screen():
     log.info("pxe/download/deploy-screen: serving a %s", _get_client_ip())
     return send_file(fpath, as_attachment=True, download_name="NovaSCMDeployScreen.exe",
                      mimetype="application/octet-stream")
+
+
+@app.route("/api/pxe/download/postinstall.ps1", methods=["GET"])
+@limiter.limit("10 per minute")
+def pxe_download_postinstall():
+    """Serve postinstall.ps1 senza auth — protetto da subnet PXE.
+    Viene scaricato in WinPE e piazzato su C:\\Windows\\postinstall.ps1
+    prima del reboot, così autounattend.xml lo trova e lo esegue."""
+    if not _is_pxe_allowed(_get_client_ip()):
+        return "Accesso negato", 403
+    fpath = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "..", "deploy", "postinstall.ps1")
+    fpath = os.path.normpath(fpath)
+    if not os.path.isfile(fpath):
+        return jsonify({"error": "postinstall.ps1 non trovato"}), 404
+    log.info("pxe/download/postinstall.ps1: serving a %s", _get_client_ip())
+    return send_file(fpath, as_attachment=False, download_name="postinstall.ps1",
+                     mimetype="text/plain; charset=utf-8")
 
 
 @app.route("/api/pxe/agent-config/<pc_name>", methods=["GET"])

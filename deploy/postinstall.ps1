@@ -100,10 +100,8 @@ if ($env:COMPUTERNAME -ne $newName) {
 }
 $PC = $newName
 
-# ── Avvia DeployScreen HTML dalla rete ───────────────────────────────────────
+# ── Registra deploy/start sul server (senza UI) ──────────────────────────────
 $PW_ID = $null
-
-# 1. Chiedi al server di creare il workflow per questo PC → ottieni pw_id
 try {
     $body = [Text.Encoding]::UTF8.GetBytes(
         (ConvertTo-Json @{ pc_name = $PC } -Compress))
@@ -122,33 +120,6 @@ try {
     Write-Output "NovaSCM deploy/start: pw_id=$PW_ID"
 } catch {
     Write-Warning "deploy/start non riuscito: $_"
-}
-
-# 2. Scarica e avvia NovaSCMDeployScreen.exe
-$deployScreenPath = "C:\Windows\Temp\NovaSCMDeployScreen.exe"
-try {
-    $wc = New-Object System.Net.WebClient
-    $wc.Headers.Add("X-Api-Key", $APIKEY)
-    $wc.DownloadFile("$SERVER/api/deploy-screen", $deployScreenPath)
-    Write-Output "NovaSCM DeployScreen scaricato in $deployScreenPath"
-} catch {
-    Write-Warning "DeployScreen download fallito: $_ — continuo senza grafica"
-    $deployScreenPath = $null
-}
-
-if ($deployScreenPath -and (Test-Path $deployScreenPath)) {
-    try {
-        $domain = (Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters" -Name "Domain" -ErrorAction SilentlyContinue)?.Domain
-        if (-not $domain) { $domain = "." }
-        $ver = "2.5.0"
-        $args = "hostname=$PC domain=$domain server=$SERVER key=$APIKEY ver=$ver"
-        if ($PW_ID) { $args += " pw_id=$PW_ID" } else { $args += " demo=1" }
-        Start-Process $deployScreenPath -ArgumentList $args -WindowStyle Maximized
-        Start-Sleep 2
-        Write-Output "NovaSCM DeployScreen avviato (pw_id=$PW_ID)"
-    } catch {
-        Write-Warning "DeployScreen avvio fallito: $_"
-    }
 }
 
 # ── Funzioni Report ───────────────────────────────────────────────────────────
@@ -263,16 +234,19 @@ Step-Done 18; Report-Step "office365" "done"
 foreach ($o in @(19,20,21)) { Deploy-Step $o 'done' '' 0 }
 foreach ($s in @("outlook_cfg","onedrive_cfg","default_profile")) { Report-Step $s "done" }
 
-# ── Step 22: Agente NovaSCM ───────────────────────────────────────────────────
+# ── Step 22: Agente NovaSCM (già installato da WinPE come servizio) ───────────
 Step-Start 22; Report-Step "agent_install" "running"
-try {
-    $agentTmp = "$env:TEMP\novascm-agent-install.ps1"
-    Invoke-WebRequest -Uri "$SERVER/api/download/agent-install.ps1" `
-        -OutFile $agentTmp -UseBasicParsing `
-        -Headers @{ "X-Api-Key" = $APIKEY }
-    powershell.exe -ExecutionPolicy Bypass -NonInteractive -File $agentTmp
-    Remove-Item $agentTmp -Force -ErrorAction SilentlyContinue
-} catch { Write-Warning "Agent install: $_" }
+# L'agent è stato registrato come servizio Windows in WinPE prima del reboot.
+# Verifica che il servizio esista e sia avviato; se non lo è, lo avvia.
+$svc = Get-Service -Name "NovaSCMAgent" -ErrorAction SilentlyContinue
+if ($svc) {
+    if ($svc.Status -ne 'Running') {
+        try { Start-Service "NovaSCMAgent" -ErrorAction SilentlyContinue } catch {}
+    }
+    Write-Output "NovaSCMAgent: $($svc.Status)"
+} else {
+    Write-Warning "NovaSCMAgent: servizio non trovato — registrazione WinPE mancante?"
+}
 Step-Done 22; Report-Step "agent_install" "done"
 
 # ── Step 23: Cleanup ──────────────────────────────────────────────────────────
