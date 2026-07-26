@@ -2805,7 +2805,7 @@ echo StepIndex=6
 echo StepCount=10
 echo Details=Configurazione boot loader UEFI...) > X:\\DeployStatus.ini
 bcdboot C:\\Windows /l it-IT /s S: /f UEFI
-bcdedit /set "{fwbootmgr}" displayorder "{bootmgr}" /addfirst
+bcdedit /set "{{fwbootmgr}}" displayorder "{{bootmgr}}" /addfirst
 (echo [Status]
 echo Action=Download componenti NovaSCM
 echo ActionPercent=0
