@@ -109,29 +109,38 @@ public class SettingsViewModel : ViewModelBase
 
     public void Save()
     {
-        _config["CertportalUrl"] = CertportalUrl;
-        _config["UnifiUrl"] = UnifiUrl;
-        _config["UnifiUser"] = UnifiUser;
-        _config["UnifiPass"] = ConfigService.Encrypt(UnifiPass);
-        _config["WifiSsid"] = WifiSsid;
-        _config["RadiusIp"] = RadiusIp;
-        _config["CertValidityDays"] = CertValidityDays;
-        _config["OrgName"] = OrgName;
-        _config["OrgDomain"] = OrgDomain;
-        _config["ScanSubnets"] = ScanSubnets;
-        _config["NovaSCMApiUrl"] = ApiUrl;
-        _config["NovaSCMApiKey"] = ConfigService.Encrypt(ApiKey);
-        _config["AdminUser"] = AdminUser;
-        _config["AdminPass"] = ConfigService.Encrypt(AdminPass);
-
         // BUG: ConfigService.Save() rilancia (throw) se la scrittura su disco
         // fallisce (AV che blocca il file, disco pieno, permessi) — e questo
         // metodo è agganciato a un RelayCommand SINCRONO senza alcun try/catch
         // proprio, che a sua volta non ha catch: un'eccezione qui crashava
         // l'intera app invece di mostrare "Errore: ..." come fanno tutti gli
         // altri comandi (Proxmox/Workflow/ChangeRequest/Dashboard).
+        // Il try/catch copriva solo ConfigService.Save(): le chiamate a
+        // Encrypt() costruivano _config PRIMA del try, quindi un'eccezione lì
+        // (es. DPAPI non disponibile) crashava comunque l'app. Ora tutto il
+        // metodo, incluse le Encrypt(), è protetto.
+        if (!int.TryParse(CertValidityDays, out _))
+        {
+            StatusMessage = "Giorni di validità certificato non valido: deve essere un numero";
+            return;
+        }
         try
         {
+            _config["CertportalUrl"] = CertportalUrl;
+            _config["UnifiUrl"] = UnifiUrl;
+            _config["UnifiUser"] = UnifiUser;
+            _config["UnifiPass"] = ConfigService.Encrypt(UnifiPass);
+            _config["WifiSsid"] = WifiSsid;
+            _config["RadiusIp"] = RadiusIp;
+            _config["CertValidityDays"] = CertValidityDays;
+            _config["OrgName"] = OrgName;
+            _config["OrgDomain"] = OrgDomain;
+            _config["ScanSubnets"] = ScanSubnets;
+            _config["NovaSCMApiUrl"] = ApiUrl;
+            _config["NovaSCMApiKey"] = ConfigService.Encrypt(ApiKey);
+            _config["AdminUser"] = AdminUser;
+            _config["AdminPass"] = ConfigService.Encrypt(AdminPass);
+
             ConfigService.Save(_config);
             StatusMessage = "Impostazioni salvate";
         }

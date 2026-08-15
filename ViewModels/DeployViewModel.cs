@@ -81,10 +81,17 @@ public class DeployViewModel : ViewModelBase
     {
         var dir = Services.ConfigService.ProfilesDir;
         ProfileNames.Clear();
-        if (System.IO.Directory.Exists(dir))
+        try
         {
-            foreach (var file in System.IO.Directory.GetFiles(dir, "*.json"))
-                ProfileNames.Add(System.IO.Path.GetFileNameWithoutExtension(file));
+            if (System.IO.Directory.Exists(dir))
+            {
+                foreach (var file in System.IO.Directory.GetFiles(dir, "*.json"))
+                    ProfileNames.Add(System.IO.Path.GetFileNameWithoutExtension(file));
+            }
+        }
+        catch (Exception ex)
+        {
+            Status = $"Errore lettura profili: {ex.Message}";
         }
     }
 }
