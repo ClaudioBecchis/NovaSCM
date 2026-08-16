@@ -4,6 +4,46 @@ All notable changes to NovaSCM are documented here.
 
 ---
 
+## [2.6.0] - 2026-08-16
+
+### Nuovo: motore di deploy PXE nativo (stile ConfigMgr/SCCM)
+
+Riscritto da zero il flusso di deploy PXE, studiando l'architettura reale di
+ConfigMgr (analisi statica dei binari `tsmanager.exe`/`tsprogressui.exe`,
+nessun file Microsoft riusato) e replicandola con componenti nostri:
+
+- **`NativeEngine/`** — nuova cartella con il motore nativo in C
+  (`NovaTsManager.exe` + 7 tool `NovaOsd*.exe` mono-funzione + libreria
+  condivisa `NovaOsdCore.dll`), sostituisce il vecchio script batch
+  generato dal server e la GUI WPF avviata dopo il reboot.
+- **Sequenza di step come dati**: il client scarica la Task Sequence dal
+  server (`GET /api/pc/<pc>/workflow`) invece di averla hardcoded, esatta-
+  mente come ConfigMgr scarica la TS dal site DB.
+- **GUI di progresso in tempo reale durante il deploy** (non solo dopo il
+  reboot), comunicazione **COM reale** (`IDispatch`/`CoCreateInstance`) tra
+  motore e GUI — non un fallback a file/pipe. WinPE non ha le chiavi di
+  registro per il marshaling COM precaricate come Windows: risolto facendo
+  auto-registrare alla GUI le stesse chiavi che il vero `tsprogressui.exe`
+  scrive a runtime (confermato dalle stringhe `RegCreateKeyExW` nel binario
+  originale).
+- Log dettagliati per-step raccolti sul server per diagnosi post-mortem.
+- Rimossa l'attesa di rete artificiale (`ping -n 8`) nel flusso precedente.
+
+### Problemi noti (aperti)
+
+- Stato di avanzamento persistito su disco (`ts-state.ini`) non viene
+  ripulito tra un test e l'altro: se residuo da un tentativo precedente con
+  un `NextOrdine` fuori range, l'intero ciclo di deploy viene saltato senza
+  errore visibile — va pulito manualmente sui dischi di test riusati.
+- Il motore non ha gestione strutturata delle eccezioni (mingw-w64 GCC non
+  supporta `__try`/`__except` di MSVC): aggiunto un
+  `SetUnhandledExceptionFilter` come rete di sicurezza, ma non copre ogni
+  possibile crash.
+- Validato solo su VM di test (QEMU/Proxmox, risorse limitate): lo step di
+  scrittura del sistema operativo su disco è lento in quell'ambiente e non
+  ancora provato su hardware fisico.
+- Dettagli tecnici completi in `NativeEngine/README.md`.
+
 ## [2.5.0] - 2026-07-25
 
 ### Security
