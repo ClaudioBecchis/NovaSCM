@@ -40,8 +40,7 @@ static int DiskpartLogHasError(void) {
     char line[512];
     int found = 0;
     while (fgets(line, sizeof(line), f)) {
-        if (strstr(line, "rror") ||          /* error / Error / errore */
-            strstr(line, "rrore") ||
+        if (strstr(line, "rror") ||          /* error / Error / errore / Errore */
             strstr(line, "ailed") ||         /* failed / Failed */
             strstr(line, "allit")) {         /* fallito / fallita */
             found = 1;
@@ -82,7 +81,17 @@ int wmain(int argc, wchar_t *argv[]) {
         "CREATE PARTITION MSR SIZE=128\r\n"
         "CREATE PARTITION PRIMARY\r\nFORMAT QUICK FS=NTFS LABEL=Windows\r\nASSIGN LETTER=C\r\n"
         "EXIT\r\n", aDisk);
-    if (scriptLen <= 0) { CloseHandle(hf); fwprintf(stderr, L"Script diskpart non generato\n"); return 1; }
+    /* _snprintf (semantica MSVC) restituisce -1 se tronca, quindi <= 0 basta.
+       Il controllo sul limite superiore e' ridondante oggi, ma protegge dal caso
+       in cui qualcuno sostituisca _snprintf con snprintf (semantica C99), che
+       invece restituirebbe la lunghezza teorica: passarla a WriteFile
+       provocherebbe una lettura oltre i confini del buffer. */
+    if (scriptLen <= 0 || scriptLen >= (int)sizeof(script)) {
+        CloseHandle(hf);
+        fwprintf(stderr, L"Script diskpart non generato o troncato (len=%d, buffer=%d)\n",
+                 scriptLen, (int)sizeof(script));
+        return 1;
+    }
 
     DWORD written = 0;
     BOOL wrote = WriteFile(hf, script, (DWORD)scriptLen, &written, NULL);
