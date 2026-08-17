@@ -16,12 +16,23 @@ int wmain(int argc, wchar_t *argv[]) {
     _snwprintf(cmd, 511,
         L"dism.exe /Apply-Image /ImageFile:%s /Index:%s /ApplyDir:C:\\ /LogPath:X:\\dism.log",
         wim, index);
-    NovaOsd_RunCmd(cmd);
-    DeleteFileW(wim);
+    int ec = NovaOsd_RunCmd(cmd);
+    if (ec != 0) {
+        /* NON cancellare il .wim se DISM e' fallito: lo step di download risulta
+           gia' completato nello stato salvato, quindi al riavvio la sequenza
+           riprende da qui saltando il download. Senza il file l'apply
+           fallirebbe di nuovo, all'infinito. */
+        fwprintf(stderr, L"DISM ha restituito exit code %d — %s conservato per il nuovo tentativo\n",
+                 ec, wim);
+        return 1;
+    }
 
     if (GetFileAttributesW(L"C:\\Windows\\System32\\ntoskrnl.exe") == INVALID_FILE_ATTRIBUTES) {
         fwprintf(stderr, L"Apply immagine fallito: ntoskrnl.exe non trovato\n");
         return 1;
     }
+
+    /* Solo ora l'immagine e' applicata e verificata: liberare lo spazio. */
+    DeleteFileW(wim);
     return 0;
 }

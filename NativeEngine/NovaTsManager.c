@@ -73,9 +73,11 @@ static LONG WINAPI CrashHandler(EXCEPTION_POINTERS *ep) {
         WideCharToMultiByte(CP_UTF8, 0, msg, -1, amsg, 255, NULL, NULL);
         int bodyLen = _snprintf(body, sizeof(body)-1,
             "{\"step_id\":0,\"status\":\"error\",\"output\":\"%s\"}", amsg);
+        /* NovaOsd_HttpPostJson e' sincrona (chiude gli handle WinHTTP prima di
+           ritornare, con timeout impostati): quando torna, il report e' gia'
+           stato inviato o e' scaduto. Nessuna attesa aggiuntiva necessaria. */
         NovaOsd_HttpPostJson(url, g_apiKey, body, bodyLen);
     }
-    Sleep(20000); /* lascia tempo alla richiesta HTTP di completare prima che il processo termini */
     return EXCEPTION_EXECUTE_HANDLER;
 }
 
